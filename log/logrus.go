@@ -42,23 +42,93 @@ var logrusLevelMap = map[Level]logrus.Level{
 	FatalLevel: logrus.FatalLevel,
 }
 
+// LogrusLoggerOptions 包含了 LogrusLogger 的所有配置选项。
+type LogrusLoggerOptions struct {
+	// 输出文件路径。
+	OutputPath string
+	// 日志格式化器。
+	Formatter logrus.Formatter
+	// 日志级别。
+	Level logrus.Level
+	// 文件权限。
+	FileMode os.FileMode
+	// 目录权限。
+	DirMode os.FileMode
+}
+
+// LogrusOption 定义了 LogrusLogger 的配置选项函数类型。
+type LogrusOption func(*LogrusLoggerOptions)
+
+// 默认选项。
+var defaultOptions = LogrusLoggerOptions{
+	Formatter: &logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02 15:04:05",
+	},
+	Level:    logrus.InfoLevel,
+	FileMode: 0666,
+	DirMode:  0755,
+}
+
+// WithOutputPath 设置日志输出路径。
+func WithOutputPath(path string) LogrusOption {
+	return func(o *LogrusLoggerOptions) {
+		o.OutputPath = path
+	}
+}
+
+// WithFormatter 设置日志格式化器。
+func WithFormatter(formatter logrus.Formatter) LogrusOption {
+	return func(o *LogrusLoggerOptions) {
+		o.Formatter = formatter
+	}
+}
+
+// WithLogrusLevel 设置日志级别。
+func WithLogrusLevel(level Level) LogrusOption {
+	return func(o *LogrusLoggerOptions) {
+		if logrusLevel, ok := logrusLevelMap[level]; ok {
+			o.Level = logrusLevel
+		}
+	}
+}
+
+// WithFileMode 设置日志文件权限。
+func WithFileMode(mode os.FileMode) LogrusOption {
+	return func(o *LogrusLoggerOptions) {
+		o.FileMode = mode
+	}
+}
+
+// WithDirMode 设置日志目录权限。
+func WithDirMode(mode os.FileMode) LogrusOption {
+	return func(o *LogrusLoggerOptions) {
+		o.DirMode = mode
+	}
+}
+
 // NewLogrusLogger 创建一个新的 LogrusLogger 实例。
-// 参数 output 指定日志文件的路径，如果为空则只输出到标准输出。
-// 返回一个实现了 Logger 接口的实例和可能的错误。
-func NewLogrusLogger(output string) (Logger, error) {
+// 使用可选的 LogrusOption 函数来配置 logger。
+func NewLogrusLogger(opts ...LogrusOption) (Logger, error) {
+	// 使用默认选项。
+	options := defaultOptions
+
+	// 应用自定义选项。
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	log := logrus.New()
 
 	// 如果指定了输出目录，配置文件输出。
-	if output != "" {
+	if options.OutputPath != "" {
 		// 确保日志文件所在的目录存在。
-		// 使用 0755 权限确保目录可读可执行，且所有者可写。
-		if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(options.OutputPath), options.DirMode); err != nil {
 			return nil, err
 		}
 
 		// 打开或创建日志文件。
-		// 使用 0666 权限确保文件可读可写。
-		file, err := os.OpenFile(output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		file, err := os.OpenFile(options.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, options.FileMode)
 		if err != nil {
 			return nil, err
 		}
@@ -67,15 +137,11 @@ func NewLogrusLogger(output string) (Logger, error) {
 		log.SetOutput(file)
 	}
 
-	// 配置日志格式为文本格式。
-	// 启用完整时间戳，使用标准的日期时间格式。
-	log.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: "2006-01-02 15:04:05",
-	})
+	// 配置日志格式。
+	log.SetFormatter(options.Formatter)
 
-	// 默认设置为 InfoLevel。
-	log.SetLevel(logrus.InfoLevel)
+	// 设置日志级别。
+	log.SetLevel(options.Level)
 
 	return &LogrusLogger{
 		logger: logrus.NewEntry(log),

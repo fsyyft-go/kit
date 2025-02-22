@@ -256,7 +256,11 @@ func NewLogger(options ...Option) (Logger, error) {
 	case LogTypeStd:
 		logger, err = NewStdLogger(opts.Output)
 	case LogTypeLogrus:
-		logger, err = NewLogrusLogger(opts.Output)
+		// 使用 WithOutputPath 和 WithLogrusLevel 选项创建 Logrus 日志实例。
+		logger, err = NewLogrusLogger(
+			WithOutputPath(opts.Output),
+			WithLogrusLevel(opts.Level),
+		)
 	default:
 		return nil, fmt.Errorf("不支持的日志类型：%s", opts.Type)
 	}
