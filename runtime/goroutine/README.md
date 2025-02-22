@@ -60,6 +60,50 @@ func main() {
 ### 通用支持（慢速路径）：
 - 所有 Go 支持的平台
 
+## 平台实现对照表
+
+| 操作系统 | CPU 架构 | 实现文件 | 实现方法 | 说明 |
+|---------|---------|---------|---------|------|
+| Windows | AMD64 | goid_amd64.s | 汇编实现 | 通过 TLS 直接访问，使用偏移量获取 |
+| Windows | ARM64 | goid_windows_arm64.go | getGoIDSlow | 使用堆栈信息解析方式获取 |
+| Linux | AMD64 | goid_amd64.s | 汇编实现 | 通过 TLS 直接访问，使用偏移量获取 |
+| Linux | ARM64 | goid_arm64.go | getg().goid | 通过 TLS 直接访问 g 结构体 |
+| Darwin | AMD64 | goid_amd64.s | 汇编实现 | 通过 TLS 直接访问，使用偏移量获取 |
+| Darwin | ARM64 | goid_arm64.go | getg().goid | 通过 TLS 直接访问 g 结构体 |
+| 所有 | 386 | goid.go | getGoIDSlow | 使用堆栈信息解析方式获取 |
+| 所有 | ARM(32位) | goid.go | getGoIDSlow | 使用堆栈信息解析方式获取 |
+| 所有 | MIPS/MIPS64 | goid.go | getGoIDSlow | 使用堆栈信息解析方式获取 |
+| 所有 | PPC64/PPC64LE | goid.go | getGoIDSlow | 使用堆栈信息解析方式获取 |
+| 所有 | S390X | goid.go | getGoIDSlow | 使用堆栈信息解析方式获取 |
+| 所有 | RISC-V 64 | goid.go | getGoIDSlow | 使用堆栈信息解析方式获取 |
+
+### 实现说明
+
+1. **AMD64 平台**：
+   - 使用汇编实现，通过 TLS（Thread Local Storage）直接访问
+   - 使用 offset 变量存储不同 Go 版本的 goid 偏移量
+   - 性能最优
+   - 支持 Windows、Linux、Darwin 等主流操作系统
+
+2. **ARM64 平台**：
+   - 非 Windows 系统：直接通过 getg() 获取 g 结构体
+   - Windows 系统：使用 getGoIDSlow 方法
+   - 性能次优（非 Windows）
+   - M1/M2 芯片的 Mac 设备使用此实现
+
+3. **其他平台**：
+   - 统一使用 getGoIDSlow 方法
+   - 通过解析堆栈信息获取 goroutine ID
+   - 性能较低但通用性好
+   - 支持所有 Go 语言支持的操作系统和 CPU 架构组合
+
+### 性能说明
+
+从性能角度，实现方式按照以下顺序从高到低排列：
+1. AMD64 汇编实现：性能最优，接近直接内存访问速度
+2. ARM64 非 Windows 实现：性能次优，通过 getg() 直接访问
+3. 通用 getGoIDSlow 实现：性能最低，但兼容性最好
+
 ## 注意事项
 
 1. Go 语言官方不推荐依赖 goroutine ID 进行业务逻辑处理

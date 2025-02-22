@@ -17,7 +17,7 @@ help:
 	@echo "  make <目标>"
 	@echo ""
 	@echo "目标:"
-	@echo "  test      运行测试"
+	@echo "  test      运行测试和构建示例"
 	@echo "  coverage  生成测试覆盖率报告"
 	@echo "  lint      运行代码检查"
 	@echo "  mod       更新 Go 模块依赖"
@@ -25,7 +25,10 @@ help:
 	@echo "  help      显示帮助信息"
 
 test:
-	@echo "运行测试..."
+	@echo "构建示例程序..."
+	@chmod +x example/runtime/goroutine/build.sh
+	@example/runtime/goroutine/build.sh
+	@echo "\n运行测试..."
 	@go test -v -race ./...
 
 coverage:
@@ -58,4 +61,4 @@ mod:
 
 clean:
 	@echo "清理输出目录..."
-	@rm -rf $(OUT_DIR) 
+	@rm -rf $(OUT_DIR) bin/ 
