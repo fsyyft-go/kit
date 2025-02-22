@@ -10,8 +10,8 @@ import (
 )
 
 func main() {
-	// 示例1：使用标准输出日志器。
-	if err := log.InitLogger(log.LogTypeConsole, ""); err != nil {
+	// 示例1：使用默认配置。
+	if err := log.InitLogger(); err != nil {
 		panic(err)
 	}
 
@@ -41,18 +41,37 @@ func main() {
 		log.WithField("error", err).Error("操作失败")
 	}
 
-	// 示例2：使用 logrus 日志器。
+	// 示例2：使用自定义配置。
+	// 日志文件会按照 app.20240315{HH}.log 的格式滚动
+	// 例如：app.2024031510.log, app.2024031511.log 等
 	logFile := filepath.Join("example", "log", "app.log")
-	if err := log.InitLogger(log.LogTypeLogrus, logFile); err != nil {
+	if err := log.InitLogger(
+		log.WithLogType(log.LogTypeLogrus),
+		log.WithOutput(logFile),
+		log.WithLevel(log.InfoLevel),
+	); err != nil {
 		panic(err)
 	}
 
 	// 使用新的日志器记录。
-	log.Info("已切换到 logrus 日志器")
+	log.Info("已切换到 logrus 日志器（默认启用日志滚动功能）")
 	log.WithFields(map[string]interface{}{
 		"component": "server",
 		"status":    "starting",
 	}).Info("服务器启动")
+
+	// 示例3：创建独立的日志实例。
+	logger, err := log.NewLogger(
+		log.WithLogType(log.LogTypeStd),
+		log.WithLevel(log.DebugLevel),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	// 使用独立的日志实例。
+	logger.Debug("这是独立日志实例的调试信息")
+	logger.WithField("module", "cache").Info("缓存已初始化")
 }
 
 func someFunction() error {

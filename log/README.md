@@ -10,6 +10,7 @@
 - 多个日志级别（Debug、Info、Warn、Error、Fatal）
 - 支持文件和标准输出
 - 支持字段注入和上下文
+- 支持日志滚动（按时间自动切分）
 
 ## 快速开始
 
@@ -22,7 +23,7 @@ import "github.com/fsyyft-go/kit/log"
 
 func main() {
     // 初始化标准输出日志
-    if err := log.InitLogger(log.LogTypeStd, ""); err != nil {
+    if err := log.InitLogger(log.WithLogType(log.LogTypeStd)); err != nil {
         panic(err)
     }
 
@@ -51,10 +52,58 @@ log.WithFields(map[string]interface{}{
 
 ```go
 // 初始化 Logrus 日志
-if err := log.InitLogger(log.LogTypeLogrus, "/path/to/log/file.log"); err != nil {
+if err := log.InitLogger(
+    log.WithLogType(log.LogTypeLogrus),
+    log.WithOutput("/path/to/log/file.log"),
+); err != nil {
     panic(err)
 }
 ```
+
+### 使用日志滚动功能
+
+日志滚动功能默认启用，配置如下：
+- 默认每小时滚动一次
+- 默认保留7天的日志
+- 自动创建软链接到最新日志文件
+
+日志文件命名规则：
+- 原始文件名：`app.log`
+- 滚动后的文件名：`app-2024031510.log`（表示2024年3月15日10点的日志）
+- 软链接：始终保持原始文件名（`app.log`），指向最新的日志文件
+
+如果需要自定义配置，可以使用以下选项：
+
+```go
+// 自定义日志滚动配置
+if err := log.InitLogger(
+    log.WithLogType(log.LogTypeLogrus),
+    log.WithOutput("/path/to/log/app.log"),
+    log.WithLevel(log.InfoLevel),
+    log.WithRotateTime(time.Minute * 30),    // 每30分钟滚动一次
+    log.WithMaxAge(time.Hour*24*30),         // 保留30天的日志
+); err != nil {
+    panic(err)
+}
+```
+
+如果需要禁用日志滚动功能：
+```go
+if err := log.InitLogger(
+    log.WithLogType(log.LogTypeLogrus),
+    log.WithOutput("/path/to/log/app.log"),
+    log.WithEnableRotate(false),             // 禁用日志滚动
+); err != nil {
+    panic(err)
+}
+```
+
+日志滚动功能特性：
+- 支持按时间自动切分日志文件（默认每小时一个）
+- 可配置日志滚动时间间隔
+- 可配置日志文件保留时间（默认7天）
+- 自动清理过期日志文件
+- 支持软链接到最新日志文件
 
 ## 日志级别
 
