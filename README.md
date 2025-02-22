@@ -30,6 +30,10 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 
 ⚠️ 低级工具：用于获取 goroutine ID，仅用于特殊调试场景，不建议在生产环境使用。[详细说明 →](runtime/goroutine/README.md)
 
+### [testing](testing/README.md)
+
+测试日志工具：提供带有统一前缀的测试日志输出功能，使测试输出更加清晰易读。[详细说明 →](testing/README.md)
+
 更多模块正在开发中，敬请期待...
 
 ## 如何贡献
