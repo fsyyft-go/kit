@@ -26,9 +26,12 @@ help:
 
 test:
 	@echo "构建示例程序..."
-	@chmod +x example/runtime/goroutine/build.sh
+	@chmod +x example/runtime/goroutine/build.sh example/log/build.sh
+	@echo "\n构建并运行获取 goroutine id 示例..."
 	@example/runtime/goroutine/build.sh
-	@echo "\n运行测试..."
+	@echo "\n构建并运行日志示例..."
+	@example/log/build.sh
+	@echo "\n运行单元测试..."
 	@go test -v -race ./...
 
 coverage:
