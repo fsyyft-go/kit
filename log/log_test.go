@@ -25,6 +25,7 @@ import (
 
 // TestLoggers 测试所有支持的日志实现。
 // 测试内容包括：
+// - 默认配置
 // - 控制台日志输出
 // - 标准库文件日志
 // - Logrus 文件日志
@@ -41,23 +42,34 @@ func TestLoggers(t *testing.T) {
 	// 定义测试用例，包含不同类型的日志器测试。
 	testCases := []struct {
 		name     string                            // 测试用例名称
-		logType  LogType                           // 日志类型
-		logPath  string                            // 日志文件路径
+		options  []Option                          // 日志配置选项
 		testFunc func(t *testing.T, logger Logger) // 测试函数
 	}{
 		{
-			name:    "Console Logger",
-			logType: LogTypeConsole,
-			logPath: "",
+			name:    "Default Logger",
+			options: nil,
+			testFunc: func(t *testing.T, logger Logger) {
+				logger.Info("测试默认日志配置。")
+				logger.WithField("test", "field").Info("测试带字段的默认日志。")
+			},
+		},
+		{
+			name: "Console Logger",
+			options: []Option{
+				WithLogType(LogTypeConsole),
+			},
 			testFunc: func(t *testing.T, logger Logger) {
 				logger.Info("测试控制台日志。")
 				logger.WithField("test", "field").Info("测试带字段的控制台日志。")
 			},
 		},
 		{
-			name:    "Std Logger File",
-			logType: LogTypeStd,
-			logPath: filepath.Join(tmpDir, "std.log"),
+			name: "Std Logger File",
+			options: []Option{
+				WithLogType(LogTypeStd),
+				WithOutput(filepath.Join(tmpDir, "std.log")),
+				WithLevel(DebugLevel),
+			},
 			testFunc: func(t *testing.T, logger Logger) {
 				logger.Info("测试标准库日志文件。")
 				logger.WithFields(map[string]interface{}{
@@ -67,9 +79,12 @@ func TestLoggers(t *testing.T) {
 			},
 		},
 		{
-			name:    "Logrus Logger File",
-			logType: LogTypeLogrus,
-			logPath: filepath.Join(tmpDir, "logrus.log"),
+			name: "Logrus Logger File",
+			options: []Option{
+				WithLogType(LogTypeLogrus),
+				WithOutput(filepath.Join(tmpDir, "logrus.log")),
+				WithLevel(DebugLevel),
+			},
 			testFunc: func(t *testing.T, logger Logger) {
 				logger.Debug("测试 Logrus 调试日志。")
 				logger.Info("测试 Logrus 信息日志。")
@@ -83,24 +98,67 @@ func TestLoggers(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// 初始化日志实例。
-			err := InitLogger(tc.logType, tc.logPath)
+			err := InitLogger(tc.options...)
 			assert.NoError(t, err)
 
 			// 执行测试函数。
 			tc.testFunc(t, GetLogger())
 
 			// 如果配置了日志文件，验证文件是否正确创建和写入。
-			if tc.logPath != "" {
-				_, err := os.Stat(tc.logPath)
-				assert.NoError(t, err)
+			if len(tc.options) > 0 {
+				for _, opt := range tc.options {
+					// 创建一个临时的 LoggerOptions 来获取配置。
+					opts := &LoggerOptions{}
+					opt(opts)
+					if opts.Output != "" {
+						_, err := os.Stat(opts.Output)
+						assert.NoError(t, err)
 
-				// 读取并验证日志文件内容。
-				content, err := os.ReadFile(tc.logPath)
-				assert.NoError(t, err)
-				assert.NotEmpty(t, content)
+						// 读取并验证日志文件内容。
+						content, err := os.ReadFile(opts.Output)
+						assert.NoError(t, err)
+						assert.NotEmpty(t, content)
+					}
+				}
 			}
 		})
 	}
+}
+
+// TestNewLogger 测试直接创建日志实例。
+// 测试内容包括：
+// - 使用默认配置创建
+// - 使用自定义配置创建
+// - 验证配置是否正确应用
+func TestNewLogger(t *testing.T) {
+	// 创建临时测试目录。
+	tmpDir := filepath.Join(os.TempDir(), "apisix-metric-test-new")
+	err := os.MkdirAll(tmpDir, 0755)
+	assert.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// 测试默认配置。
+	logger, err := NewLogger()
+	assert.NoError(t, err)
+	assert.NotNil(t, logger)
+	assert.Equal(t, InfoLevel, logger.GetLevel())
+
+	// 测试自定义配置。
+	logPath := filepath.Join(tmpDir, "custom.log")
+	logger, err = NewLogger(
+		WithLogType(LogTypeLogrus),
+		WithLevel(DebugLevel),
+		WithOutput(logPath),
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, logger)
+	assert.Equal(t, DebugLevel, logger.GetLevel())
+
+	// 验证日志文件。
+	logger.Info("测试自定义日志配置。")
+	content, err := os.ReadFile(logPath)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, content)
 }
 
 // TestLogLevels 测试日志的各个级别。
@@ -121,7 +179,11 @@ func TestLogLevels(t *testing.T) {
 	logPath := filepath.Join(tmpDir, "all-levels.log")
 
 	// 初始化 Logrus 日志器。
-	err = InitLogger(LogTypeLogrus, logPath)
+	err = InitLogger(
+		WithLogType(LogTypeLogrus),
+		WithOutput(logPath),
+		WithLevel(DebugLevel),
+	)
 	assert.NoError(t, err)
 
 	logger := GetLogger()
@@ -162,7 +224,10 @@ func TestWithFieldsAndFormat(t *testing.T) {
 	logPath := filepath.Join(tmpDir, "fields.log")
 
 	// 初始化 Logrus 日志器。
-	err = InitLogger(LogTypeLogrus, logPath)
+	err = InitLogger(
+		WithLogType(LogTypeLogrus),
+		WithOutput(logPath),
+	)
 	assert.NoError(t, err)
 
 	logger := GetLogger()

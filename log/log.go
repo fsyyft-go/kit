@@ -20,14 +20,38 @@
 //   - 支持结构化日志记录。
 //   - 支持多个日志级别。
 //   - 支持文件和标准输出。
+//   - 支持函数式配置选项。
 //
 // 基本使用示例：
 //
-//	if err := log.InitLogger(log.LogTypeStd, ""); err != nil {
+//	// 使用默认配置初始化日志
+//	if err := log.InitLogger(); err != nil {
 //	    panic(err)
 //	}
+//
+//	// 使用自定义配置初始化日志
+//	if err := log.InitLogger(
+//	    log.WithLogType(log.LogTypeLogrus),
+//	    log.WithLevel(log.DebugLevel),
+//	    log.WithOutput("/var/log/app.log"),
+//	); err != nil {
+//	    panic(err)
+//	}
+//
+//	// 使用日志功能
 //	log.Info("应用启动")
 //	log.WithField("user", "admin").Info("用户登录")
+//
+// 也可以直接创建日志实例：
+//
+//	logger, err := log.NewLogger(
+//	    log.WithLogType(log.LogTypeStd),
+//	    log.WithLevel(log.DebugLevel),
+//	)
+//	if err != nil {
+//	    panic(err)
+//	}
+//	logger.Info("使用独立的日志实例")
 //
 // 更多示例请参考 example/log 目录。
 package log
@@ -170,4 +194,79 @@ type Logger interface {
 	// 返回一个新的 Logger 实例，原实例不会被修改。
 	// 这个方法用于一次性添加多个结构化字段。
 	WithFields(fields map[string]interface{}) Logger
+}
+
+// LoggerOptions 定义了日志配置选项。
+type LoggerOptions struct {
+	// Type 指定日志实现类型。
+	Type LogType
+
+	// Level 指定日志级别。
+	Level Level
+
+	// Output 指定日志输出路径。
+	Output string
+}
+
+// Option 定义了日志配置的函数选项。
+type Option func(*LoggerOptions)
+
+// WithLogType 设置日志类型。
+func WithLogType(logType LogType) Option {
+	return func(opts *LoggerOptions) {
+		opts.Type = logType
+	}
+}
+
+// WithLevel 设置日志级别。
+func WithLevel(level Level) Option {
+	return func(opts *LoggerOptions) {
+		opts.Level = level
+	}
+}
+
+// WithOutput 设置日志输出路径。
+func WithOutput(output string) Option {
+	return func(opts *LoggerOptions) {
+		opts.Output = output
+	}
+}
+
+// NewLogger 创建一个新的日志实例。
+// 使用可选的配置选项来配置日志行为。
+func NewLogger(options ...Option) (Logger, error) {
+	// 默认配置。
+	opts := &LoggerOptions{
+		Type:   LogTypeStd,
+		Level:  InfoLevel,
+		Output: "",
+	}
+
+	// 应用所有选项。
+	for _, option := range options {
+		option(opts)
+	}
+
+	var logger Logger
+	var err error
+
+	switch opts.Type {
+	case LogTypeConsole:
+		logger, err = NewStdLogger("")
+	case LogTypeStd:
+		logger, err = NewStdLogger(opts.Output)
+	case LogTypeLogrus:
+		logger, err = NewLogrusLogger(opts.Output)
+	default:
+		return nil, fmt.Errorf("不支持的日志类型：%s", opts.Type)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("创建日志实例失败：%v", err)
+	}
+
+	// 设置日志级别。
+	logger.SetLevel(opts.Level)
+
+	return logger, nil
 }

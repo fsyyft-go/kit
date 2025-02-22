@@ -47,22 +47,21 @@ var (
 )
 
 // InitLogger 初始化全局日志实例。
-// 参数 logType 指定要使用的日志类型，output 指定日志输出路径。
-// 当 output 为空字符串时，日志将输出到标准输出。
+// 使用可选的配置选项来配置日志行为。
+// 如果没有提供任何选项，将使用默认配置：
+//   - 日志类型：LogTypeStd
+//   - 日志级别：InfoLevel
+//   - 输出路径：标准输出
+//
 // 返回初始化过程中可能发生的错误。
-func InitLogger(logType LogType, output string) error {
-	var err error
-	switch logType {
-	case LogTypeConsole:
-		globalLogger, err = NewStdLogger("")
-	case LogTypeStd:
-		globalLogger, err = NewStdLogger(output)
-	case LogTypeLogrus:
-		globalLogger, err = NewLogrusLogger(output)
-	default:
-		return fmt.Errorf("不支持的日志类型：%s", logType)
+func InitLogger(options ...Option) error {
+	logger, err := NewLogger(options...)
+	if err != nil {
+		return fmt.Errorf("初始化日志实例失败：%v", err)
 	}
-	return err
+
+	SetLogger(logger)
+	return nil
 }
 
 // SetLevel 设置全局日志级别。
@@ -89,7 +88,7 @@ func GetLogger() Logger {
 	defer globalLoggerLock.RUnlock()
 
 	if globalLogger == nil {
-		stdLogger, err := NewStdLogger("")
+		stdLogger, err := NewLogger()
 		if err != nil {
 			panic(fmt.Sprintf("创建默认日志器失败：%v", err))
 		}
