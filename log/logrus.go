@@ -1,16 +1,6 @@
-// Copyright 2024 fsyyft-go Authors
+// Copyright 2025 fsyyft-go
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 // Package log 提供了基于 Logrus 的日志实现。
 package log
@@ -69,8 +59,7 @@ type LogrusOption func(*LogrusLoggerOptions)
 
 // 默认选项。
 var defaultOptions = LogrusLoggerOptions{
-	Formatter: &logrus.TextFormatter{
-		FullTimestamp:   true,
+	Formatter: &logrus.JSONFormatter{
 		TimestampFormat: "2006-01-02 15:04:05",
 	},
 	Level:        logrus.InfoLevel,
@@ -82,6 +71,7 @@ var defaultOptions = LogrusLoggerOptions{
 }
 
 // WithOutputPath 设置日志输出路径。
+// path：日志文件的输出路径，支持绝对路径和相对路径。
 func WithOutputPath(path string) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
 		o.OutputPath = path
@@ -89,13 +79,41 @@ func WithOutputPath(path string) LogrusOption {
 }
 
 // WithFormatter 设置日志格式化器。
+// formatter：自定义的日志格式化器实例，用于控制日志的输出格式。
 func WithFormatter(formatter logrus.Formatter) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
 		o.Formatter = formatter
 	}
 }
 
+// WithJSONFormatter 设置 JSON 格式化器的选项。
+// timestampFormat：时间戳的格式化模板，例如："2006-01-02 15:04:05"。
+// prettyPrint：是否美化 JSON 输出格式，true 表示美化，false 表示单行输出。
+func WithJSONFormatter(timestampFormat string, prettyPrint bool) LogrusOption {
+	return func(o *LogrusLoggerOptions) {
+		o.Formatter = &logrus.JSONFormatter{
+			TimestampFormat: timestampFormat,
+			PrettyPrint:     prettyPrint,
+		}
+	}
+}
+
+// WithTextFormatter 设置文本格式化器的选项。
+// timestampFormat：时间戳的格式化模板，例如："2006-01-02 15:04:05"。
+// fullTimestamp：是否显示完整时间戳，true 表示显示完整时间戳，false 表示显示相对时间。
+// disableColors：是否禁用控制台颜色输出，true 表示禁用颜色，false 表示启用颜色。
+func WithTextFormatter(timestampFormat string, fullTimestamp bool, disableColors bool) LogrusOption {
+	return func(o *LogrusLoggerOptions) {
+		o.Formatter = &logrus.TextFormatter{
+			TimestampFormat: timestampFormat,
+			FullTimestamp:   fullTimestamp,
+			DisableColors:   disableColors,
+		}
+	}
+}
+
 // WithLogrusLevel 设置日志级别。
+// level：日志输出的级别，可选值包括 DebugLevel、InfoLevel、WarnLevel、ErrorLevel、FatalLevel。
 func WithLogrusLevel(level Level) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
 		if logrusLevel, ok := logrusLevelMap[level]; ok {
@@ -105,6 +123,7 @@ func WithLogrusLevel(level Level) LogrusOption {
 }
 
 // WithFileMode 设置日志文件权限。
+// mode：日志文件的权限模式，使用八进制表示，例如：0666。
 func WithFileMode(mode os.FileMode) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
 		o.FileMode = mode
@@ -112,6 +131,7 @@ func WithFileMode(mode os.FileMode) LogrusOption {
 }
 
 // WithDirMode 设置日志目录权限。
+// mode：日志目录的权限模式，使用八进制表示，例如：0755。
 func WithDirMode(mode os.FileMode) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
 		o.DirMode = mode
@@ -119,6 +139,7 @@ func WithDirMode(mode os.FileMode) LogrusOption {
 }
 
 // WithLogrusEnableRotate 设置是否启用日志滚动。
+// enable：是否启用日志滚动功能，true 表示启用，false 表示禁用。
 func WithLogrusEnableRotate(enable bool) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
 		o.EnableRotate = enable
@@ -126,6 +147,7 @@ func WithLogrusEnableRotate(enable bool) LogrusOption {
 }
 
 // WithLogrusRotateTime 设置日志滚动时间间隔。
+// duration：日志滚动的时间间隔，例如：time.Hour 表示每小时滚动一次。
 func WithLogrusRotateTime(duration time.Duration) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
 		o.RotateTime = duration
@@ -133,6 +155,7 @@ func WithLogrusRotateTime(duration time.Duration) LogrusOption {
 }
 
 // WithLogrusMaxAge 设置日志保留时间。
+// duration：日志文件的最大保留时间，超过这个时间的日志文件会被自动删除。
 func WithLogrusMaxAge(duration time.Duration) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
 		o.MaxAge = duration
@@ -140,7 +163,7 @@ func WithLogrusMaxAge(duration time.Duration) LogrusOption {
 }
 
 // NewLogrusLogger 创建一个新的 LogrusLogger 实例。
-// 使用可选的 LogrusOption 函数来配置 logger。
+// opts：可选的配置选项列表，用于自定义日志记录器的行为。
 func NewLogrusLogger(opts ...LogrusOption) (Logger, error) {
 	// 使用默认选项。
 	options := defaultOptions
