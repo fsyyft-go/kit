@@ -42,6 +42,8 @@ func main() {
 	}
 
 	// 示例2：使用自定义配置。
+	// 日志文件会按照 app.20240315{HH}.log 的格式滚动
+	// 例如：app.2024031510.log, app.2024031511.log 等
 	logFile := filepath.Join("example", "log", "app.log")
 	if err := log.InitLogger(
 		log.WithLogType(log.LogTypeLogrus),
@@ -52,7 +54,7 @@ func main() {
 	}
 
 	// 使用新的日志器记录。
-	log.Info("已切换到 logrus 日志器")
+	log.Info("已切换到 logrus 日志器（默认启用日志滚动功能）")
 	log.WithFields(map[string]interface{}{
 		"component": "server",
 		"status":    "starting",

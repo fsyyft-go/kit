@@ -18,7 +18,9 @@ package log
 import (
 	"os"
 	"path/filepath"
+	"time"
 
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -54,6 +56,12 @@ type LogrusLoggerOptions struct {
 	FileMode os.FileMode
 	// 目录权限。
 	DirMode os.FileMode
+	// 是否启用日志滚动。
+	EnableRotate bool
+	// 日志滚动时间间隔。
+	RotateTime time.Duration
+	// 日志保留时间。
+	MaxAge time.Duration
 }
 
 // LogrusOption 定义了 LogrusLogger 的配置选项函数类型。
@@ -65,9 +73,12 @@ var defaultOptions = LogrusLoggerOptions{
 		FullTimestamp:   true,
 		TimestampFormat: "2006-01-02 15:04:05",
 	},
-	Level:    logrus.InfoLevel,
-	FileMode: 0666,
-	DirMode:  0755,
+	Level:        logrus.InfoLevel,
+	FileMode:     0666,
+	DirMode:      0755,
+	EnableRotate: true,               // 默认启用日志滚动
+	RotateTime:   time.Hour,          // 默认每小时滚动一次
+	MaxAge:       time.Hour * 24 * 7, // 默认保留7天
 }
 
 // WithOutputPath 设置日志输出路径。
@@ -107,6 +118,27 @@ func WithDirMode(mode os.FileMode) LogrusOption {
 	}
 }
 
+// WithLogrusEnableRotate 设置是否启用日志滚动。
+func WithLogrusEnableRotate(enable bool) LogrusOption {
+	return func(o *LogrusLoggerOptions) {
+		o.EnableRotate = enable
+	}
+}
+
+// WithLogrusRotateTime 设置日志滚动时间间隔。
+func WithLogrusRotateTime(duration time.Duration) LogrusOption {
+	return func(o *LogrusLoggerOptions) {
+		o.RotateTime = duration
+	}
+}
+
+// WithLogrusMaxAge 设置日志保留时间。
+func WithLogrusMaxAge(duration time.Duration) LogrusOption {
+	return func(o *LogrusLoggerOptions) {
+		o.MaxAge = duration
+	}
+}
+
 // NewLogrusLogger 创建一个新的 LogrusLogger 实例。
 // 使用可选的 LogrusOption 函数来配置 logger。
 func NewLogrusLogger(opts ...LogrusOption) (Logger, error) {
@@ -127,14 +159,30 @@ func NewLogrusLogger(opts ...LogrusOption) (Logger, error) {
 			return nil, err
 		}
 
-		// 打开或创建日志文件。
-		file, err := os.OpenFile(options.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, options.FileMode)
-		if err != nil {
-			return nil, err
-		}
+		if options.EnableRotate {
+			// 获取文件名和扩展名
+			ext := filepath.Ext(options.OutputPath)
+			base := options.OutputPath[:len(options.OutputPath)-len(ext)]
 
-		// 只输出到文件。
-		log.SetOutput(file)
+			// 配置日志滚动
+			writer, err := rotatelogs.New(
+				base+"-%Y%m%d%H"+ext,
+				rotatelogs.WithLinkName(options.OutputPath),
+				rotatelogs.WithRotationTime(options.RotateTime),
+				rotatelogs.WithMaxAge(options.MaxAge),
+			)
+			if err != nil {
+				return nil, err
+			}
+			log.SetOutput(writer)
+		} else {
+			// 打开或创建日志文件。
+			file, err := os.OpenFile(options.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, options.FileMode)
+			if err != nil {
+				return nil, err
+			}
+			log.SetOutput(file)
+		}
 	}
 
 	// 配置日志格式。

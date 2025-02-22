@@ -58,6 +58,7 @@ package log
 
 import (
 	"fmt"
+	"time"
 )
 
 // Level 定义了日志的级别类型，用于控制日志的输出粒度。
@@ -206,6 +207,15 @@ type LoggerOptions struct {
 
 	// Output 指定日志输出路径。
 	Output string
+
+	// EnableRotate 是否启用日志滚动。
+	EnableRotate bool
+
+	// RotateTime 日志滚动时间间隔。
+	RotateTime time.Duration
+
+	// MaxAge 日志保留时间。
+	MaxAge time.Duration
 }
 
 // Option 定义了日志配置的函数选项。
@@ -232,14 +242,38 @@ func WithOutput(output string) Option {
 	}
 }
 
+// WithEnableRotate 设置是否启用日志滚动。
+func WithEnableRotate(enable bool) Option {
+	return func(opts *LoggerOptions) {
+		opts.EnableRotate = enable
+	}
+}
+
+// WithRotateTime 设置日志滚动时间间隔。
+func WithRotateTime(duration time.Duration) Option {
+	return func(opts *LoggerOptions) {
+		opts.RotateTime = duration
+	}
+}
+
+// WithMaxAge 设置日志保留时间。
+func WithMaxAge(duration time.Duration) Option {
+	return func(opts *LoggerOptions) {
+		opts.MaxAge = duration
+	}
+}
+
 // NewLogger 创建一个新的日志实例。
 // 使用可选的配置选项来配置日志行为。
 func NewLogger(options ...Option) (Logger, error) {
 	// 默认配置。
 	opts := &LoggerOptions{
-		Type:   LogTypeStd,
-		Level:  InfoLevel,
-		Output: "",
+		Type:         LogTypeStd,
+		Level:        InfoLevel,
+		Output:       "",
+		EnableRotate: true,               // 默认启用日志滚动
+		RotateTime:   time.Hour,          // 默认每小时滚动一次
+		MaxAge:       time.Hour * 24 * 7, // 默认保留7天
 	}
 
 	// 应用所有选项。
@@ -256,11 +290,15 @@ func NewLogger(options ...Option) (Logger, error) {
 	case LogTypeStd:
 		logger, err = NewStdLogger(opts.Output)
 	case LogTypeLogrus:
-		// 使用 WithOutputPath 和 WithLogrusLevel 选项创建 Logrus 日志实例。
-		logger, err = NewLogrusLogger(
+		// 使用 WithOutputPath 和其他选项创建 Logrus 日志实例。
+		logrusOpts := []LogrusOption{
 			WithOutputPath(opts.Output),
 			WithLogrusLevel(opts.Level),
-		)
+			WithLogrusEnableRotate(opts.EnableRotate),
+			WithLogrusRotateTime(opts.RotateTime),
+			WithLogrusMaxAge(opts.MaxAge),
+		}
+		logger, err = NewLogrusLogger(logrusOpts...)
 	default:
 		return nil, fmt.Errorf("不支持的日志类型：%s", opts.Type)
 	}
