@@ -11,6 +11,8 @@
 - 支持文件和标准输出
 - 支持字段注入和上下文
 - 支持日志滚动（按时间自动切分）
+- 支持多种输出格式（行日志、JSON）
+- 支持编译时配置（如时间格式等）
 
 ## 快速开始
 
@@ -50,15 +52,71 @@ log.WithFields(map[string]interface{}{
 
 ### 使用 Logrus 后端
 
+Logrus 后端默认使用 JSON 格式输出，可以通过配置更改为行日志格式：
+
 ```go
-// 初始化 Logrus 日志
+// 初始化 Logrus 日志（默认 JSON 格式）
 if err := log.InitLogger(
     log.WithLogType(log.LogTypeLogrus),
     log.WithOutput("/path/to/log/file.log"),
 ); err != nil {
     panic(err)
 }
+
+// 使用行日志格式
+if err := log.InitLogger(
+    log.WithLogType(log.LogTypeLogrus),
+    log.WithOutput("/path/to/log/file.log"),
+    log.WithFormat(log.FormatText),
+); err != nil {
+    panic(err)
+}
 ```
+
+注意：日志格式（JSON/行日志）和日志滚动功能仅在使用 Logrus 后端时可用。
+
+### 编译时配置
+
+在使用 Logrus 后端时，以下配置项可以在编译时通过 `-X` 链接标志指定：
+
+```go
+package log
+
+var (
+    // timestampFormat 定义时间戳格式
+    timestampFormat = "2006-01-02 15:04:05"
+    
+    // disableColors 控制是否禁用颜色输出
+    disableColors = false
+    
+    // fullTimestamp 控制是否使用完整时间戳
+    fullTimestamp = true
+    
+    // prettyPrint 控制是否美化输出（仅在 JSON 格式下有效）
+    prettyPrint = false
+)
+```
+
+可以在编译时使用 `-X` 标志设置这些变量的值：
+
+```bash
+# 设置时间格式
+go build -ldflags "-X 'github.com/fsyyft-go/kit/log.timestampFormat=2006/01/02-15:04:05'"
+
+# 设置多个变量
+go build -ldflags "
+    -X 'github.com/fsyyft-go/kit/log.timestampFormat=2006/01/02-15:04:05'
+    -X 'github.com/fsyyft-go/kit/log.disableColors=true'
+    -X 'github.com/fsyyft-go/kit/log.fullTimestamp=true'
+    -X 'github.com/fsyyft-go/kit/log.prettyPrint=true'
+"
+```
+
+注意：这些配置项仅在使用 Logrus 后端时生效。其中：
+- timestampFormat：定义日志中时间戳的格式
+- disableColors：设置为 true 时禁用终端颜色输出
+- fullTimestamp：设置为 true 时使用完整时间戳，false 时使用相对时间
+- prettyPrint：设置为 true 时美化 JSON 输出格式（仅在 JSON 格式下有效）
 
 ### 使用日志滚动功能
 
@@ -105,6 +163,8 @@ if err := log.InitLogger(
 - 自动清理过期日志文件
 - 支持软链接到最新日志文件
 
+注意：日志滚动功能仅在使用 Logrus 后端时可用。
+
 ## 日志级别
 
 - `Debug`: 调试信息，用于开发环境
@@ -128,6 +188,14 @@ logger.SetLevel(log.InfoLevel) // 只记录 Info 及以上级别的日志
 level := logger.GetLevel()
 ```
 
+## 更多示例
+
+更多使用示例请参考 [example/log](../example/log) 目录，其中包含了：
+- 不同输出格式（JSON/行日志）的使用
+- 编译时配置的示例
+- 日志滚动的完整示例
+- 各种日志级别的使用方式
+
 ## 最佳实践
 
 1. 合理使用日志级别
@@ -145,6 +213,7 @@ level := logger.GetLevel()
 3. 性能考虑
    - 在高性能场景下，使用 Debug 级别前先检查级别
    - 避免在热点代码路径中过度记录日志
+   - JSON 格式输出可能比行日志格式有更多的性能开销
 
 ## 贡献
 
