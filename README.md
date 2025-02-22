@@ -72,7 +72,7 @@ Copyright © 2024 fsyyft-go
 ## 联系我们
 
 - 提交 Issue: [GitHub Issues](https://github.com/fsyyft-go/kit/issues)
-- 邮件联系: [your-email@example.com](mailto:fsyyft@gmail.com)
+- 邮件联系: [fsyyft@gmail.com](mailto:fsyyft@gmail.com)
 
 ## 致谢
 
