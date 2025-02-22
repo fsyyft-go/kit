@@ -51,6 +51,10 @@ jobs:
           # 使用最新版本的 golangci-lint。
           version: latest
 
+      # 使用 Makefile 中的 test 命令运行测试。
+      - name: Run tests
+        run: make test
+
       # 使用 Makefile 中的 coverage 命令运行测试并生成覆盖率报告。
       - name: Run tests with coverage
         run: make coverage
