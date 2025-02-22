@@ -1,43 +1,67 @@
+# 工作流名称。
 name: CI
 
+# 定义触发工作流的事件。
 on:
+  # 当有代码推送时触发。
   push:
+  # 当有 Pull Request 时触发。
   pull_request:
 
 jobs:
+  # 定义测试作业。
   test:
+    # 作业的显示名称。
     name: Test
+    # 指定运行环境为最新版本的 Ubuntu。
     runs-on: ubuntu-latest
+    
     strategy:
       matrix:
+        # 定义测试矩阵，在多个 Go 版本上运行测试。
         go-version: [ '1.22', '1.23', '1.24' ]
+      # 某个版本失败时不中断其他版本的测试。
       fail-fast: false
 
     steps:
+      # 使用官方的 checkout action 检出代码。
       - uses: actions/checkout@v4
-
+        
+      # 使用官方的 setup-go action 配置 Go 环境。
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
+          # 使用矩阵中定义的 Go 版本。
           go-version: ${{ matrix.go-version }}
+          # 启用依赖缓存，加速构建。
           cache: true
           
+      # 使用 Makefile 中的 download 命令下载依赖。
       - name: Install dependencies
-        run: go mod download
+        run: make download
 
+      # 使用 Makefile 中的 verify 命令验证依赖完整性。
       - name: Verify dependencies
-        run: go mod verify
+        run: make verify
 
+      # 使用 golangci-lint 官方 action 运行代码质量检查。
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
+          # 使用最新版本的 golangci-lint。
           version: latest
 
-      - name: Run tests
-        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+      # 使用 Makefile 中的 coverage 命令运行测试并生成覆盖率报告。
+      - name: Run tests with coverage
+        run: make coverage
 
+      # 使用 Codecov 官方 action 上传覆盖率报告。
+      # 上传后可以在 https://codecov.io 查看报告，需要先用 GitHub 账号登录并激活仓库。
+      # 也可以通过 GitHub PR 中的 Codecov bot 评论查看覆盖率变化。
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
-          file: ./coverage.txt
+          # 指定覆盖率报告文件路径。
+          file: ./out/coverage.txt
+          # 上传失败时不中断 CI 流程。
           fail_ci_if_error: false 
