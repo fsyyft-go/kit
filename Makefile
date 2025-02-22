@@ -1,4 +1,4 @@
-.PHONY: test coverage lint mod help
+.PHONY: test coverage lint mod help download verify
 
 # 输出目录
 OUT_DIR=out
@@ -26,13 +26,13 @@ help:
 
 test:
 	@echo "运行测试..."
-	@go test -v ./...
+	@go test -v -race ./...
 
 coverage:
 	@echo "生成测试覆盖率报告..."
 	@mkdir -p $(OUT_DIR)
-	@go test -coverprofile=$(OUT_DIR)/coverage.out ./...
-	@go tool cover -html=$(OUT_DIR)/coverage.out -o $(OUT_DIR)/coverage.html
+	@go test -v -race -coverprofile=$(OUT_DIR)/coverage.txt -covermode=atomic ./...
+	@go tool cover -html=$(OUT_DIR)/coverage.txt -o $(OUT_DIR)/coverage.html
 
 lint:
 	@echo "运行代码检查..."
@@ -42,6 +42,14 @@ lint:
 		echo "请先安装 golangci-lint: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
 		exit 1; \
 	fi
+
+download:
+	@echo "下载依赖..."
+	@go mod download
+
+verify:
+	@echo "验证依赖..."
+	@go mod verify
 
 mod:
 	@echo "更新依赖..."
