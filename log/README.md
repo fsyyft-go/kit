@@ -23,7 +23,7 @@ import "github.com/fsyyft-go/kit/log"
 
 func main() {
     // 初始化标准输出日志
-    if err := log.InitLogger(log.LogTypeStd, ""); err != nil {
+    if err := log.InitLogger(log.WithLogType(log.LogTypeStd)); err != nil {
         panic(err)
     }
 
@@ -52,7 +52,10 @@ log.WithFields(map[string]interface{}{
 
 ```go
 // 初始化 Logrus 日志
-if err := log.InitLogger(log.LogTypeLogrus, "/path/to/log/file.log"); err != nil {
+if err := log.InitLogger(
+    log.WithLogType(log.LogTypeLogrus),
+    log.WithOutput("/path/to/log/file.log"),
+); err != nil {
     panic(err)
 }
 ```
@@ -66,7 +69,7 @@ if err := log.InitLogger(log.LogTypeLogrus, "/path/to/log/file.log"); err != nil
 
 日志文件命名规则：
 - 原始文件名：`app.log`
-- 滚动后的文件名：`app.2024031510.log`（表示2024年3月15日10点的日志）
+- 滚动后的文件名：`app-2024031510.log`（表示2024年3月15日10点的日志）
 - 软链接：始终保持原始文件名（`app.log`），指向最新的日志文件
 
 如果需要自定义配置，可以使用以下选项：

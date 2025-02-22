@@ -144,13 +144,13 @@ time="2025-02-24 20:03:42" level=info msg="服务器启动" component=server sta
 ## 说明
 
 1. 标准输出日志器
-   - 使用 `log.InitLogger(log.LogTypeConsole, "")` 初始化
+   - 使用 `log.InitLogger(log.WithLogType(log.LogTypeConsole))` 初始化
    - 日志直接输出到标准输出
    - 适合开发环境使用
    - 支持结构化字段，以 `[key=value]` 的格式显示
 
 2. Logrus 日志器
-   - 使用 `log.InitLogger(log.LogTypeLogrus, "path/to/file.log")` 初始化
+   - 使用 `log.InitLogger(log.WithLogType(log.LogTypeLogrus), log.WithOutput("path/to/file.log"))` 初始化
    - 日志输出到指定的文件
    - 使用 logrus 的默认格式输出
    - 支持结构化字段，以 key=value 的格式显示
