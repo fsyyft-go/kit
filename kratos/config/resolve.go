@@ -6,26 +6,31 @@
 package config
 
 import (
-	// 导入 base64 包，用于解码 base64 编码的配置值。
 	"encoding/base64"
-	// 导入 strings 包，用于字符串处理操作。
 	"strings"
+
+	kit_crypto_des "github.com/fsyyft-go/kit/crypto/des"
 )
 
 var (
 	// defaultResolve 是默认的解析器实例，用于全局配置解析。
 	defaultResolve *resolve
+	// defaultDESKey 是默认的 DES 密钥。
+	defaultDESKey = "go-kit-k"
 )
 
 const (
 	// suffixBase64 定义了 base64 编码值的后缀标识，用于识别需要 base64 解码的配置项。
 	suffixBase64 = ".b64"
+	// suffixDES 定义了 DES 加密值的后缀标识，用于识别需要 DES 解密的配置项。
+	suffixDES = ".des"
 )
 
 // init 函数在包初始化时执行，创建默认解析器并注册 base64 解析处理器。
 func init() {
 	defaultResolve = newResolve()
 	defaultResolve.register(suffixBase64, registerResolveBase64)
+	defaultResolve.register(suffixDES, registerResolveDES)
 }
 
 type (
@@ -123,12 +128,29 @@ func registerResolveBase64(target map[string]interface{}, key, val string) error
 	if strings.HasSuffix(key, suffixBase64) {
 		// 尝试解码 base64 值。
 		if v, err := base64.StdEncoding.DecodeString(val); nil != err {
-			// 解码失败时，将错误信息存储到去除后缀的键中。
 			target[strings.TrimSuffix(key, suffixBase64)] = err.Error()
 			return err
 		} else {
 			// 解码成功时，将解码后的字符串存储到去除后缀的键中。
 			target[strings.TrimSuffix(key, suffixBase64)] = string(v)
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func registerResolveDES(target map[string]interface{}, key, val string) error {
+	// 检查键名是否以 .des 后缀结尾。
+	if strings.HasSuffix(key, suffixDES) {
+		// 尝试解密 DES 值。
+		if v, err := kit_crypto_des.DecryptStringCBCPkCS7PaddingStringHex(defaultDESKey, val); nil != err {
+			target[strings.TrimSuffix(key, suffixDES)] = err.Error()
+			return err
+		} else {
+			// 解码成功时，将解码后的字符串存储到去除后缀的键中。
+			target[strings.TrimSuffix(key, suffixDES)] = string(v)
+			return nil
 		}
 	}
 

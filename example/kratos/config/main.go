@@ -24,6 +24,8 @@ type Config struct {
 		Name string `json:"name"`
 		// Password 是应用程序密码，可能是从 base64 编码后解码得到的。
 		Password string `json:"password"`
+		// Addr 是应用程序地址，可能是从 base64 编码后解码得到的。
+		Addr string `json:"addr"`
 	} `json:"app"`
 }
 
@@ -71,4 +73,6 @@ func main() {
 	fmt.Printf("%+v\n", cfg.App.Name)
 	// 打印应用程序密码（可能是从 base64 编码后解码得到的）。
 	fmt.Printf("%+v\n", cfg.App.Password)
+	// 打印应用程序地址。
+	fmt.Printf("%+v\n", cfg.App.Addr)
 }
