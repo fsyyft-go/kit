@@ -1,74 +1,97 @@
-# HTTP 模块测试
+# HTTP Transport 包
 
-本目录包含 Kratos HTTP 模块与 Gin 框架集成的功能实现及其单元测试。
+`http` 包提供了 Kratos HTTP 服务器到 Gin 引擎的转换功能，让你能够在 Kratos 框架中使用 Gin 的路由和中间件能力。
 
-## 功能概览
+## 特性
 
-主要功能包括：
+- 将 Kratos HTTP 路由转换为 Gin 路由
+- 支持路径参数和查询参数的转换
+- 提供路由信息获取功能
+- 保持 Kratos 的上下文和中间件兼容性
 
-1. `getRouter` - 从 Kratos HTTP Server 获取底层的 mux.Router 实例
-2. `GetPaths` - 提取 Kratos HTTP 服务器中所有注册的路由信息
-3. `Parse` - 将 Kratos HTTP 服务器中的路由注册到 Gin 引擎中
+## 快速开始
 
-## 运行测试
+### 基本使用
 
-执行以下命令运行单元测试：
+```go
+package main
 
-```bash
-go test -v github.com/fsyyft-go/kit/kratos/transport/http
+import (
+    "github.com/gin-gonic/gin"
+    "github.com/go-kratos/kratos/v2/transport/http"
+    kithttp "github.com/fsyyft-go/kit/kratos/transport/http"
+)
+
+func main() {
+    // 创建 Kratos HTTP 服务器
+    srv := http.NewServer()
+
+    // 创建 Gin 引擎
+    engine := gin.New()
+
+    // 将 Kratos 路由转换为 Gin 路由
+    kithttp.Parse(srv, engine)
+
+    // 启动服务器
+    if err := srv.Start(); err != nil {
+        panic(err)
+    }
+}
 ```
 
-## 测试覆盖率
+### 获取路由信息
 
-执行以下命令生成测试覆盖率报告：
-
-```bash
-go test -v -coverprofile=coverage.out github.com/fsyyft-go/kit/kratos/transport/http
-go tool cover -html=coverage.out -o coverage.html
+```go
+// 获取所有路由信息
+routes := kithttp.GetPaths(srv)
+for _, route := range routes {
+    fmt.Printf("Method: %s, Path: %s\n", route.Method(), route.Path())
+}
 ```
 
-然后可以在浏览器中打开 `coverage.html` 查看详细的测试覆盖率报告。
+## 路由转换说明
 
-当前测试覆盖率为 96.7%，几乎覆盖了所有的代码路径。
+### 路径参数转换
 
-## 基准测试
+Kratos 的路径参数会被自动转换为 Gin 的路径参数格式：
 
-执行以下命令运行基准测试：
+```go
+// Kratos 路由
+srv.Handle("/users/{id}", handler)
 
-```bash
-go test -bench=. github.com/fsyyft-go/kit/kratos/transport/http
+// 转换后的 Gin 路由
+// /users/:id
 ```
 
-## 测试用例说明
+### 查询参数处理
 
-本测试套件采用表格驱动测试模式，包含以下测试用例：
+查询参数会被正确保留和处理：
 
-1. `TestGetRouter` - 测试从 Kratos HTTP Server 获取 mux.Router 功能。
-2. `TestRouteInfo` - 测试 RouteInfo 结构体。
-3. `TestGetPathsScenarios` - 测试 GetPaths 函数在各种场景下的行为，包括：
-   - 正常路由
-   - 空服务器
-   - 复杂路径
-   - 无路由
-4. `TestParseBasicScenarios` - 测试 Parse 函数的基本场景，包括：
-   - 基本解析
-   - 无路由服务器
-5. `TestParseWithPathProcessing` - 测试 Parse 函数中的路径处理，包括：
-   - 处理查询参数
-   - 处理空路径
-6. `TestParseWithNilParams` - 测试 Parse 函数处理 nil 参数，包括：
-   - nil 服务器
-   - nil 引擎
-   - 全部 nil
+```go
+// Kratos 路由
+srv.Handle("/search?q={query}", handler)
 
-这些测试覆盖了代码的核心功能和边缘情况，确保代码具有健壮性。我们尤其关注了错误处理和边界条件，确保代码在各种情况下都能稳定工作。
+// 转换后的 Gin 路由
+// /search
+// 查询参数可以通过 c.Query("q") 访问
+```
 
-## 表格驱动测试的优势
+## 最佳实践
 
-采用表格驱动测试模式带来以下优势：
+1. 路由定义
+   - 使用 Kratos 的路由定义方式
+   - 避免在路径中包含复杂的正则表达式
+   - 保持路径参数命名的一致性
 
-1. 代码组织更清晰，相关测试场景集中在一起。
-2. 减少重复代码，提高测试维护效率。
-3. 易于扩展，添加新测试场景只需在测试表中添加新条目。
-4. 提高测试可读性，每个测试场景都有明确的名称和目的。
-5. 更系统地测试各种边界情况和异常场景。 
+2. 性能优化
+   - 避免重复调用 Parse 函数
+   - 合理组织路由结构
+   - 注意路由数量对性能的影响
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request 来帮助改进这个包。
+
+## 许可证
+
+本项目采用 MIT License 许可证。详见 [LICENSE](../../../LICENSE) 文件。 
