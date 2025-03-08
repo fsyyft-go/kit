@@ -22,6 +22,26 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 
 ## 模块列表
 
+### crypto
+
+#### [crypto/des](crypto/des/README.md)
+
+DES 加密工具：提供 DES-CBC 加密/解密功能，支持 PKCS7 填充和多种输入格式（字节数组、字符串、16 进制字符串）。[详细说明 →](crypto/des/README.md)
+
+### kratos
+
+#### [kratos/config](kratos/config/README.md)
+
+配置解码器：对 Kratos 配置系统的扩展，支持对特定后缀（如 .b64）的配置值进行解码。[详细说明 →](kratos/config/README.md)
+
+#### [kratos/middleware](kratos/middleware/README.md)
+
+中间件集合：提供了验证（validate）和基本认证（basicauth）两个中间件，支持请求验证和 HTTP Basic Authentication。[详细说明 →](kratos/middleware/README.md)
+
+#### [kratos/transport/http](kratos/transport/http/README.md)
+
+HTTP 适配器：提供 Kratos HTTP 服务器到 Gin 引擎的转换功能，支持路由和参数转换。[详细说明 →](kratos/transport/http/README.md)
+
 ### [log](log/README.md)
 
 日志抽象接口，提供统一的日志记录标准，支持多种底层实现。[详细说明 →](log/README.md)
@@ -38,25 +58,9 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 
 测试日志工具：提供带有统一前缀的测试日志输出功能，使测试输出更加清晰易读。[详细说明 →](testing/README.md)
 
-### [kratos/config](kratos/config/README.md)
-
-配置解码器：对 Kratos 配置系统的扩展，支持对特定后缀（如 .b64）的配置值进行解码。[详细说明 →](kratos/config/README.md)
-
-### [kratos/middleware](kratos/middleware/README.md)
-
-中间件集合：提供了验证（validate）和基本认证（basicauth）两个中间件，支持请求验证和 HTTP Basic Authentication。[详细说明 →](kratos/middleware/README.md)
-
-### [kratos/transport/http](kratos/transport/http/README.md)
-
-HTTP 适配器：提供 Kratos HTTP 服务器到 Gin 引擎的转换功能，支持路由和参数转换。[详细说明 →](kratos/transport/http/README.md)
-
 ### [time](time/README.md)
 
 基于 [carbon](https://github.com/dromara/carbon) 库的时间处理工具包，提供简单的相对时间获取功能和可配置的时间格式化选项。支持编译时配置时区、格式、语言等参数。[详细说明 →](time/README.md)
-
-### [crypto/des](crypto/des/README.md)
-
-DES 加密工具：提供 DES-CBC 加密/解密功能，支持 PKCS7 填充和多种输入格式（字节数组、字符串、16 进制字符串）。[详细说明 →](crypto/des/README.md)
 
 更多模块正在开发中，敬请期待...
 
