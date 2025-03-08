@@ -335,7 +335,7 @@ func (o *oneTimePassword) GenerateURL() string {
 	buffer.WriteString("otpauth://totp/")
 
 	// 如果存在标签，则将其添加到 URL 中并进行 URL 编码。
-	if 0 != len(o.label) {
+	if len(o.label) > 0 {
 		buffer.WriteString(url.QueryEscape(o.label))
 	}
 
@@ -345,7 +345,7 @@ func (o *oneTimePassword) GenerateURL() string {
 	buffer.WriteString("&")
 
 	// 如果存在发行者，则将其添加到 URL 中并进行 URL 编码。
-	if 0 != len(o.issuer) {
+	if len(o.issuer) > 0 {
 		buffer.WriteString("issuer=")
 		buffer.WriteString(url.QueryEscape(o.issuer))
 		buffer.WriteString("&")
