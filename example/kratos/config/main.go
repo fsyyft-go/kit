@@ -17,20 +17,25 @@ import (
 )
 
 // Config 结构体定义了应用程序的配置结构。
-type Config struct {
-	// App 嵌套结构体包含应用程序相关配置。
-	App struct {
-		// Name 是应用程序名称。
-		Name string `json:"name"`
-		// Password 是应用程序密码，可能是从 base64 编码后解码得到的。
-		Password string `json:"password"`
-		// Addr 是应用程序地址，可能是从 base64 编码后解码得到的。
-		Addr string `json:"addr"`
-	} `json:"app"`
-}
 
 // main 函数是程序入口点，演示了如何加载和使用配置。
 func main() {
+	example()
+}
+
+func example() {
+	type Config struct {
+		// App 嵌套结构体包含应用程序相关配置。
+		App struct {
+			// Name 是应用程序名称。
+			Name string `json:"name"`
+			// Password 是应用程序密码，可能是从 base64 编码后解码得到的。
+			Password string `json:"password"`
+			// Addr 是应用程序地址，可能是从 base64 编码后解码得到的。
+			Addr string `json:"addr"`
+		} `json:"app"`
+	}
+
 	// 声明配置文件路径变量。
 	var configPath string
 
