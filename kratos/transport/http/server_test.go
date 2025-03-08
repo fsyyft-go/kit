@@ -15,192 +15,288 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestGetRouter 测试从 Kratos HTTP Server 获取 mux.Router 功能
+// TestGetRouter 测试从 Kratos HTTP Server 获取 mux.Router 功能。
 func TestGetRouter(t *testing.T) {
-	// 创建一个 Kratos HTTP 服务器
+	// 创建一个 Kratos HTTP 服务器。
 	srv := kratoshttp.NewServer()
 
-	// 获取路由器
+	// 获取路由器。
 	router := getRouter(srv)
 
-	// 验证获取的路由器不为空
+	// 验证获取的路由器不为空。
 	assert.NotNil(t, router)
 	assert.IsType(t, &mux.Router{}, router)
 }
 
-// TestGetPaths 测试获取 HTTP 服务器中注册的所有路由信息
-func TestGetPaths(t *testing.T) {
-	// 创建一个 Kratos HTTP 服务器
-	srv := kratoshttp.NewServer()
-
-	// 注册一些测试路由
-	srv.Handle("/test", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	srv.HandlePrefix("/prefix", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-
-	// 获取所有路由信息
-	routes := GetPaths(srv)
-
-	// 验证路由信息不为空
-	assert.NotNil(t, routes)
-}
-
-// TestRouteInfo 测试 RouteInfo 结构体
+// TestRouteInfo 测试 RouteInfo 结构体。
 func TestRouteInfo(t *testing.T) {
-	// 创建一个 RouteInfo 实例
+	// 创建一个 RouteInfo 实例。
 	routeInfo := RouteInfo{
 		method: "GET",
 		path:   "/test",
 	}
 
-	// 验证字段值
+	// 验证字段值。
 	assert.Equal(t, "GET", routeInfo.method)
 	assert.Equal(t, "/test", routeInfo.path)
 }
 
-// TestBasicParse 测试基本的 Parse 功能
-func TestBasicParse(t *testing.T) {
-	// 设置 Gin 为测试模式
-	gin.SetMode(gin.TestMode)
+// TestGetPathsScenarios 测试 GetPaths 函数在各种场景下的行为。
+func TestGetPathsScenarios(t *testing.T) {
+	// 定义测试用例。
+	tests := []struct {
+		name          string                    // 测试用例名称。
+		setupServer   func() *kratoshttp.Server // 准备服务器的函数。
+		expectEmpty   bool                      // 是否期望返回空列表。
+		validatePaths func([]RouteInfo)         // 验证路径列表的函数。
+	}{
+		{
+			name: "正常路由",
+			setupServer: func() *kratoshttp.Server {
+				srv := kratoshttp.NewServer()
+				srv.Handle("/test", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+				srv.HandlePrefix("/prefix", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+				return srv
+			},
+			expectEmpty: false,
+			validatePaths: func(routes []RouteInfo) {
+				assert.NotEmpty(t, routes)
+			},
+		},
+		{
+			name: "空服务器",
+			setupServer: func() *kratoshttp.Server {
+				return nil
+			},
+			expectEmpty: true,
+			validatePaths: func(routes []RouteInfo) {
+				assert.Empty(t, routes)
+			},
+		},
+		{
+			name: "复杂路径",
+			setupServer: func() *kratoshttp.Server {
+				srv := kratoshttp.NewServer()
+				complexPath := "/test/{param:.*}"
+				srv.Handle(complexPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+				return srv
+			},
+			expectEmpty: false,
+			validatePaths: func(routes []RouteInfo) {
+				assert.NotEmpty(t, routes)
+			},
+		},
+		{
+			name: "无路由",
+			setupServer: func() *kratoshttp.Server {
+				return kratoshttp.NewServer()
+			},
+			expectEmpty: false,
+			validatePaths: func(routes []RouteInfo) {
+				// 返回空路由列表而不是 nil。
+				assert.NotNil(t, routes)
+			},
+		},
+	}
 
-	// 创建一个 Kratos HTTP 服务器
-	srv := kratoshttp.NewServer()
+	// 执行测试用例。
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 准备服务器。
+			srv := tt.setupServer()
 
-	// 创建一个 Gin 引擎
-	engine := gin.New()
+			// 预期 GetPaths 不会导致 panic。
+			assert.NotPanics(t, func() {
+				// 获取所有路由信息。
+				routes := GetPaths(srv)
 
-	// 验证 Parse 不会导致 panic
-	assert.NotPanics(t, func() {
-		Parse(srv, engine)
-	})
+				// 验证路由信息。
+				assert.NotNil(t, routes)
+				if tt.expectEmpty {
+					assert.Empty(t, routes)
+				}
+				if tt.validatePaths != nil {
+					tt.validatePaths(routes)
+				}
+			})
+		})
+	}
 }
 
-// TestParseWithPathProcessing 测试 Parse 函数中的路径处理
+// TestParseBasicScenarios 测试 Parse 函数的基本场景。
+func TestParseBasicScenarios(t *testing.T) {
+	// 设置 Gin 为测试模式。
+	gin.SetMode(gin.TestMode)
+
+	// 定义测试用例。
+	tests := []struct {
+		name        string                    // 测试用例名称。
+		setupServer func() *kratoshttp.Server // 准备服务器的函数。
+		setupEngine func() *gin.Engine        // 准备 Gin 引擎的函数。
+	}{
+		{
+			name: "基本解析",
+			setupServer: func() *kratoshttp.Server {
+				return kratoshttp.NewServer()
+			},
+			setupEngine: func() *gin.Engine {
+				return gin.New()
+			},
+		},
+		{
+			name: "无路由服务器",
+			setupServer: func() *kratoshttp.Server {
+				return kratoshttp.NewServer()
+			},
+			setupEngine: func() *gin.Engine {
+				return gin.New()
+			},
+		},
+	}
+
+	// 执行测试用例。
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 准备服务器和引擎。
+			srv := tt.setupServer()
+			engine := tt.setupEngine()
+
+			// 验证 Parse 不会导致 panic。
+			assert.NotPanics(t, func() {
+				Parse(srv, engine)
+			})
+
+			// 对于无路由服务器场景，验证返回空路由列表而不是 nil。
+			if tt.name == "无路由服务器" {
+				routes := GetPaths(srv)
+				assert.NotNil(t, routes)
+			}
+		})
+	}
+}
+
+// TestParseWithPathProcessing 测试 Parse 函数中的路径处理。
 func TestParseWithPathProcessing(t *testing.T) {
-	// 设置 Gin 为测试模式
+	// 设置 Gin 为测试模式。
 	gin.SetMode(gin.TestMode)
 
-	// 创建一个 Kratos HTTP 服务器
-	srv := kratoshttp.NewServer()
+	// 定义测试用例。
+	tests := []struct {
+		name        string                              // 测试用例名称。
+		setupRoute  func(*mux.Router, http.HandlerFunc) // 设置路由的函数。
+		testRequest func(*gin.Engine)                   // 测试请求的函数。
+	}{
+		{
+			name: "处理查询参数",
+			setupRoute: func(router *mux.Router, handler http.HandlerFunc) {
+				router.Handle("/path/with/query?param=value", handler).Methods("GET")
+			},
+			testRequest: func(engine *gin.Engine) {
+				req := httptest.NewRequest("GET", "/path/with/query", nil)
+				resp := httptest.NewRecorder()
+				engine.ServeHTTP(resp, req)
+				// 这里不验证响应内容，只确保处理不会崩溃。
+			},
+		},
+		{
+			name: "处理空路径",
+			setupRoute: func(router *mux.Router, handler http.HandlerFunc) {
+				router.Handle("", handler).Methods("GET")
+			},
+			testRequest: func(engine *gin.Engine) {
+				req := httptest.NewRequest("GET", "/", nil)
+				resp := httptest.NewRecorder()
+				engine.ServeHTTP(resp, req)
+				// 这里不验证响应内容，只确保处理不会崩溃。
+			},
+		},
+	}
 
-	// 创建一个处理函数，它将返回简单的响应
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("test path processing"))
-	})
+	// 执行测试用例。
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 创建服务器。
+			srv := kratoshttp.NewServer()
 
-	// 手动添加路由
-	router := getRouter(srv)
-	router.Handle("/path/with/query?param=value", handler).Methods("GET")
-	router.Handle("", handler).Methods("GET")
+			// 创建处理函数。
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("test path processing"))
+			})
 
-	// 创建一个 Gin 引擎
-	engine := gin.New()
+			// 设置路由。
+			router := getRouter(srv)
+			tt.setupRoute(router, handler)
 
-	// 将 Kratos 路由解析到 Gin 引擎中
-	Parse(srv, engine)
+			// 创建 Gin 引擎。
+			engine := gin.New()
 
-	// 测试不带查询参数的路径
-	req1 := httptest.NewRequest("GET", "/path/with/query", nil)
-	resp1 := httptest.NewRecorder()
-	engine.ServeHTTP(resp1, req1)
+			// 将 Kratos 路由解析到 Gin 引擎中。
+			Parse(srv, engine)
 
-	// 测试空路径变为根路径
-	req2 := httptest.NewRequest("GET", "/", nil)
-	resp2 := httptest.NewRecorder()
-	engine.ServeHTTP(resp2, req2)
+			// 测试请求。
+			tt.testRequest(engine)
+		})
+	}
 }
 
-// TestParseWithNilParams 测试 Parse 函数处理 nil 参数
+// TestParseWithNilParams 测试 Parse 函数处理 nil 参数。
 func TestParseWithNilParams(t *testing.T) {
-	// 测试 nil 服务器
-	assert.NotPanics(t, func() {
-		Parse(nil, gin.New())
-	})
+	// 定义测试用例。
+	tests := []struct {
+		name   string             // 测试用例名称。
+		server *kratoshttp.Server // 服务器。
+		engine *gin.Engine        // Gin 引擎。
+	}{
+		{
+			name:   "nil 服务器",
+			server: nil,
+			engine: gin.New(),
+		},
+		{
+			name:   "nil 引擎",
+			server: kratoshttp.NewServer(),
+			engine: nil,
+		},
+		{
+			name:   "全部 nil",
+			server: nil,
+			engine: nil,
+		},
+	}
 
-	// 测试 nil 引擎
-	assert.NotPanics(t, func() {
-		Parse(kratoshttp.NewServer(), nil)
-	})
-
-	// 测试两个都是 nil
-	assert.NotPanics(t, func() {
-		Parse(nil, nil)
-	})
+	// 执行测试用例。
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 验证 Parse 不会导致 panic。
+			assert.NotPanics(t, func() {
+				Parse(tt.server, tt.engine)
+			})
+		})
+	}
 }
 
-// TestParseWithNoRoutes 测试处理没有路由的情况
-func TestParseWithNoRoutes(t *testing.T) {
-	// 设置 Gin 为测试模式
-	gin.SetMode(gin.TestMode)
-
-	// 创建一个没有注册任何路由的 Kratos HTTP 服务器
-	srv := kratoshttp.NewServer()
-
-	// 创建一个 Gin 引擎
-	engine := gin.New()
-
-	// 将 Kratos 路由解析到 Gin 引擎
-	Parse(srv, engine)
-
-	// 获取所有路由信息
-	routes := GetPaths(srv)
-
-	// 验证返回空路由列表而不是 nil 或导致崩溃
-	assert.NotNil(t, routes)
-}
-
-// TestGetPathsWithNilRouter 测试处理 nil 路由器的情况
-func TestGetPathsWithNilRouter(t *testing.T) {
-	// 创建一个特殊的空服务器
-	// 注意: 实际使用中不应该出现这种情况，这里仅用于测试代码的健壮性
-	var srv *kratoshttp.Server
-
-	// 预期获取路径应该优雅地处理 nil 路由器的情况
-	assert.NotPanics(t, func() {
-		routes := GetPaths(srv)
-		// 对于 nil 服务器，预期返回空切片而不是 nil
-		assert.NotNil(t, routes)
-		assert.Empty(t, routes)
-	})
-}
-
-// TestGetPathsWithRouteErrors 测试 GetPaths 处理路由错误的情况
-func TestGetPathsWithRouteErrors(t *testing.T) {
-	// 创建一个 Kratos HTTP 服务器
-	srv := kratoshttp.NewServer()
-
-	// 注册一个复杂路径，可能在获取路径模板或方法时产生错误
-	complexPath := "/test/{param:.*}"
-	srv.Handle(complexPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-
-	// 验证 GetPaths 不会因为处理错误而抛出 panic
-	assert.NotPanics(t, func() {
-		routes := GetPaths(srv)
-		assert.NotNil(t, routes)
-	})
-}
-
-// BenchmarkParse 基准测试 Parse 函数的性能
+// BenchmarkParse 基准测试 Parse 函数的性能。
 func BenchmarkParse(b *testing.B) {
-	// 设置 Gin 为测试模式
+	// 设置 Gin 为测试模式。
 	gin.SetMode(gin.TestMode)
 
-	// 创建一个 Kratos HTTP 服务器
+	// 创建一个 Kratos HTTP 服务器。
 	srv := kratoshttp.NewServer()
 
-	// 注册一些测试路由
+	// 注册一些测试路由。
 	srv.Handle("/api", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	srv.Handle("/api/users", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 
-	// 重置基准计时器
+	// 重置基准计时器。
 	b.ResetTimer()
 
-	// 运行基准测试
+	// 运行基准测试。
 	for i := 0; i < b.N; i++ {
-		// 为每次迭代创建新的 Gin 引擎
+		// 为每次迭代创建新的 Gin 引擎。
 		engine := gin.New()
 
-		// 将 Kratos 路由解析到 Gin 引擎
+		// 将 Kratos 路由解析到 Gin 引擎。
 		Parse(srv, engine)
 	}
 }
