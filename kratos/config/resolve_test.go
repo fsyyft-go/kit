@@ -7,6 +7,8 @@ package config
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestNewResolve 测试 newResolve 函数是否正确初始化解析器实例
@@ -14,17 +16,11 @@ func TestNewResolve(t *testing.T) {
 	// 创建一个新的解析器实例。
 	r := newResolve()
 	// 验证解析器实例不为空。
-	if r == nil {
-		t.Fatal("newResolve() 返回了 nil")
-	}
+	assert.NotNil(t, r, "newResolve() 返回了 nil")
 	// 验证解析器的 resolvers 映射已初始化。
-	if r.resolvers == nil {
-		t.Fatal("newResolve() 未初始化 resolvers 映射")
-	}
+	assert.NotNil(t, r.resolvers, "newResolve() 未初始化 resolvers 映射")
 	// 验证初始化的 resolvers 映射为空。
-	if len(r.resolvers) != 0 {
-		t.Fatalf("newResolve() 初始化的 resolvers 映射不为空，包含 %d 个元素", len(r.resolvers))
-	}
+	assert.Empty(t, r.resolvers, "newResolve() 初始化的 resolvers 映射不为空")
 }
 
 // TestResolveRegister 测试 register 方法是否正确注册解析处理函数。
@@ -41,14 +37,11 @@ func TestResolveRegister(t *testing.T) {
 	r.register("test", testResolver)
 
 	// 验证解析处理函数是否已正确注册。
-	if len(r.resolvers) != 1 {
-		t.Fatalf("register() 后 resolvers 映射应包含 1 个元素，实际包含 %d 个", len(r.resolvers))
-	}
+	assert.Len(t, r.resolvers, 1, "register() 后 resolvers 映射应包含 1 个元素")
 
 	// 验证是否可以通过键名获取到注册的解析处理函数。
-	if _, exists := r.resolvers["test"]; !exists {
-		t.Fatal("register() 未能正确注册解析处理函数")
-	}
+	_, exists := r.resolvers["test"]
+	assert.True(t, exists, "register() 未能正确注册解析处理函数")
 }
 
 // TestRegisterResolve 测试 RegisterResolve 函数是否正确向默认解析器注册解析处理函数。
@@ -69,14 +62,11 @@ func TestRegisterResolve(t *testing.T) {
 	RegisterResolve("test", testResolver)
 
 	// 验证解析处理函数是否已正确注册到默认解析器。
-	if len(defaultResolve.resolvers) != 1 {
-		t.Fatalf("RegisterResolve() 后默认解析器的 resolvers 映射应包含 1 个元素，实际包含 %d 个", len(defaultResolve.resolvers))
-	}
+	assert.Len(t, defaultResolve.resolvers, 1, "RegisterResolve() 后默认解析器的 resolvers 映射应包含 1 个元素")
 
 	// 验证是否可以通过键名获取到注册的解析处理函数。
-	if _, exists := defaultResolve.resolvers["test"]; !exists {
-		t.Fatal("RegisterResolve() 未能正确向默认解析器注册解析处理函数")
-	}
+	_, exists := defaultResolve.resolvers["test"]
+	assert.True(t, exists, "RegisterResolve() 未能正确向默认解析器注册解析处理函数")
 }
 
 // TestRegisterResolveBase64 测试 registerResolveBase64 函数是否正确处理 base64 编码的值。
@@ -123,20 +113,18 @@ func TestRegisterResolveBase64(t *testing.T) {
 			err := registerResolveBase64(tt.target, tt.key, tt.val)
 
 			// 验证错误是否符合预期。
-			if (err == nil && tt.expectedError != nil) || (err != nil && tt.expectedError == nil) {
-				t.Fatalf("期望错误: %v, 实际错误: %v", tt.expectedError, err)
-			}
-			if err != nil && tt.expectedError != nil && err.Error() != tt.expectedError.Error() {
-				t.Fatalf("期望错误消息: %v, 实际错误消息: %v", tt.expectedError.Error(), err.Error())
+			if tt.expectedError != nil {
+				assert.Error(t, err, "应该返回错误")
+				assert.Equal(t, tt.expectedError.Error(), err.Error(), "错误消息不匹配")
+			} else {
+				assert.NoError(t, err, "不应该返回错误")
 			}
 
 			// 验证目标映射是否符合预期。
 			for k, expectedV := range tt.expectedTarget {
-				if actualV, exists := tt.target[k]; !exists {
-					t.Fatalf("目标映射中缺少键 %s", k)
-				} else if actualV != expectedV {
-					t.Fatalf("键 %s 的值不匹配，期望: %v, 实际: %v", k, expectedV, actualV)
-				}
+				actualV, exists := tt.target[k]
+				assert.True(t, exists, "目标映射中缺少键 %s", k)
+				assert.Equal(t, expectedV, actualV, "键 %s 的值不匹配", k)
 			}
 		})
 	}
@@ -250,65 +238,61 @@ func TestResolve(t *testing.T) {
 			err := r.Resolve(tt.target)
 
 			// 验证错误是否符合预期。
-			if (err == nil && tt.expectedError != nil) || (err != nil && tt.expectedError == nil) {
-				t.Fatalf("期望错误: %v, 实际错误: %v", tt.expectedError, err)
-			}
-			if err != nil && tt.expectedError != nil && err.Error() != tt.expectedError.Error() {
-				t.Fatalf("期望错误消息: %v, 实际错误消息: %v", tt.expectedError.Error(), err.Error())
+			if tt.expectedError != nil {
+				assert.Error(t, err, "应该返回错误")
+				assert.Equal(t, tt.expectedError.Error(), err.Error(), "错误消息不匹配")
+			} else {
+				assert.NoError(t, err, "不应该返回错误")
 			}
 
 			// 验证嵌套映射是否符合预期。
-			validateNestedMap(t, tt.target, tt.expectedTarget)
+			validateNestedMapWithAssert(t, tt.target, tt.expectedTarget)
 		})
 	}
 }
 
-// validateNestedMap 递归验证嵌套映射是否匹配预期。
-func validateNestedMap(t *testing.T, actual, expected map[string]interface{}) {
+// validateNestedMapWithAssert 递归验证嵌套映射是否匹配预期，使用 assert 包。
+func validateNestedMapWithAssert(t *testing.T, actual, expected map[string]interface{}) {
 	// 遍历期望的映射，验证实际映射中是否存在对应的键值对。
 	for k, expectedV := range expected {
 		actualV, exists := actual[k]
-		if !exists {
-			t.Fatalf("目标映射中缺少键 %s", k)
-		}
+		assert.True(t, exists, "目标映射中缺少键 %s", k)
 
 		// 根据值的类型进行不同的验证。
 		switch expectedVTyped := expectedV.(type) {
 		case map[string]interface{}:
 			// 如果值是映射，递归验证。
 			actualVTyped, ok := actualV.(map[string]interface{})
-			if !ok {
-				t.Fatalf("键 %s 的值类型不匹配，期望: map[string]interface{}, 实际: %T", k, actualV)
+			assert.True(t, ok, "键 %s 的值类型不匹配，期望: map[string]interface{}, 实际: %T", k, actualV)
+			if ok {
+				validateNestedMapWithAssert(t, actualVTyped, expectedVTyped)
 			}
-			validateNestedMap(t, actualVTyped, expectedVTyped)
 		case []interface{}:
 			// 如果值是数组，验证数组长度和内容。
 			actualVTyped, ok := actualV.([]interface{})
-			if !ok {
-				t.Fatalf("键 %s 的值类型不匹配，期望: []interface{}, 实际: %T", k, actualV)
-			}
-			if len(actualVTyped) != len(expectedVTyped) {
-				t.Fatalf("键 %s 的数组长度不匹配，期望: %d, 实际: %d", k, len(expectedVTyped), len(actualVTyped))
-			}
-			// 遍历数组，验证每个元素。
-			for i, expectedItem := range expectedVTyped {
-				if expectedItemMap, ok := expectedItem.(map[string]interface{}); ok {
-					// 如果元素是映射，递归验证。
-					actualItemMap, ok := actualVTyped[i].(map[string]interface{})
-					if !ok {
-						t.Fatalf("键 %s 的数组项 %d 类型不匹配，期望: map[string]interface{}, 实际: %T", k, i, actualVTyped[i])
+			assert.True(t, ok, "键 %s 的值类型不匹配，期望: []interface{}, 实际: %T", k, actualV)
+			if ok {
+				assert.Len(t, actualVTyped, len(expectedVTyped), "键 %s 的数组长度不匹配", k)
+				// 遍历数组，验证每个元素。
+				for i, expectedItem := range expectedVTyped {
+					if i < len(actualVTyped) { // 确保索引在范围内
+						if expectedItemMap, ok := expectedItem.(map[string]interface{}); ok {
+							// 如果元素是映射，递归验证。
+							actualItemMap, ok := actualVTyped[i].(map[string]interface{})
+							assert.True(t, ok, "键 %s 的数组项 %d 类型不匹配，期望: map[string]interface{}, 实际: %T", k, i, actualVTyped[i])
+							if ok {
+								validateNestedMapWithAssert(t, actualItemMap, expectedItemMap)
+							}
+						} else {
+							// 如果元素是简单类型，直接比较。
+							assert.Equal(t, expectedItem, actualVTyped[i], "键 %s 的数组项 %d 不匹配", k, i)
+						}
 					}
-					validateNestedMap(t, actualItemMap, expectedItemMap)
-				} else if actualVTyped[i] != expectedItem {
-					// 如果元素是简单类型，直接比较。
-					t.Fatalf("键 %s 的数组项 %d 不匹配，期望: %v, 实际: %v", k, i, expectedItem, actualVTyped[i])
 				}
 			}
 		default:
 			// 对于简单类型，直接比较。
-			if actualV != expectedV {
-				t.Fatalf("键 %s 的值不匹配，期望: %v, 实际: %v", k, expectedV, actualV)
-			}
+			assert.Equal(t, expectedV, actualV, "键 %s 的值不匹配", k)
 		}
 	}
 }
@@ -316,14 +300,11 @@ func validateNestedMap(t *testing.T, actual, expected map[string]interface{}) {
 // TestInit 测试 init 函数是否正确初始化默认解析器并注册 base64 解析处理器。
 func TestInit(t *testing.T) {
 	// 验证默认解析器是否已初始化。
-	if defaultResolve == nil {
-		t.Fatal("init() 未初始化默认解析器")
-	}
+	assert.NotNil(t, defaultResolve, "init() 未初始化默认解析器")
 
 	// 验证 base64 解析处理器是否已注册。
-	if _, exists := defaultResolve.resolvers[suffixBase64]; !exists {
-		t.Fatal("init() 未注册 base64 解析处理器")
-	}
+	_, exists := defaultResolve.resolvers[suffixBase64]
+	assert.True(t, exists, "init() 未注册 base64 解析处理器")
 
 	// 测试默认解析器的 base64 解析功能。
 	target := map[string]interface{}{
@@ -332,14 +313,10 @@ func TestInit(t *testing.T) {
 
 	// 使用默认解析器解析目标映射。
 	err := defaultResolve.Resolve(target)
-	if err != nil {
-		t.Fatalf("默认解析器解析 base64 值时出错: %v", err)
-	}
+	assert.NoError(t, err, "默认解析器解析 base64 值时出错")
 
 	// 验证 base64 解析结果。
-	if val, exists := target["key"]; !exists {
-		t.Fatal("默认解析器未能解析 base64 值")
-	} else if val != "Hello World" {
-		t.Fatalf("默认解析器解析 base64 值不正确，期望: %s, 实际: %s", "Hello World", val)
-	}
+	val, exists := target["key"]
+	assert.True(t, exists, "默认解析器未能解析 base64 值")
+	assert.Equal(t, "Hello World", val, "默认解析器解析 base64 值不正确")
 }

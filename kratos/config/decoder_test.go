@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	kratos_config "github.com/go-kratos/kratos/v2/config"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestWithResolve 测试 WithResolve 函数是否正确设置解析函数。
@@ -27,9 +28,7 @@ func TestWithResolve(t *testing.T) {
 	opt(options)
 
 	// 验证解析函数是否已正确设置。
-	if options.Resolve == nil {
-		t.Fatal("WithResolve() 未能正确设置解析函数")
-	}
+	assert.NotNil(t, options.Resolve, "WithResolve() 未能正确设置解析函数")
 }
 
 // TestNewDecoder 测试 NewDecoder 函数是否正确创建解码器实例。
@@ -73,14 +72,11 @@ func TestNewDecoder(t *testing.T) {
 			decoder := NewDecoder(tt.opts...)
 
 			// 验证解码器是否已创建。
-			if decoder == nil {
-				t.Fatal("NewDecoder() 返回了 nil")
-			}
+			assert.NotNil(t, decoder, "NewDecoder() 返回了 nil")
 
 			// 验证解析函数是否已正确设置。
-			if (decoder.Resolve == nil) == tt.expectResolve {
-				t.Fatalf("解析函数设置不正确，期望存在: %v, 实际: %v", tt.expectResolve, decoder.Resolve != nil)
-			}
+			hasResolve := decoder.Resolve != nil
+			assert.Equal(t, tt.expectResolve, hasResolve, "解析函数设置不正确，期望存在: %v, 实际: %v", tt.expectResolve, hasResolve)
 		})
 	}
 }
@@ -214,18 +210,20 @@ func TestDecode(t *testing.T) {
 			err := decoder.Decode(tt.src, target)
 
 			// 验证错误是否符合预期。
-			if (err != nil) != tt.expectedError {
-				t.Fatalf("期望错误: %v, 实际: %v, 错误信息: %v", tt.expectedError, err != nil, err)
+			if tt.expectedError {
+				assert.Error(t, err, "期望有错误，但没有返回错误")
+			} else {
+				assert.NoError(t, err, "不期望有错误，但返回了错误: %v", err)
 			}
 
 			// 如果期望成功，验证解码结果。
 			if !tt.expectedError {
 				if tt.src.Format == "" {
 					// 对于空格式，我们需要特殊处理验证，因为键可能是嵌套的。
-					validateNestedKeyValue(t, target, tt.src.Key, tt.src.Value)
+					validateNestedKeyValueWithAssert(t, target, tt.src.Key, tt.src.Value)
 				} else {
 					// 对于其他格式，直接比较映射。
-					validateMap(t, target, tt.expectedMap)
+					validateMapWithAssert(t, target, tt.expectedMap)
 				}
 			}
 		})
@@ -276,27 +274,18 @@ func TestDecodeEmptyFormat(t *testing.T) {
 			err := decoder.Decode(tt.src, target)
 
 			// 验证没有错误。
-			if err != nil {
-				t.Fatalf("解码出错: %v", err)
-			}
+			assert.NoError(t, err, "解码出错: %v", err)
 
 			// 验证解码结果。
 			if tt.src.Key == tt.expectedKey {
 				// 简单键。
 				value, exists := target[tt.expectedKey]
-				if !exists {
-					t.Fatalf("键 %s 不存在于映射中", tt.expectedKey)
-				}
+				assert.True(t, exists, "键 %s 不存在于映射中", tt.expectedKey)
 
 				// 验证值类型和内容。
 				actualValue, ok := value.([]byte)
-				if !ok {
-					t.Fatalf("键 %s 的值类型不是 []byte，而是 %T", tt.expectedKey, value)
-				}
-
-				if string(actualValue) != string(tt.expectedValue) {
-					t.Fatalf("键 %s 的值不匹配，期望: %s, 实际: %s", tt.expectedKey, string(tt.expectedValue), string(actualValue))
-				}
+				assert.True(t, ok, "键 %s 的值类型不是 []byte，而是 %T", tt.expectedKey, value)
+				assert.Equal(t, string(tt.expectedValue), string(actualValue), "键 %s 的值不匹配", tt.expectedKey)
 			} else {
 				// 嵌套键，需要遍历键路径。
 				keys := strings.Split(tt.src.Key, ".")
@@ -305,26 +294,17 @@ func TestDecodeEmptyFormat(t *testing.T) {
 				// 遍历键路径。
 				for i, k := range keys {
 					value, exists := current[k]
-					if !exists {
-						t.Fatalf("键 %s 不存在于映射中", k)
-					}
+					assert.True(t, exists, "键 %s 不存在于映射中", k)
 
 					if i == len(keys)-1 {
 						// 最后一个键，验证值。
 						actualValue, ok := value.([]byte)
-						if !ok {
-							t.Fatalf("键 %s 的值类型不是 []byte，而是 %T", k, value)
-						}
-
-						if string(actualValue) != string(tt.expectedValue) {
-							t.Fatalf("键 %s 的值不匹配，期望: %s, 实际: %s", k, string(tt.expectedValue), string(actualValue))
-						}
+						assert.True(t, ok, "键 %s 的值类型不是 []byte，而是 %T", k, value)
+						assert.Equal(t, string(tt.expectedValue), string(actualValue), "键 %s 的值不匹配", k)
 					} else {
 						// 中间键，继续遍历。
 						nestedMap, ok := value.(map[string]interface{})
-						if !ok {
-							t.Fatalf("键 %s 的值不是映射，而是 %T", k, value)
-						}
+						assert.True(t, ok, "键 %s 的值不是映射，而是 %T", k, value)
 						current = nestedMap
 					}
 				}
@@ -350,19 +330,15 @@ func TestDecodeUnsupportedFormat(t *testing.T) {
 	err := decoder.Decode(src, target)
 
 	// 验证有错误。
-	if err == nil {
-		t.Fatal("期望解码不支持的格式时返回错误，但没有错误")
-	}
+	assert.Error(t, err, "期望解码不支持的格式时返回错误，但没有错误")
 
 	// 验证错误消息。
 	expectedErrMsg := "unsupported key: config format: unsupported"
-	if err.Error() != expectedErrMsg {
-		t.Fatalf("错误消息不匹配，期望: %s, 实际: %s", expectedErrMsg, err.Error())
-	}
+	assert.Equal(t, expectedErrMsg, err.Error(), "错误消息不匹配")
 }
 
-// validateNestedKeyValue 验证嵌套键值是否正确设置。
-func validateNestedKeyValue(t *testing.T, actual map[string]interface{}, key string, expectedValue []byte) {
+// validateNestedKeyValueWithAssert 验证嵌套键值是否正确设置，使用 assert 包。
+func validateNestedKeyValueWithAssert(t *testing.T, actual map[string]interface{}, key string, expectedValue []byte) {
 	// 分割键路径。
 	keys := strings.Split(key, ".")
 
@@ -370,60 +346,47 @@ func validateNestedKeyValue(t *testing.T, actual map[string]interface{}, key str
 	current := actual
 	for i, k := range keys {
 		value, exists := current[k]
-		if !exists {
-			t.Fatalf("键 %s 不存在于映射中", k)
-		}
+		assert.True(t, exists, "键 %s 不存在于映射中", k)
 
 		if i == len(keys)-1 {
 			// 最后一个键，验证值。
 			actualValue, ok := value.([]byte)
-			if !ok {
-				t.Fatalf("键 %s 的值类型不是 []byte，而是 %T", k, value)
-			}
-			if string(actualValue) != string(expectedValue) {
-				t.Fatalf("键 %s 的值不匹配，期望: %s, 实际: %s", k, string(expectedValue), string(actualValue))
-			}
+			assert.True(t, ok, "键 %s 的值类型不是 []byte，而是 %T", k, value)
+			assert.Equal(t, string(expectedValue), string(actualValue), "键 %s 的值不匹配", k)
 		} else {
 			// 中间键，继续遍历。
 			nestedMap, ok := value.(map[string]interface{})
-			if !ok {
-				t.Fatalf("键 %s 的值不是映射，而是 %T", k, value)
-			}
+			assert.True(t, ok, "键 %s 的值不是映射，而是 %T", k, value)
 			current = nestedMap
 		}
 	}
 }
 
-// validateMap 验证两个映射是否匹配。
-func validateMap(t *testing.T, actual, expected map[string]interface{}) {
+// validateMapWithAssert 验证两个映射是否匹配，使用 assert 包。
+func validateMapWithAssert(t *testing.T, actual, expected map[string]interface{}) {
 	// 验证所有期望的键值对都存在。
 	for k, expectedV := range expected {
 		actualV, exists := actual[k]
-		if !exists {
-			t.Fatalf("键 %s 不存在于实际映射中", k)
-		}
+		assert.True(t, exists, "键 %s 不存在于实际映射中", k)
 
 		// 根据值的类型进行不同的验证。
 		switch expectedVTyped := expectedV.(type) {
 		case map[string]interface{}:
 			// 如果值是映射，递归验证。
 			actualVTyped, ok := actualV.(map[string]interface{})
-			if !ok {
-				t.Fatalf("键 %s 的值类型不匹配，期望: map[string]interface{}, 实际: %T", k, actualV)
+			assert.True(t, ok, "键 %s 的值类型不匹配，期望: map[string]interface{}, 实际: %T", k, actualV)
+			if ok {
+				validateMapWithAssert(t, actualVTyped, expectedVTyped)
 			}
-			validateMap(t, actualVTyped, expectedVTyped)
 		default:
 			// 对于简单类型，直接比较字符串表示。
-			if actualV != expectedV {
-				t.Fatalf("键 %s 的值不匹配，期望: %v, 实际: %v", k, expectedV, actualV)
-			}
+			assert.Equal(t, expectedV, actualV, "键 %s 的值不匹配", k)
 		}
 	}
 
 	// 验证没有多余的键。
 	for k := range actual {
-		if _, exists := expected[k]; !exists {
-			t.Fatalf("实际映射中存在多余的键: %s", k)
-		}
+		_, exists := expected[k]
+		assert.True(t, exists, "实际映射中存在多余的键: %s", k)
 	}
 }
