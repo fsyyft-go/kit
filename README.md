@@ -28,6 +28,10 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 
 DES 加密工具：提供 DES-CBC 加密/解密功能，支持 PKCS7 填充和多种输入格式（字节数组、字符串、16 进制字符串）。[详细说明 →](crypto/des/README.md)
 
+#### [crypto/otp](crypto/otp/README.md)
+
+一次性密码工具：提供基于时间的一次性密码（TOTP）算法实现，支持多种哈希算法、自定义密码长度和生成兼容的验证器 URL。[详细说明 →](crypto/otp/README.md)
+
 ### kratos
 
 #### [kratos/config](kratos/config/README.md)
