@@ -58,6 +58,12 @@ func TestEncryptStringCBCPkCS7PaddingStringHex(t *testing.T) {
 			want: "B6B93CE25531C9441EE463531E074876",
 		},
 		{
+			name: "应用用例测试-中文配置示例",
+			key:  "go-kit-k",
+			data: "中文配置示例",
+			want: "A16121360A42757F6B6307A8AD8C37163647D18BE7921339",
+		},
+		{
 			name: "正常加密英文字符串",
 			key:  "12345678",
 			data: "Hello, World!",
