@@ -72,6 +72,12 @@ HTTP 适配器：提供 Kratos HTTP 服务器到 Gin 引擎的转换功能，支
 
 日志抽象接口，提供统一的日志记录标准，支持多种底层实现。[详细说明 →](log/README.md)
 
+### math
+
+#### [math/rand](math/rand/README.md)
+
+随机数生成工具：提供范围内的随机数生成和中文字符（汉字、姓氏）随机生成功能，支持自定义随机数生成器。[详细说明 →](math/rand/README.md)
+
 ### [runtime](runtime/README.md)
 
 运行时管理：提供应用程序运行时组件的生命周期管理。[详细说明 →](runtime/README.md)
