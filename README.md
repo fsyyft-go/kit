@@ -50,6 +50,10 @@ MD5 哈希工具：提供便捷的字符串 MD5 哈希计算功能，支持带�
 
 一次性密码工具：提供基于时间的一次性密码（TOTP）算法实现，支持多种哈希算法、自定义密码长度和生成兼容的验证器 URL。[详细说明 →](crypto/otp/README.md)
 
+#### [crypto/rsa](crypto/rsa/README.md)
+
+RSA 加密工具：提供 RSA 加密/解密功能，支持公钥加密/私钥解密和私钥加密/公钥解密（数字签名）操作，以及 PEM 格式密钥处理。[详细说明 →](crypto/rsa/README.md)
+
 ### kratos
 
 #### [kratos/config](kratos/config/README.md)
