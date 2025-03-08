@@ -10,7 +10,7 @@ rem 删除路径末尾的反斜杠
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 
 rem 项目根目录（向上两级）
-for %%I in ("%SCRIPT_DIR%\..\..\") do set "PROJECT_ROOT=%%~fI"
+for %%I in ("%SCRIPT_DIR%\..\..\..\") do set "PROJECT_ROOT=%%~fI"
 
 rem 源文件路径
 set "SOURCE_FILE=%SCRIPT_DIR%\main.go"

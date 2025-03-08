@@ -6,7 +6,7 @@ set -e
 # 脚本所在目录
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # 项目根目录（向上两级）
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../" && pwd)"
 # 源文件路径
 SOURCE_FILE="$SCRIPT_DIR/main.go"
 # 输出目录
