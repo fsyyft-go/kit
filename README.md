@@ -42,6 +42,10 @@ AES 加密工具：提供 AES-GCM 加密/解密功能，支持多种输入格式
 
 DES 加密工具：提供 DES-CBC 加密/解密功能，支持 PKCS7 填充和多种输入格式（字节数组、字符串、16 进制字符串）。[详细说明 →](crypto/des/README.md)
 
+#### [crypto/md5](crypto/md5/README.md)
+
+MD5 哈希工具：提供便捷的字符串 MD5 哈希计算功能，支持带错误处理和忽略错误的版本，适用于数据校验和缓存键生成。[详细说明 →](crypto/md5/README.md)
+
 #### [crypto/otp](crypto/otp/README.md)
 
 一次性密码工具：提供基于时间的一次性密码（TOTP）算法实现，支持多种哈希算法、自定义密码长度和生成兼容的验证器 URL。[详细说明 →](crypto/otp/README.md)
