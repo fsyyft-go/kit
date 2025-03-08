@@ -10,6 +10,19 @@ import (
 	"errors"
 )
 
+var (
+	// defaultDESKey 是默认的 DES 密钥。
+	defaultDESKey = "go-kit-k"
+)
+
+// GetDefaultDESKey 返回默认的 DES 密钥。
+//
+// 返回：
+//   - string：默认的 DES 密钥。
+func GetDefaultDESKey() string {
+	return defaultDESKey
+}
+
 // PKCS7Padding 使用 PKCS7 标准对数据进行填充。
 //
 // 参数：

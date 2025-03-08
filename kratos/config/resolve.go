@@ -16,7 +16,7 @@ var (
 	// defaultResolve 是默认的解析器实例，用于全局配置解析。
 	defaultResolve *resolve
 	// defaultDESKey 是默认的 DES 密钥。
-	defaultDESKey = "go-kit-k"
+	defaultDESKey = kit_crypto_des.GetDefaultDESKey()
 )
 
 const (
