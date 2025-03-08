@@ -57,7 +57,11 @@ func WithResolve(fn Resolve) DecoderOption {
 // 返回值：
 //   - *Decoder: 配置好的解码器实例。
 func NewDecoder(opts ...DecoderOption) *Decoder {
-	d := Decoder{}
+	d := Decoder{
+		DecoderOptions: DecoderOptions{
+			Resolve: defaultResolve.Resolve,
+		},
+	}
 
 	// 应用所有非空的解码器选项。
 	for _, o := range opts {
@@ -101,7 +105,6 @@ func (d *Decoder) Decode(src *kratos_config.KeyValue, target map[string]any) err
 		if err := codec.Unmarshal(src.Value, &target); nil != err {
 			return err
 		}
-
 		// 如果设置了解析函数，则调用它进行额外处理。
 		if nil != d.Resolve {
 			if err := d.Resolve(target); nil != err {
