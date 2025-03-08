@@ -113,6 +113,11 @@ type (
 // 返回值：
 //   - *mux.Router：gorilla/mux 路由器指针。
 func getRouter(s *kratoshttp.Server) *mux.Router {
+	// 检查是否为 nil，避免空指针异常
+	if nil == s {
+		return nil
+	}
+
 	// 将 kratoshttp.Server 指针转换为 serverAccessor 指针，以访问私有字段。
 	sa := (*serverAccessor)(unsafe.Pointer(s))
 	return sa.router
@@ -133,18 +138,25 @@ func GetPaths(s *kratoshttp.Server) []RouteInfo {
 	// 获取路由器实例。
 	router := getRouter(s)
 
+	// 如果路由器为 nil，直接返回空切片
+	if router == nil {
+		return routeInfos
+	}
+
 	// 遍历路由器中的所有路由。
 	_ = router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
 		// 获取路由路径模板。
 		path, err := route.GetPathTemplate()
 		if err != nil {
-			return err
+			// 如果获取路径模板失败，跳过此路由，继续处理下一个
+			return nil
 		}
 
 		// 获取路由支持的 HTTP 方法。
 		method, err := route.GetMethods()
 		if err != nil {
-			return err
+			// 如果获取方法失败，假设此路由支持 GET 方法
+			method = []string{"GET"}
 		}
 
 		// 为每个 HTTP 方法创建一个路由信息对象并添加到结果切片中。
@@ -167,6 +179,11 @@ func GetPaths(s *kratoshttp.Server) []RouteInfo {
 //   - s：kratos http.Server 指针。
 //   - e：gin.Engine 指针。
 func Parse(s *kratoshttp.Server, e *gin.Engine) {
+	// 检查参数是否为 nil
+	if s == nil || e == nil {
+		return
+	}
+
 	// 获取所有路由信息。
 	routeInfos := GetPaths(s)
 
