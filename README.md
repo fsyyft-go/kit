@@ -93,7 +93,7 @@ HTTP 适配器：提供 Kratos HTTP 服务器到 Gin 引擎的转换功能，支
 
 ## 版权声明
 
-Copyright © 2024 fsyyft-go
+Copyright © 2025 fsyyft-go
 
 本项目采用 [MIT 许可证](LICENSE)。详见 [LICENSE](LICENSE) 文件。
 
