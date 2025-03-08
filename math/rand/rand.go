@@ -2,6 +2,7 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+// Package rand 提供了一系列随机数生成的工具函数，包括数值范围随机和中文字符随机生成。
 package rand
 
 import (
@@ -15,8 +16,8 @@ const (
 	// maxChinese 定义了常用汉字的 Unicode 最大值，用于生成随机汉字的范围上限。
 	maxChinese = 40869
 
-	// lastNameString 包含了中国常见的姓氏汉字集合，用于随机生成中文姓氏。
-	// 包括单姓和复姓，按照传统顺序排列。
+	// lastNameString 包含了中国传统姓氏的字符集，包括单姓和复姓，按照传统顺序排列。
+	// 此字符集收录了中国最常见的姓氏，用于随机生成具有真实性的中文姓氏。
 	lastNameString = "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜戚谢邹喻柏水窦章云苏潘葛奚范彭郎" +
 		"鲁韦昌马苗凤花方俞任袁柳酆鲍史唐费廉岑薛雷贺倪汤滕殷罗毕郝邬安常乐于时傅皮卞齐康伍余元卜顾孟平黄" +
 		"和穆萧尹姚邵湛汪祁毛禹狄米贝明臧计伏成戴谈宋茅庞熊纪舒屈项祝董梁杜阮蓝闵席季麻强贾路娄危江童颜郭" +
@@ -31,46 +32,88 @@ const (
 		"岳帅缑亢况後有琴梁丘左丘东门西门商牟佘佴伯赏南宫墨哈谯笪年爱阳佟"
 )
 
-// Int63n 生成一个范围在 [min, max) 的随机数。
+// Int63n 生成一个范围在 [min, max) 之间的 int64 类型随机数。
+//
+// 参数：
+//   - random：随机数生成器，如果为 nil 则使用默认的随机数生成器。
+//   - min：随机数范围的最小值（包含）。
+//   - max：随机数范围的最大值（不包含）。
+//
+// 返回值：
+//   - 返回一个范围在 [min, max) 之间的 int64 类型随机数。
 func Int63n(random *rand.Rand, min, max int64) int64 {
+	// 计算随机数范围。
 	result := max - min
 	if nil == random {
+		// 如果未提供随机数生成器，使用默认的随机数生成器。
 		result = rand.Int63n(result)
 	} else {
+		// 使用提供的随机数生成器。
 		result = random.Int63n(result)
 	}
 
+	// 将结果调整到指定范围内。
 	result = result + min
 
 	return result
 }
 
-// Intn 生成一个范围在 [min, max) 的随机数。
+// Intn 生成一个范围在 [min, max) 之间的 int 类型随机数。
+//
+// 参数：
+//   - random：随机数生成器，如果为 nil 则使用默认的随机数生成器。
+//   - min：随机数范围的最小值（包含）。
+//   - max：随机数范围的最大值（不包含）。
+//
+// 返回值：
+//   - 返回一个范围在 [min, max) 之间的 int 类型随机数。
 func Intn(random *rand.Rand, min, max int) int {
+	// 计算随机数范围。
 	result := max - min
 	if nil == random {
+		// 如果未提供随机数生成器，使用默认的随机数生成器。
 		result = rand.Intn(result)
 	} else {
+		// 使用提供的随机数生成器。
 		result = random.Intn(result)
 	}
 
+	// 将结果调整到指定范围内。
 	result = result + min
 
 	return result
 }
 
-// Chinese 生成随机汉字。
+// Chinese 生成一个随机的汉字字符串。
+//
+// 参数：
+//   - random：随机数生成器，如果为 nil 则使用默认的随机数生成器。
+//
+// 返回值：
+//   - 返回一个随机生成的汉字字符串。
 func Chinese(random *rand.Rand) string {
+	// 生成一个在常用汉字 Unicode 范围内的随机数。
 	r := rune(Intn(random, minChinese, maxChinese))
+	// 将 Unicode 码点转换为字符串。
 	s := string(r)
 	return s
 }
 
-// ChineseLastName 生成随机汉字的姓。
+// ChineseLastName 生成一个随机的中文姓氏。
+//
+// 参数：
+//   - random：随机数生成器，如果为 nil 则使用默认的随机数生成器。
+//
+// 返回值：
+//   - 返回一个随机选择的中文姓氏字符串。
 func ChineseLastName(random *rand.Rand) string {
+	// 将姓氏字符串转换为 rune 切片。
 	var r = []rune(lastNameString)
+	// 随机选择一个姓氏的索引。
 	idx := Intn(random, 0, len(r))
+	// 获取选中的姓氏字符。
 	lastName := r[idx : idx+1]
+	// 将 rune 切片转换为字符串。
 	s := string(lastName)
 	return s
 }
