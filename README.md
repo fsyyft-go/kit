@@ -54,6 +54,10 @@ HTTP 适配器：提供 Kratos HTTP 服务器到 Gin 引擎的转换功能，支
 
 基于 [carbon](https://github.com/dromara/carbon) 库的时间处理工具包，提供简单的相对时间获取功能和可配置的时间格式化选项。支持编译时配置时区、格式、语言等参数。[详细说明 →](time/README.md)
 
+### [crypto/des](crypto/des/README.md)
+
+DES 加密工具：提供 DES-CBC 加密/解密功能，支持 PKCS7 填充和多种输入格式（字节数组、字符串、16 进制字符串）。[详细说明 →](crypto/des/README.md)
+
 更多模块正在开发中，敬请期待...
 
 ## 如何贡献
