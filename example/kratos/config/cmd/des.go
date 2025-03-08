@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/fsyyft-go/kit/crypto/des"
+	kit_crypto_des "github.com/fsyyft-go/kit/crypto/des"
 )
 
 // 定义命令行参数变量。
@@ -28,9 +28,9 @@ var desCmd = &cobra.Command{
 	// 指定命令的名称。
 	Use: "des",
 	// 简短的命令描述。
-	Short: "DES加密解密工具",
+	Short: "DES 加密解密工具",
 	// 详细的命令描述和使用示例。
-	Long: `DES加密解密的命令行工具。
+	Long: `DES 加密解密的命令行工具。
 使用示例：
   # 使用默认密钥加密数据
   des --data 待加密数据 --encrypt
@@ -42,7 +42,7 @@ var desCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 如果未提供密钥，使用默认密钥。
 		if key == "" {
-			key = des.GetDefaultDESKey()
+			key = kit_crypto_des.GetDefaultDESKey()
 		}
 		// 验证数据参数不能为空。
 		if data == "" {
@@ -54,9 +54,9 @@ var desCmd = &cobra.Command{
 
 		// 根据 encrypt 标志决定执行加密或解密操作。
 		if encrypt {
-			result, err = des.EncryptStringCBCPkCS7PaddingStringHex(key, data)
+			result, err = kit_crypto_des.EncryptStringCBCPkCS7PaddingStringHex(key, data)
 		} else {
-			result, err = des.EncryptStringCBCPkCS7PaddingStringHex(key, data)
+			result, err = kit_crypto_des.EncryptStringCBCPkCS7PaddingStringHex(key, data)
 		}
 
 		// 处理操作结果。

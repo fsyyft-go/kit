@@ -9,26 +9,27 @@ import (
 	"os"
 	"strings"
 
-	kit_kratos_config "github.com/fsyyft-go/kit/kratos/config"
 	"github.com/go-kratos/kratos/v2/config"
 	"github.com/go-kratos/kratos/v2/config/file"
+
+	kit_kratos_config "github.com/fsyyft-go/kit/kratos/config"
 )
 
-// Example 函数展示了配置的基本用法。
-func Example() {
-	// Config 结构体定义了配置文件的结构。
-	type Config struct {
-		// App 嵌套结构体包含应用程序相关配置。
-		App struct {
-			// Name 是应用程序名称。
-			Name string `json:"name"`
-			// Password 是应用程序密码，可能是从 base64 编码后解码得到的。
-			Password string `json:"password"`
-			// Addr 是应用程序地址，可能是从 base64 编码后解码得到的。
-			Addr string `json:"addr"`
-		} `json:"app"`
-	}
+// Config 结构体定义了配置文件的结构。
+type Config struct {
+	// App 嵌套结构体包含应用程序相关配置。
+	App struct {
+		// Name 是应用程序名称。
+		Name string `json:"name"`
+		// Password 是应用程序密码，可能是从 DES 解密后解码得到的。
+		Password string `json:"password"`
+		// Addr 是应用程序地址，可能是从 base64 编码后解码得到的。
+		Addr string `json:"addr"`
+	} `json:"app"`
+}
 
+// example 函数展示了配置的基本用法。
+func example() {
 	// 声明配置文件路径变量。
 	var configPath string
 

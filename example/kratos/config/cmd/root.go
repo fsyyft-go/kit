@@ -19,12 +19,12 @@ var rootCmd = &cobra.Command{
 	Short: "配置工具",
 	// 详细的命令描述。
 	Long: `一个提供各种配置处理实用工具的程序，
-包含DES加密解密等功能。`,
+包含 DES 加密解密等功能。`,
 	// RunE 函数定义了命令的执行逻辑。
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 当没有提供子命令时，运行示例函数。
 		if len(args) == 0 {
-			Example()
+			example()
 			return nil
 		}
 		return nil
