@@ -1,0 +1,4 @@
+app:
+  name: example-kratos-config
+  password.des: A16121360A42757F6B6307A8AD8C37163647D18BE7921339
+  addr.b63: 5oiR5pivIGJhc2U2NCDov4fnmoQgdGVzdA==

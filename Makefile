@@ -26,15 +26,35 @@ help:
 
 test:
 	@echo "构建示例程序..."
-	@chmod +x example/runtime/goroutine/build.sh example/log/build.sh example/cache/build.sh
-	@echo "\n构建并运行获取 goroutine id 示例..."
-	@example/runtime/goroutine/build.sh
-	@echo "\n构建并运行日志示例..."
-	@example/log/build.sh
-	@echo "\n构建并运行缓存示例..."
+	@chmod +x example/cache/build.sh \
+		example/kratos/config/build.sh \
+		example/log/build.sh \
+		example/runtime/goroutine/build.sh
+	
+	@echo "\n===================================================="
+	@echo "构建并运行缓存示例..."
 	@example/cache/build.sh
-	@echo "\n运行单元测试..."
+	@echo "====================================================\n"
+	
+	@echo "===================================================="
+	@echo "构建并运行 kratos config 示例..."
+	@example/kratos/config/build.sh
+	@echo "====================================================\n"
+	
+	@echo "===================================================="
+	@echo "构建并运行日志示例..."
+	@example/log/build.sh
+	@echo "====================================================\n"
+	
+	@echo "===================================================="
+	@echo "构建并运行获取 goroutine id 示例..."
+	@example/runtime/goroutine/build.sh
+	@echo "====================================================\n"
+	
+	@echo "===================================================="
+	@echo "运行单元测试..."
 	@go test -v -race ./...
+	@echo "====================================================\n"
 
 coverage:
 	@echo "生成测试覆盖率报告..."
