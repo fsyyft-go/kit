@@ -36,22 +36,38 @@ func TestEncryptStringCBCPkCS7PaddingStringHex(t *testing.T) {
 		name    string // 测试用例名称
 		key     string // 加密密钥
 		data    string // 待加密数据
+		want    string // 预期的加密结果（16 进制字符串）
 		wantErr bool   // 是否期望错误
 	}{
 		{
 			name: "正常加密中文字符串",
 			key:  "12345678",
 			data: "你好，世界！",
+			want: "AA217B34D883AC1ECE1F8A6B8A45BC45B75815ADA93C87CD",
+		},
+		{
+			name: "应用用例测试-英文",
+			key:  "newbienb",
+			data: "newbienb",
+			want: "ED5C0836038E6E9739670D810E965521",
+		},
+		{
+			name: "应用用例测试-中文",
+			key:  "newbienb",
+			data: "这是中文",
+			want: "B6B93CE25531C9441EE463531E074876",
 		},
 		{
 			name: "正常加密英文字符串",
 			key:  "12345678",
 			data: "Hello, World!",
+			want: "738939092EEC608E2E2BE40CEB3A6EBE",
 		},
 		{
 			name: "空字符串加密",
 			key:  "12345678",
 			data: "",
+			want: "4431CC0267954866",
 		},
 		{
 			name:    "密钥长度错误",
@@ -63,11 +79,13 @@ func TestEncryptStringCBCPkCS7PaddingStringHex(t *testing.T) {
 			name: "特殊字符加密",
 			key:  "12345678",
 			data: "!@#$%^&*()_+",
+			want: "E269AEFD9C8E95B9CD98B6F68156AA83",
 		},
 		{
 			name: "长字符串加密",
 			key:  "12345678",
 			data: "这是一个很长的字符串，包含中文、English、数字123、特殊字符!@#$%^&*()_+",
+			want: "07FF69BCE9F3E04FB146A407642F06FC8F039DA00549E4F193F27E10BD282FBB391C605CA1AE62FDFEAFC65BDD47869B16EA868DD53A388A81891EA135AE7C15A985C788F19068F631A55CE27D128C1BC734B6315497C093A20123E46508888D",
 		},
 	}
 
@@ -82,11 +100,15 @@ func TestEncryptStringCBCPkCS7PaddingStringHex(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotEmpty(t, encrypted)
 
-			// 解密验证
+			// 验证加密结果
 			if !tt.wantErr {
+				// 比对加密结果
+				assert.Equal(t, tt.want, encrypted, "加密结果与预期不符")
+
+				// 解密验证
 				decrypted, err := des.DecryptStringCBCPkCS7PaddingStringHex(tt.key, encrypted)
 				assert.NoError(t, err)
-				assert.Equal(t, tt.data, decrypted)
+				assert.Equal(t, tt.data, decrypted, "解密结果与原始数据不符")
 			}
 		})
 	}
