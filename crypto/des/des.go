@@ -51,6 +51,7 @@ func PKCS7Padding(data []byte, blockSize int) []byte {
 func PKCS7UnPadding(data []byte) ([]byte, error) {
 	// 获取数据的总长度。
 	length := len(data)
+	// 如果数据为空，返回错误。
 	if length == 0 {
 		return nil, errors.New("empty data")
 	}
@@ -58,11 +59,16 @@ func PKCS7UnPadding(data []byte) ([]byte, error) {
 	// 获取填充值：
 	// - 最后一个字节的值就是填充的字节数。
 	unPadding := int(data[length-1])
+	// 验证填充值的合法性：
+	// - 填充值不能为 0。
+	// - 填充值不能大于数据总长度。
 	if unPadding == 0 || unPadding > length {
 		return nil, errors.New("invalid padding value")
 	}
 
-	// 验证所有填充字节是否相同
+	// 验证所有填充字节是否相同：
+	// - PKCS7 要求所有填充字节的值必须相同。
+	// - 填充字节的值必须等于填充的字节数。
 	for i := length - unPadding; i < length; i++ {
 		if int(data[i]) != unPadding {
 			return nil, errors.New("invalid padding")
