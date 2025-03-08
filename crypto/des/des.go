@@ -7,6 +7,7 @@ package des
 
 import (
 	"bytes"
+	"errors"
 )
 
 // PKCS7Padding 使用 PKCS7 标准对数据进行填充。
@@ -46,17 +47,29 @@ func PKCS7Padding(data []byte, blockSize int) []byte {
 //
 // 返回：
 //   - []byte：去除填充后的原始数据。
-func PKCS7UnPadding(data []byte) []byte {
+//   - error：去填充过程中可能发生的错误。
+func PKCS7UnPadding(data []byte) ([]byte, error) {
 	// 获取数据的总长度。
 	length := len(data)
+	if length == 0 {
+		return nil, errors.New("empty data")
+	}
 
 	// 获取填充值：
 	// - 最后一个字节的值就是填充的字节数。
 	unPadding := int(data[length-1])
+	if unPadding == 0 || unPadding > length {
+		return nil, errors.New("invalid padding value")
+	}
+
+	// 验证所有填充字节是否相同
+	for i := length - unPadding; i < length; i++ {
+		if int(data[i]) != unPadding {
+			return nil, errors.New("invalid padding")
+		}
+	}
 
 	// 返回去除填充后的数据：
 	// - 从数据开始到（总长度-填充字节数）的部分就是原始数据。
-	d := data[:(length - unPadding)]
-
-	return d
+	return data[:(length - unPadding)], nil
 }

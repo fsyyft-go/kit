@@ -101,6 +101,30 @@ func TestPKCS7UnPadding(t *testing.T) {
 			want:    []byte{1, 2, 3, 4, 5, 6, 7, 8},
 			wantErr: false,
 		},
+		{
+			name:    "空数据去填充",
+			input:   []byte{},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "无效填充值",
+			input:   []byte{1, 2, 3, 0},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "填充值大于数据长度",
+			input:   []byte{1, 2, 3, 5},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "填充字节不一致",
+			input:   []byte{1, 2, 3, 4, 4, 4, 3, 4},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 
 	// 遍历执行每个测试用例。
@@ -108,7 +132,12 @@ func TestPKCS7UnPadding(t *testing.T) {
 		// 使用子测试方式运行每个测试场景。
 		t.Run(tt.name, func(t *testing.T) {
 			// 执行去填充操作并验证结果。
-			got := PKCS7UnPadding(tt.input)
+			got, err := PKCS7UnPadding(tt.input)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got, "PKCS7UnPadding() = %v, want %v", got, tt.want)
 		})
 	}
@@ -156,7 +185,12 @@ func TestPKCS7PaddingAndUnPadding(t *testing.T) {
 			// 首先执行填充操作。
 			padded := PKCS7Padding(tt.input, tt.blockSize)
 			// 然后执行去填充操作。
-			unpadded := PKCS7UnPadding(padded)
+			unpadded, err := PKCS7UnPadding(padded)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
 			// 验证去填充后的结果是否与原始数据相同。
 			assert.Equal(t, tt.input, unpadded, "PKCS7UnPadding(PKCS7Padding()) should return original data")
 		})

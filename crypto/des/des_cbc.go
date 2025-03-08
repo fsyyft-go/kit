@@ -9,6 +9,7 @@ import (
 	"crypto/cipher"
 	"crypto/des"
 	"encoding/hex"
+	"fmt"
 	"strings"
 )
 
@@ -57,6 +58,8 @@ func EncryptCBCPkCS7PaddingAloneIV(key, iv, data []byte) ([]byte, error) {
 
 	if block, errBlock := des.NewCipher(key); nil != errBlock { //nolint:gosec
 		err = errBlock
+	} else if len(iv) != block.BlockSize() {
+		err = fmt.Errorf("IV length must equal block size")
 	} else {
 		dataPadded := PKCS7Padding(data, block.BlockSize())
 		mode := cipher.NewCBCEncrypter(block, iv)
@@ -113,11 +116,13 @@ func DecryptCBCPkCS7PaddingAloneIV(key, iv, data []byte) ([]byte, error) {
 
 	if block, errBlock := des.NewCipher(key); nil != errBlock { //nolint:gosec
 		err = errBlock
+	} else if len(iv) != block.BlockSize() {
+		err = fmt.Errorf("IV length must equal block size")
 	} else {
 		mode := cipher.NewCBCDecrypter(block, iv)
 		dataPadded := make([]byte, len(data))
 		mode.CryptBlocks(dataPadded, data)
-		result = PKCS7UnPadding(dataPadded)
+		result, err = PKCS7UnPadding(dataPadded)
 	}
 
 	return result, err
