@@ -459,7 +459,7 @@ func TestDefaultValidator(t *testing.T) {
 	}
 
 	// 创建使用默认选项的中间件
-	middleware := Server()
+	middleware := Server() // nolint:ineffassign
 
 	// 从Server中提取默认验证器
 	o := &options{}

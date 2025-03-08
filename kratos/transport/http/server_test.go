@@ -221,7 +221,7 @@ func TestParseWithPathProcessing(t *testing.T) {
 			// 创建处理函数。
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("test path processing"))
+				_, _ = w.Write([]byte("test path processing"))
 			})
 
 			// 设置路由。
