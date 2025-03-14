@@ -1,25 +1,59 @@
-# 日志包使用示例
+ # 日志功能示例
 
-这个目录包含了日志包的使用示例，展示了各种日志功能的使用方法。
+本示例展示了如何使用 Kit 的日志模块，实现统一的日志记录、多级别日志控制和结构化日志输出。
 
 ## 功能特性
 
-- 支持多种日志后端（标准输出、Logrus）
-- 提供统一的日志接口
-- 支持结构化日志记录
-- 支持多个日志级别
-- 支持文件和标准输出
-- 支持函数式配置选项
+- 支持多种日志级别（Debug、Info、Warn、Error、Fatal）
+- 支持结构化日志记录（WithField、WithFields）
+- 支持多种日志后端（标准库、Logrus）
+- 支持文件输出和日志滚动
+- 支持格式化日志输出
+- 支持独立日志实例创建
+
+## 设计原理
+
+Kit 的日志模块设计采用了统一接口 + 多种实现的方式，主要组件包括：
+
+- 统一的 `Logger` 接口：定义了所有日志实现必须支持的方法
+- 多种后端实现：支持标准库（StdLogger）和 Logrus（LogrusLogger）
+- 全局日志实例：方便在应用的不同部分使用相同的日志配置
+- 函数式选项模式：灵活配置日志行为
 
 ## 使用方法
 
-### 1. 使用默认配置
+### 1. 编译和运行
+
+在 Unix/Linux/macOS 系统上：
+
+```bash
+# 添加执行权限
+chmod +x build.sh
+
+# 构建和运行
+./build.sh
+```
+
+在 Windows 系统上：
+
+```cmd
+# 使用 Go 命令直接构建和运行
+go build -o bin/example/log/log.exe main.go
+./bin/example/log/log.exe
+```
+
+### 2. 代码示例
+
+#### 基本日志记录
 
 ```go
-// 使用默认配置初始化日志
+// 初始化默认日志器
 if err := log.InitLogger(); err != nil {
     panic(err)
 }
+
+// 设置日志级别
+log.SetLevel(log.DebugLevel)
 
 // 记录不同级别的日志
 log.Debug("这是一条调试日志")
@@ -28,36 +62,14 @@ log.Warn("这是一条警告日志")
 log.Error("这是一条错误日志")
 ```
 
-### 2. 使用自定义配置
+#### 格式化日志
 
 ```go
-// 使用自定义配置初始化日志
-if err := log.InitLogger(
-    log.WithLogType(log.LogTypeLogrus),
-    log.WithOutput("/var/log/app.log"),
-    log.WithLevel(log.DebugLevel),
-); err != nil {
-    panic(err)
-}
+log.Debugf("当前时间是: %v", time.Now().Format("2006-01-02 15:04:05"))
+log.Infof("程序运行在: %s", os.Getenv("PWD"))
 ```
 
-### 3. 创建独立的日志实例
-
-```go
-// 创建独立的日志实例
-logger, err := log.NewLogger(
-    log.WithLogType(log.LogTypeStd),
-    log.WithLevel(log.DebugLevel),
-)
-if err != nil {
-    panic(err)
-}
-
-// 使用独立的日志实例
-logger.Info("使用独立的日志实例")
-```
-
-### 4. 结构化日志
+#### 结构化日志
 
 ```go
 // 添加单个字段
@@ -71,100 +83,107 @@ log.WithFields(map[string]interface{}{
 }).Info("收到HTTP请求")
 ```
 
-### 5. 格式化日志
+#### 自定义日志配置
 
 ```go
-log.Debugf("当前时间是: %v", time.Now())
-log.Infof("用户 %s 执行了 %s 操作", "admin", "登录")
+// 配置日志输出到文件，使用 Logrus 后端
+logFile := filepath.Join("example", "log", "app.log")
+if err := log.InitLogger(
+    log.WithLogType(log.LogTypeLogrus),
+    log.WithOutput(logFile),
+    log.WithLevel(log.InfoLevel),
+); err != nil {
+    panic(err)
+}
 ```
 
-## 配置选项
+#### 创建独立日志实例
 
-日志包提供了以下配置选项：
+```go
+// 创建独立的日志实例
+logger, err := log.NewLogger(
+    log.WithLogType(log.LogTypeStd),
+    log.WithLevel(log.DebugLevel),
+)
+if err != nil {
+    panic(err)
+}
 
-- `WithLogType(LogType)`: 设置日志类型
-  - `LogTypeConsole`: 控制台日志
-  - `LogTypeStd`: 标准库日志
-  - `LogTypeLogrus`: Logrus 日志
-
-- `WithLevel(Level)`: 设置日志级别
-  - `DebugLevel`: 调试级别
-  - `InfoLevel`: 信息级别
-  - `WarnLevel`: 警告级别
-  - `ErrorLevel`: 错误级别
-  - `FatalLevel`: 致命错误级别
-
-- `WithOutput(string)`: 设置日志输出路径
-  - 空字符串: 输出到标准输出
-  - 文件路径: 输出到指定文件
-
-## 运行示例
-
-```bash
-go run main.go
+// 使用独立的日志实例
+logger.Debug("这是独立日志实例的调试信息")
+logger.WithField("module", "cache").Info("缓存已初始化")
 ```
 
-示例程序会依次展示：
-1. 默认配置的使用
-2. 不同日志级别的输出
-3. 结构化日志的使用
-4. 自定义配置的应用
-5. 独立日志实例的创建和使用
+### 3. 输出示例
+
+使用默认配置（标准输出）：
+```
+2024/03/15 10:00:00 [DEBUG] 这是一条调试日志
+2024/03/15 10:00:00 [INFO] 这是一条信息日志
+2024/03/15 10:00:00 [WARN] 这是一条警告日志
+2024/03/15 10:00:00 [ERROR] 这是一条错误日志
+2024/03/15 10:00:00 [DEBUG] 当前时间是: 2024-03-15 10:00:00
+2024/03/15 10:00:00 [INFO] 程序运行在: /path/to/example/log
+2024/03/15 10:00:00 [INFO] [user=admin] 用户登录
+2024/03/15 10:00:00 [INFO] [ip=192.168.1.1 method=POST latency=20ms] 收到HTTP请求
+```
+
+使用 Logrus 配置（JSON 格式）：
+```json
+{"level":"info","msg":"已切换到 logrus 日志器（默认启用日志滚动功能）","time":"2024-03-15T10:00:00+08:00"}
+{"component":"server","level":"info","msg":"服务器启动","status":"starting","time":"2024-03-15T10:00:00+08:00"}
+```
+
+### 4. 在其他项目中使用
+
+```go
+package main
+
+import (
+    "github.com/fsyyft-go/kit/log"
+)
+
+func main() {
+    // 初始化日志
+    if err := log.InitLogger(
+        log.WithLogType(log.LogTypeLogrus),
+        log.WithOutput("/var/log/myapp.log"),
+        log.WithLevel(log.InfoLevel),
+    ); err != nil {
+        panic(err)
+    }
+    
+    // 使用日志
+    log.Info("应用启动")
+    
+    // 记录带上下文的日志
+    log.WithFields(map[string]interface{}{
+        "module": "api",
+        "method": "GET",
+        "path":   "/users",
+    }).Info("处理请求")
+    
+    // 记录错误
+    if err := someFunction(); err != nil {
+        log.WithField("error", err).Error("操作失败")
+    }
+}
+```
 
 ## 注意事项
 
-1. Fatal 级别的日志会导致程序退出
-2. 文件日志需要确保目录存在且有写入权限
-3. 默认使用 InfoLevel 日志级别
-4. 默认使用标准输出作为日志输出
+- 日志级别控制：只有大于或等于设置级别的日志才会被记录
+- 文件路径：使用 `WithOutput` 指定日志文件路径时，会自动创建所需的目录
+- 日志滚动：使用 Logrus 后端时默认启用日志滚动功能，按小时滚动
+- 性能考虑：结构化日志在高并发场景下可能影响性能，建议适度使用
+- 敏感信息：避免在日志中记录密码、令牌等敏感信息
 
-## 示例输出
+## 相关文档
 
-运行示例程序后，你将在标准输出中看到类似下面的输出：
+- [Kit 日志模块文档](../../log/README.md)
+- [Logrus 官方文档](https://github.com/sirupsen/logrus)
+- [Go 标准库 log 包](https://golang.org/pkg/log/)
 
-```
-2025/02/24 20:03:42 [DEBUG] 这是一条调试日志
-2025/02/24 20:03:42 [INFO] 这是一条信息日志
-2025/02/24 20:03:42 [WARN] 这是一条警告日志
-2025/02/24 20:03:42 [ERROR] 这是一条错误日志
-2025/02/24 20:03:42 [DEBUG] 当前时间是: 2025-02-24 20:03:42
-2025/02/24 20:03:42 [INFO] 程序运行在: /path/to/your/workspace
-2025/02/24 20:03:42 [INFO] [user=admin] 用户登录
-2025/02/24 20:03:42 [INFO] [latency=20ms ip=192.168.1.1 method=POST] 收到HTTP请求
-2025/02/24 20:03:42 [ERROR] [error=示例错误] 操作失败
-```
+## 许可证
 
-同时，在 `example/log/app.log` 文件中，你将看到 logrus 格式的日志：
-
-```
-time="2025-02-24 20:03:42" level=info msg="已切换到 logrus 日志器"
-time="2025-02-24 20:03:42" level=info msg="服务器启动" component=server status=starting
-```
-
-## 说明
-
-1. 标准输出日志器
-   - 使用 `log.InitLogger(log.WithLogType(log.LogTypeConsole))` 初始化
-   - 日志直接输出到标准输出
-   - 适合开发环境使用
-   - 支持结构化字段，以 `[key=value]` 的格式显示
-
-2. Logrus 日志器
-   - 使用 `log.InitLogger(log.WithLogType(log.LogTypeLogrus), log.WithOutput("path/to/file.log"))` 初始化
-   - 日志输出到指定的文件
-   - 使用 logrus 的默认格式输出
-   - 支持结构化字段，以 key=value 的格式显示
-   - 适合生产环境使用
-
-3. 日志级别
-   - Debug：调试信息
-   - Info：一般信息
-   - Warn：警告信息
-   - Error：错误信息
-   - Fatal：致命错误（会导致程序退出）
-
-4. 结构化日志
-   - 使用 `WithField` 添加单个字段
-   - 使用 `WithFields` 添加多个字段
-   - 字段以键值对的形式展示在日志中
-   - 不同的日志器可能有不同的字段展示格式 
+本示例代码采用 MIT 许可证。详见 [LICENSE](../../LICENSE) 文件。

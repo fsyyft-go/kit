@@ -7,14 +7,14 @@ set -e
 # ===== 路径配置 =====
 # 脚本所在目录
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-# 项目根目录（向上三级）
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../" && pwd)"
+# 项目根目录（根据实际项目结构调整）
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../" && pwd)"  # 默认向上一级，根据需要调整
 # 源文件路径
 SOURCE_FILE="$SCRIPT_DIR/main.go"
-# 输出目录
-OUTPUT_DIR="$PROJECT_ROOT/bin/example/config/version"
+# 输出目录（根据实际项目结构调整）
+OUTPUT_DIR="$PROJECT_ROOT/bin/$(basename "$(dirname "$SCRIPT_DIR")")/$(basename "$SCRIPT_DIR")"
 # 输出文件名（默认使用目录名）
-OUTPUT_NAME="version"
+OUTPUT_NAME="$(basename "$SCRIPT_DIR")"
 
 # ===== 可选功能配置 =====
 # 是否启用版本信息
@@ -184,7 +184,7 @@ build_cross_platform() {
                 local output="$OUTPUT_DIR/${OUTPUT_NAME}_${os}_${arch}${suffix}"
                 
                 print_info "构建 $os/$arch..."
-                GOOS=$os GOARCH=$arch go build -ldflags "$ldflags" -o "$output" "$SOURCE_FILE"
+                GOOS=$os GOARCH=$arch go build -o "$output" "$SOURCE_FILE"
                 print_success "已构建: $output"
             done
         done
