@@ -40,7 +40,7 @@ const (
 //   - max：随机数范围的最大值（不包含）。
 //
 // 返回值：
-//   - 返回一个范围在 [min, max) 之间的 int64 类型随机数。
+//   - int64：返回一个范围在 [min, max) 之间的 int64 类型随机数。
 func Int63n(random *rand.Rand, min, max int64) int64 {
 	// 计算随机数范围。
 	result := max - min
@@ -66,7 +66,7 @@ func Int63n(random *rand.Rand, min, max int64) int64 {
 //   - max：随机数范围的最大值（不包含）。
 //
 // 返回值：
-//   - 返回一个范围在 [min, max) 之间的 int 类型随机数。
+//   - int：返回一个范围在 [min, max) 之间的 int 类型随机数。
 func Intn(random *rand.Rand, min, max int) int {
 	// 计算随机数范围。
 	result := max - min
@@ -90,7 +90,7 @@ func Intn(random *rand.Rand, min, max int) int {
 //   - random：随机数生成器，如果为 nil 则使用默认的随机数生成器。
 //
 // 返回值：
-//   - 返回一个随机生成的汉字字符串。
+//   - string：返回一个随机生成的汉字字符串。
 func Chinese(random *rand.Rand) string {
 	// 生成一个在常用汉字 Unicode 范围内的随机数。
 	r := rune(Intn(random, minChinese, maxChinese))
@@ -105,7 +105,7 @@ func Chinese(random *rand.Rand) string {
 //   - random：随机数生成器，如果为 nil 则使用默认的随机数生成器。
 //
 // 返回值：
-//   - 返回一个随机选择的中文姓氏字符串。
+//   - string：返回一个随机选择的中文姓氏字符串。
 func ChineseLastName(random *rand.Rand) string {
 	// 将姓氏字符串转换为 rune 切片。
 	var r = []rune(lastNameString)
