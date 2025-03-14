@@ -27,6 +27,7 @@ help:
 test:
 	@echo "构建示例程序..."
 	@chmod +x example/cache/build.sh \
+		example/config/version/build.sh \
 		example/kratos/config/build.sh \
 		example/log/build.sh \
 		example/runtime/goroutine/build.sh
@@ -34,6 +35,11 @@ test:
 	@echo "\n===================================================="
 	@echo "构建并运行缓存示例..."
 	@example/cache/build.sh
+	@echo "====================================================\n"
+	
+	@echo "===================================================="
+	@echo "构建并运行版本信息示例..."
+	@example/config/version/build.sh
 	@echo "====================================================\n"
 	
 	@echo "===================================================="

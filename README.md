@@ -22,11 +22,37 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 
 ## 模块列表
 
+### bytes
+
+#### [bytes](bytes/README.md)
+
+字节操作工具：提供安全的随机字节生成功能，基于加密安全的随机数生成器，适用于生成nonce、salt、会话令牌等安全场景。[详细说明 →](bytes/README.md)
+
+### [cache](cache/README.md)
+
+高性能进程内缓存：基于 ristretto 的缓存实现，支持过期时间设置、泛型接口和自动内存管理。[详细说明 →](cache/README.md)
+
 ### crypto
+
+#### [crypto/aes](crypto/aes/README.md)
+
+AES 加密工具：提供 AES-GCM 加密/解密功能，支持多种输入格式（字节数组、字符串、Base64、Hex）和自动随机 nonce 生成。[详细说明 →](crypto/aes/README.md)
 
 #### [crypto/des](crypto/des/README.md)
 
 DES 加密工具：提供 DES-CBC 加密/解密功能，支持 PKCS7 填充和多种输入格式（字节数组、字符串、16 进制字符串）。[详细说明 →](crypto/des/README.md)
+
+#### [crypto/md5](crypto/md5/README.md)
+
+MD5 哈希工具：提供便捷的字符串 MD5 哈希计算功能，支持带错误处理和忽略错误的版本，适用于数据校验和缓存键生成。[详细说明 →](crypto/md5/README.md)
+
+#### [crypto/otp](crypto/otp/README.md)
+
+一次性密码工具：提供基于时间的一次性密码（TOTP）算法实现，支持多种哈希算法、自定义密码长度和生成兼容的验证器 URL。[详细说明 →](crypto/otp/README.md)
+
+#### [crypto/rsa](crypto/rsa/README.md)
+
+RSA 加密工具：提供 RSA 加密/解密功能，支持公钥加密/私钥解密和私钥加密/公钥解密（数字签名）操作，以及 PEM 格式密钥处理。[详细说明 →](crypto/rsa/README.md)
 
 ### kratos
 
@@ -45,6 +71,12 @@ HTTP 适配器：提供 Kratos HTTP 服务器到 Gin 引擎的转换功能，支
 ### [log](log/README.md)
 
 日志抽象接口，提供统一的日志记录标准，支持多种底层实现。[详细说明 →](log/README.md)
+
+### math
+
+#### [math/rand](math/rand/README.md)
+
+随机数生成工具：提供范围内的随机数生成和中文字符（汉字、姓氏）随机生成功能，支持自定义随机数生成器。[详细说明 →](math/rand/README.md)
 
 ### [runtime](runtime/README.md)
 
