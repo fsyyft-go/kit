@@ -12,9 +12,7 @@ import (
 	"math/big"
 )
 
-/**
- * 下面的代码来自 SDK 的：crypt/rsa/pkcs1v5.go 。
- */
+// 下面的代码来自 SDK 的：crypt/rsa/pkcs1v5.go 。
 
 // hashPrefixes 是一个映射表，存储了各种哈希算法对应的 ASN.1 DER 编码前缀。
 // 这些前缀在 PKCS#1 v1.5 签名验证过程中用于标识使用的哈希算法。
@@ -43,7 +41,7 @@ var (
 func publicDecrypt(pub *rsa.PublicKey, hash crypto.Hash, hashed []byte, sig []byte) (out []byte, err error) {
 	// 获取哈希算法的相关信息，包括哈希长度和前缀。
 	hashLen, prefix, err := pkcs1v15HashInfo(hash, len(hashed))
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 

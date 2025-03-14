@@ -2,12 +2,10 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+// Package rsa 提供了 RSA 加密算法相关的功能实现。
+// SDK 中只包含公钥加密和私钥解密；
+// 私钥加密和公钥解密，参考：https://github.com/wenzhenxi/gorsa 。
 package rsa
-
-/**
- * SDK 中只包含公钥加密和私钥解密；
- * 私钥加密和公钥解密，参考：https://github.com/wenzhenxi/gorsa 。
- */
 
 import (
 	"crypto"
@@ -38,7 +36,7 @@ func EncryptPubKey(publieKey, dataClear []byte) ([]byte, error) {
 	}()
 
 	// 将字节切片形式的公钥转换为 rsa.PublicKey 结构
-	if pub, errPub := convertPublicKey(publieKey); nil != errPub {
+	if pub, errPub := convertPublicKey(publieKey); errPub != nil {
 		// 转换失败时保存错误信息。
 		err = errPub
 	} else {
@@ -100,7 +98,7 @@ func DecryptPubKey(publieKey, dataCipher []byte) ([]byte, error) {
 	}()
 
 	// 将字节切片形式的公钥转换为 rsa.PublicKey 结构
-	if pub, errPub := convertPublicKey(publieKey); nil != errPub {
+	if pub, errPub := convertPublicKey(publieKey); errPub != nil {
 		// 转换失败时保存错误信息。
 		err = errPub
 	} else {
@@ -163,7 +161,7 @@ func EncryptPrivKey(privateKey, dataClear []byte) ([]byte, error) {
 	}()
 
 	// 将字节切片形式的私钥转换为 rsa.PrivateKey 结构。
-	if priv, errPri := ConvertPrivateKey(privateKey); nil != errPri {
+	if priv, errPri := ConvertPrivateKey(privateKey); errPri != nil {
 		// 转换失败时保存错误信息。
 		err = errPri
 	} else {
@@ -226,7 +224,7 @@ func DecryptPrivKey(privateKey, dataCipher []byte) ([]byte, error) {
 	}()
 
 	// 将字节切片形式的私钥转换为 rsa.PrivateKey 结构。
-	if priv, errPri := ConvertPrivateKey(privateKey); nil != errPri {
+	if priv, errPri := ConvertPrivateKey(privateKey); errPri != nil {
 		// 转换失败时保存错误信息。
 		err = errPri
 	} else {

@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package rsa 提供了 RSA 加密算法相关的功能实现。
 package rsa
 
 import (
