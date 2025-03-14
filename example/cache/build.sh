@@ -241,9 +241,6 @@ main() {
     # 创建输出目录
     create_output_dir
     
-    # 检查 Debug 模式
-    check_debug_mode
-    
     # 获取版本信息
     get_version_info
     
