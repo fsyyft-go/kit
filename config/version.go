@@ -14,6 +14,11 @@ import (
 	kit_go_build "github.com/fsyyft-go/kit/go/build"
 )
 
+const (
+	// verSimple 定义版本信息的输出格式。
+	verSimple = "version %[1]s/%[2]s (build %[3]s)"
+)
+
 var (
 	// 确保 version 类型实现了这些接口。
 	_ fmt.Stringer                 = (*version)(nil)
@@ -128,8 +133,6 @@ func (v *version) Debug() bool {
 //   - string：格式化后的版本信息字符串。
 func (v *version) String() string {
 	// TODO 调试状态有问题，先忽略输出。
-	// 定义版本信息的输出格式。
-	const verSimple = "version %[1]s/%[2]s (build %[3]s)"
 	return fmt.Sprintf(verSimple,
 		v.buildingContext.GitShortVersion(),
 		v.buildingContext.BuildTimeString(),
