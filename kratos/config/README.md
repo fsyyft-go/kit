@@ -231,7 +231,7 @@ func RegisterResolve(key string, item ResolveItem)
 
 - [Kratos 配置文档](https://go-kratos.dev/docs/component/config/)
 - [Kit DES 加密模块](../crypto/des/README.md)
-- [示例代码](../example/kratos/config/README.md)
+- [示例代码](../../example/kratos/config/README.md)
 
 ## 贡献指南
 

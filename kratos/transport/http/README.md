@@ -209,7 +209,6 @@ func GetPaths(s *kratoshttp.Server) []RouteInfo
 
 - [Kratos HTTP 文档](https://go-kratos.dev/docs/component/transport/http/)
 - [Gin 框架文档](https://gin-gonic.com/docs/)
-- [示例代码](../example/kratos/transport/http/README.md)
 
 ## 贡献指南
 
@@ -224,8 +223,8 @@ func GetPaths(s *kratoshttp.Server) []RouteInfo
 
 ## 许可证
 
-本项目采用 MIT 许可证。查看 [LICENSE](../../LICENSE) 文件了解更多信息。 
+本项目采用 MIT 许可证。查看 [LICENSE](../../LICENSE) 文件了解更多信息。
 
 ## 补充说明
 
-本文的大部分信息，由 AI 使用[模板](../../../ai/templates/docs/package_readme_template.md)根据[提示词](../../../ai/prompts/docs/package_readme_generator.md)自动生成，如有任何问题，请随时联系我。
+本文的大部分信息，由 AI 使用[模板](../../ai/templates/docs/package_readme_template.md)根据[提示词](../../ai/prompts/docs/package_readme_generator.md)自动生成，如有任何问题，请随时联系我。

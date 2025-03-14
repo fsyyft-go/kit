@@ -224,7 +224,6 @@ func WithRealm(realm string) Option
 
 - [Kratos 中间件文档](https://go-kratos.dev/docs/component/middleware/)
 - [HTTP Basic Auth 规范](https://tools.ietf.org/html/rfc7617)
-- [示例代码](../example/kratos/middleware/README.md)
 
 ## 贡献指南
 
