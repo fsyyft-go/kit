@@ -237,7 +237,7 @@ logger, err := log.NewLogger(
 
 ## 许可证
 
-本项目采用 MIT 许可证。查看 [LICENSE](./LICENSE) 文件了解更多信息。
+本项目采用 MIT 许可证。查看 [LICENSE](../LICENSE) 文件了解更多信息。
 
 ## 补充说明
 
