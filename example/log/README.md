@@ -37,8 +37,9 @@ chmod +x build.sh
 在 Windows 系统上：
 
 ```cmd
-# 构建和运行
-build.bat
+# 使用 Go 命令直接构建和运行
+go build -o bin/example/log/log.exe main.go
+./bin/example/log/log.exe
 ```
 
 ### 2. 代码示例
