@@ -200,4 +200,4 @@ bytes 包中的函数会在以下情况返回错误：
 
 ## 补充说明
 
-本文的大部分信息由 AI 使用模板根据提示词自动生成，如有任何问题，请随时联系我们。 
+本文的大部分信息由 AI 使用[模板](../ai/templates/docs/package_readme_template.md)根据[提示词](../ai/prompts/docs/package_readme_generator.md)自动生成，如有任何问题，请随时联系我们。 
