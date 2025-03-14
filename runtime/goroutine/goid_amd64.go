@@ -6,5 +6,11 @@
 
 package goroutine
 
-// Deprecated: GetGoID  获取 goroutine ID。
+// GetGoID 获取当前协程的 ID。
+// 此函数在 amd64 架构下使用汇编实现，以获取更高效的性能。
+//
+// 已废弃：请考虑使用其他替代方法获取协程 ID。
+//
+// 返回值：
+//   - int64：返回当前协程的 ID。
 func GetGoID() int64
