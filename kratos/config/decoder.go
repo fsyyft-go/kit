@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package config 提供配置解码和处理的功能。
 package config
 
 import (
@@ -65,9 +64,10 @@ func NewDecoder(opts ...DecoderOption) *Decoder {
 
 	// 应用所有非空的解码器选项。
 	for _, o := range opts {
-		if nil != o {
-			o(&d.DecoderOptions)
+		if nil == o {
+			continue
 		}
+		o(&d.DecoderOptions)
 	}
 
 	return &d
@@ -100,7 +100,7 @@ func (d *Decoder) Decode(src *kratos_config.KeyValue, target map[string]any) err
 		}
 		return nil
 	}
-	if codec := kratos_encoding.GetCodec(src.Format); codec != nil {
+	if codec := kratos_encoding.GetCodec(src.Format); nil != codec {
 		// 使用对应格式的编解码器解码配置值。
 		if err := codec.Unmarshal(src.Value, &target); nil != err {
 			return err

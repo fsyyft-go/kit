@@ -106,7 +106,7 @@ func Server(opts ...Option) middleware.Middleware {
 
 				// 解析认证头。
 				username, password, err := parseBasicAuth(auths)
-				if err != nil {
+				if nil != err {
 					// 如果解析失败，设置 WWW-Authenticate 头，触发浏览器的认证对话框。
 					tr.ReplyHeader().Set("WWW-Authenticate", `Basic realm="`+o.realm+`"`)
 					return nil, ErrInvalidBasicAuth
@@ -144,7 +144,7 @@ func parseBasicAuth(auth string) (string, string, error) {
 	payload := strings.TrimPrefix(auth, "Basic ")
 	// 对 Base64 编码的载荷进行解码。
 	decodedBytes, err := base64.StdEncoding.DecodeString(payload)
-	if err != nil {
+	if nil != err {
 		return "", "", err
 	}
 
