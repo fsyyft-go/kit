@@ -38,7 +38,7 @@ func EncryptPubKey(publieKey, dataClear []byte) ([]byte, error) {
 	}()
 
 	// 将字节切片形式的公钥转换为 rsa.PublicKey 结构
-	if pub, errPub := convertPublicKey(publieKey); errPub != nil {
+	if pub, errPub := convertPublicKey(publieKey); nil != errPub {
 		// 转换失败时保存错误信息。
 		err = errPub
 	} else {
@@ -100,7 +100,7 @@ func DecryptPubKey(publieKey, dataCipher []byte) ([]byte, error) {
 	}()
 
 	// 将字节切片形式的公钥转换为 rsa.PublicKey 结构
-	if pub, errPub := convertPublicKey(publieKey); errPub != nil {
+	if pub, errPub := convertPublicKey(publieKey); nil != errPub {
 		// 转换失败时保存错误信息。
 		err = errPub
 	} else {
@@ -163,7 +163,7 @@ func EncryptPrivKey(privateKey, dataClear []byte) ([]byte, error) {
 	}()
 
 	// 将字节切片形式的私钥转换为 rsa.PrivateKey 结构。
-	if priv, errPri := ConvertPrivateKey(privateKey); errPri != nil {
+	if priv, errPri := ConvertPrivateKey(privateKey); nil != errPri {
 		// 转换失败时保存错误信息。
 		err = errPri
 	} else {
@@ -226,7 +226,7 @@ func DecryptPrivKey(privateKey, dataCipher []byte) ([]byte, error) {
 	}()
 
 	// 将字节切片形式的私钥转换为 rsa.PrivateKey 结构。
-	if priv, errPri := ConvertPrivateKey(privateKey); errPri != nil {
+	if priv, errPri := ConvertPrivateKey(privateKey); nil != errPri {
 		// 转换失败时保存错误信息。
 		err = errPri
 	} else {

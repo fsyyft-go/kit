@@ -43,7 +43,7 @@ var (
 func publicDecrypt(pub *rsa.PublicKey, hash crypto.Hash, hashed []byte, sig []byte) (out []byte, err error) {
 	// 获取哈希算法的相关信息，包括哈希长度和前缀。
 	hashLen, prefix, err := pkcs1v15HashInfo(hash, len(hashed))
-	if err != nil {
+	if nil != err {
 		return nil, err
 	}
 
