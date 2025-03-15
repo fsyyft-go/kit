@@ -2,20 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package time 提供了基于 carbon 库的时间处理工具包。
-//
-// 包配置：
-// 本包提供了多个可在编译时配置的变量，可以通过 go build 的 -ldflags 参数进行修改。
-// 完整的编译示例：
-//
-//	go build -ldflags "
-//		-X 'github.com/fsyyft/fsyyft-go/time.defaultDateTimeLayout=2006-01-02 15:04:05'
-//		-X 'github.com/fsyyft/fsyyft-go/time.defaultTimezone=UTC'
-//		-X 'github.com/fsyyft/fsyyft-go/time.defaultWeekStartAt=Sunday'
-//		-X 'github.com/fsyyft/fsyyft-go/time.defaultLocale=en'
-//	"
-//
-// 注意：修改这些值会影响整个应用程序中使用此包的所有时间处理行为。
 package time
 
 import (
