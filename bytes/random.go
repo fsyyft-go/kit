@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package bytes 提供了字节操作相关的工具函数。
 package bytes
 
 import (
