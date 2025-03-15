@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// package http 提供 Kratos HTTP 服务器与 Gin 框架的集成功能。
 package http
 
 import (
