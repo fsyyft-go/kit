@@ -2,48 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package log 提供了一个统一的日志接口和多种日志实现。
-//
-// 这个包的主要特性包括：
-//   - 支持多种日志后端（标准输出、Logrus）。
-//   - 提供统一的日志接口。
-//   - 支持结构化日志记录。
-//   - 支持多个日志级别。
-//   - 支持文件和标准输出。
-//   - 支持函数式配置选项。
-//
-// 基本使用示例：
-//
-//	// 使用默认配置初始化日志
-//	if err := log.InitLogger(); err != nil {
-//	    panic(err)
-//	}
-//
-//	// 使用自定义配置初始化日志
-//	if err := log.InitLogger(
-//	    log.WithLogType(log.LogTypeLogrus),
-//	    log.WithLevel(log.DebugLevel),
-//	    log.WithOutput("/var/log/app.log"),
-//	); err != nil {
-//	    panic(err)
-//	}
-//
-//	// 使用日志功能
-//	log.Info("应用启动")
-//	log.WithField("user", "admin").Info("用户登录")
-//
-// 也可以直接创建日志实例：
-//
-//	logger, err := log.NewLogger(
-//	    log.WithLogType(log.LogTypeStd),
-//	    log.WithLevel(log.DebugLevel),
-//	)
-//	if err != nil {
-//	    panic(err)
-//	}
-//	logger.Info("使用独立的日志实例")
-//
-// 更多示例请参考 example/log 目录。
 package log
 
 import (
