@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package config 提供了应用程序的配置管理功能。
 package config
 
 import (
