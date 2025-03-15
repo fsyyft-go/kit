@@ -12,9 +12,7 @@ import (
 	"math/big"
 )
 
-/**
- * 下面的代码来自 SDK 的：crypt/rsa/pkcs1v5.go 。
- */
+// 下面的代码来自 SDK 的：crypt/rsa/pkcs1v5.go 。
 
 // hashPrefixes 是一个映射表，存储了各种哈希算法对应的 ASN.1 DER 编码前缀。
 // 这些前缀在 PKCS#1 v1.5 签名验证过程中用于标识使用的哈希算法。

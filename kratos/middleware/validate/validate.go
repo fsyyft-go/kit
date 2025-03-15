@@ -74,9 +74,10 @@ func Validator(opts ...Option) middleware.Middleware {
 	}
 	// 应用所有提供的选项配置。
 	for _, o := range opts {
-		if nil != o {
-			o(options)
+		if nil == o {
+			continue
 		}
+		o(options)
 	}
 
 	// 返回中间件函数，该函数接收下一个处理器作为参数。
@@ -86,7 +87,7 @@ func Validator(opts ...Option) middleware.Middleware {
 			// 检查请求是否实现了 validator 接口。
 			if v, ok := req.(validator); ok {
 				// 调用请求的 Validate 方法进行验证。
-				if err := v.Validate(); err != nil {
+				if err := v.Validate(); nil != err {
 					// 如果验证失败，则调用配置的回调函数处理错误。
 					return options.callback(ctx, req, err)
 				}

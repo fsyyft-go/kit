@@ -21,31 +21,14 @@ type ristrettoCache struct {
 	cache *ristretto.Cache
 }
 
-// newRistrettoCache 创建一个新的 Ristretto 缓存实例。
-// 默认使用 ristretto 作为缓存后端，它提供了高性能和可靠的缓存实现。
-// 参数：
-//   - options：缓存配置，包括计数器数量、最大成本和缓冲区大小
-//
-// 返回值：
-//   - Cache：缓存接口实现
-//   - error：如果创建失败则返回错误
-func newRistrettoCache(options CacheOptions) (Cache, error) {
-	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: options.NumCounters,
-		MaxCost:     options.MaxCost,
-		BufferItems: options.BufferItems,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &ristrettoCache{
-		cache: cache,
-	}, nil
-}
-
 // Get 实现 Cache 接口的 Get 方法。
 // 这个实现直接使用 ristretto 的 Get 方法，它是线程安全的。
+// 参数：
+//   - key：要获取的缓存键，可以是任意类型。
+//
+// 返回值：
+//   - value：缓存的值，如果不存在则为 nil。
+//   - exists：值是否存在且未过期。
 func (c *ristrettoCache) Get(key interface{}) (interface{}, bool) {
 	return c.cache.Get(key)
 }
@@ -53,6 +36,16 @@ func (c *ristrettoCache) Get(key interface{}) (interface{}, bool) {
 // GetWithTTL 实现 Cache 接口的 GetWithTTL 方法。
 // 这个实现结合了 ristretto 的 Get 和 GetTTL 方法，提供了值和过期时间信息。
 // 注意：ristretto 的 TTL 实现中，0 表示永不过期，这里会转换为 -1 以符合接口约定。
+// 参数：
+//   - key：要获取的缓存键，可以是任意类型。
+//
+// 返回值：
+//   - value：缓存的值，如果不存在则为 nil。
+//   - exists：值是否存在且未过期。
+//   - remainingTTL：剩余过期时间：
+//   - 如果值不存在或已过期，返回 0。
+//   - 如果值永不过期，返回 -1。
+//   - 否则返回实际的剩余时间。
 func (c *ristrettoCache) GetWithTTL(key interface{}) (interface{}, bool, time.Duration) {
 	value, exists := c.cache.Get(key)
 	if !exists {
@@ -77,6 +70,12 @@ func (c *ristrettoCache) GetWithTTL(key interface{}) (interface{}, bool, time.Du
 // Set 实现 Cache 接口的 Set 方法。
 // 这个实现使用 ristretto 的 Set 方法，并等待写入完成。
 // cost 参数固定为 1，因为我们使用 MaxCost 来表示最大条目数。
+// 参数：
+//   - key：缓存键，可以是任意类型。
+//   - value：要缓存的值，可以是任意类型。
+//
+// 返回值：
+//   - bool：是否设置成功。
 func (c *ristrettoCache) Set(key interface{}, value interface{}) bool {
 	ok := c.cache.Set(key, value, 1)
 	// 等待写入完成，确保后续的 Get 操作能够看到这次写入。
@@ -87,6 +86,13 @@ func (c *ristrettoCache) Set(key interface{}, value interface{}) bool {
 // SetWithTTL 实现 Cache 接口的 SetWithTTL 方法。
 // 这个实现根据 ttl 参数选择使用 Set 或 SetWithTTL 方法。
 // cost 参数固定为 1，因为我们使用 MaxCost 来表示最大条目数。
+// 参数：
+//   - key：缓存键，可以是任意类型。
+//   - value：要缓存的值，可以是任意类型。
+//   - ttl：过期时间，如果 <= 0 则表示永不过期。
+//
+// 返回值：
+//   - bool：是否设置成功。
 func (c *ristrettoCache) SetWithTTL(key interface{}, value interface{}, ttl time.Duration) bool {
 	var ok bool
 	// 如果 ttl <= 0，则表示永不过期。
@@ -103,6 +109,8 @@ func (c *ristrettoCache) SetWithTTL(key interface{}, value interface{}, ttl time
 
 // Delete 实现 Cache 接口的 Delete 方法。
 // 这个实现直接使用 ristretto 的 Del 方法，它是线程安全的。
+// 参数：
+//   - key：要删除的缓存键，可以是任意类型。
 func (c *ristrettoCache) Delete(key interface{}) {
 	c.cache.Del(key)
 }
@@ -115,7 +123,32 @@ func (c *ristrettoCache) Clear() {
 
 // Close 实现 Cache 接口的 Close 方法。
 // 这个实现直接使用 ristretto 的 Close 方法，它会释放所有资源。
+// 返回值：
+//   - error：如果关闭过程中发生错误则返回错误，目前实现始终返回 nil。
 func (c *ristrettoCache) Close() error {
 	c.cache.Close()
 	return nil
+}
+
+// newRistrettoCache 创建一个新的 Ristretto 缓存实例。
+// 默认使用 ristretto 作为缓存后端，它提供了高性能和可靠的缓存实现。
+// 参数：
+//   - options：缓存配置，包括计数器数量、最大成本和缓冲区大小。
+//
+// 返回值：
+//   - Cache：缓存接口实现。
+//   - error：如果创建失败则返回错误。
+func newRistrettoCache(options CacheOptions) (Cache, error) {
+	cache, err := ristretto.NewCache(&ristretto.Config{
+		NumCounters: options.NumCounters,
+		MaxCost:     options.MaxCost,
+		BufferItems: options.BufferItems,
+	})
+	if nil != err {
+		return nil, err
+	}
+
+	return &ristrettoCache{
+		cache: cache,
+	}, nil
 }

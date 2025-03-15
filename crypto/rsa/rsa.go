@@ -4,10 +4,8 @@
 
 package rsa
 
-/**
- * SDK 中只包含公钥加密和私钥解密；
- * 私钥加密和公钥解密，参考：https://github.com/wenzhenxi/gorsa 。
- */
+// SDK 中只包含公钥加密和私钥解密；
+// 私钥加密和公钥解密，参考：https://github.com/wenzhenxi/gorsa 。
 
 import (
 	"crypto"

@@ -14,7 +14,7 @@ import (
 func TestCache(t *testing.T) {
 	// 创建缓存实例
 	cache, err := NewCache()
-	if err != nil {
+	if nil != err {
 		t.Fatalf("创建缓存失败: %v", err)
 	}
 	defer cache.Close()
@@ -127,11 +127,11 @@ func TestGlobalCache(t *testing.T) {
 	once = sync.Once{}
 
 	t.Run("Global Cache Operations", func(t *testing.T) {
-		if err := InitCache(); err != nil {
+		if err := InitCache(); nil != err {
 			t.Fatalf("初始化全局缓存失败: %v", err)
 		}
 		defer func() {
-			if err := Close(); err != nil {
+			if err := Close(); nil != err {
 				t.Errorf("关闭缓存失败: %v", err)
 			}
 		}()
@@ -170,7 +170,7 @@ func TestGlobalCache(t *testing.T) {
 func TestTypedCache(t *testing.T) {
 	// 创建基础缓存实例
 	baseCache, err := NewCache()
-	if err != nil {
+	if nil != err {
 		t.Fatalf("创建缓存失败: %v", err)
 	}
 	defer baseCache.Close()
@@ -284,7 +284,7 @@ func TestTypedCache(t *testing.T) {
 // BenchmarkCache 对缓存的基本操作进行基准测试。
 func BenchmarkCache(b *testing.B) {
 	cache, err := NewCache()
-	if err != nil {
+	if nil != err {
 		b.Fatalf("创建缓存失败: %v", err)
 	}
 	defer cache.Close()
@@ -345,7 +345,7 @@ func BenchmarkCache(b *testing.B) {
 // BenchmarkTypedCache 对类型安全缓存的基本操作进行基准测试。
 func BenchmarkTypedCache(b *testing.B) {
 	baseCache, err := NewCache()
-	if err != nil {
+	if nil != err {
 		b.Fatalf("创建缓存失败: %v", err)
 	}
 	defer baseCache.Close()
@@ -401,11 +401,11 @@ func BenchmarkTypedCache(b *testing.B) {
 func BenchmarkGlobalCache(b *testing.B) {
 	// 在每个子测试前重新初始化全局缓存
 	b.Run("Set", func(b *testing.B) {
-		if err := InitCache(); err != nil {
+		if err := InitCache(); nil != err {
 			b.Fatalf("初始化全局缓存失败: %v", err)
 		}
 		defer func() {
-			if err := Close(); err != nil {
+			if err := Close(); nil != err {
 				b.Errorf("关闭缓存失败: %v", err)
 			}
 		}()
@@ -418,11 +418,11 @@ func BenchmarkGlobalCache(b *testing.B) {
 	})
 
 	b.Run("Get", func(b *testing.B) {
-		if err := InitCache(); err != nil {
+		if err := InitCache(); nil != err {
 			b.Fatalf("初始化全局缓存失败: %v", err)
 		}
 		defer func() {
-			if err := Close(); err != nil {
+			if err := Close(); nil != err {
 				b.Errorf("关闭缓存失败: %v", err)
 			}
 		}()
@@ -438,11 +438,11 @@ func BenchmarkGlobalCache(b *testing.B) {
 	})
 
 	b.Run("SetWithTTL", func(b *testing.B) {
-		if err := InitCache(); err != nil {
+		if err := InitCache(); nil != err {
 			b.Fatalf("初始化全局缓存失败: %v", err)
 		}
 		defer func() {
-			if err := Close(); err != nil {
+			if err := Close(); nil != err {
 				b.Errorf("关闭缓存失败: %v", err)
 			}
 		}()
@@ -455,11 +455,11 @@ func BenchmarkGlobalCache(b *testing.B) {
 	})
 
 	b.Run("GetWithTTL", func(b *testing.B) {
-		if err := InitCache(); err != nil {
+		if err := InitCache(); nil != err {
 			b.Fatalf("初始化全局缓存失败: %v", err)
 		}
 		defer func() {
-			if err := Close(); err != nil {
+			if err := Close(); nil != err {
 				b.Errorf("关闭缓存失败: %v", err)
 			}
 		}()

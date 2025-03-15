@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package log 提供了日志功能的测试用例。
 package log
 
 import (

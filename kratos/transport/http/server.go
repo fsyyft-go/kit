@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// package http 提供 Kratos HTTP 服务器与 Gin 框架的集成功能。
 package http
 
 import (
@@ -16,7 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-kratos/kratos/v2/middleware"
-	kratoshttp "github.com/go-kratos/kratos/v2/transport/http"
+	kratos_http "github.com/go-kratos/kratos/v2/transport/http"
 	"github.com/gorilla/mux"
 )
 
@@ -66,25 +65,25 @@ type (
 		_ time.Duration
 
 		// HTTP 过滤器函数列表。
-		_ []kratoshttp.FilterFunc
+		_ []kratos_http.FilterFunc
 
 		// 中间件匹配器。
 		_ matcher
 
 		// 请求解码函数，用于解析请求参数。
-		_ kratoshttp.DecodeRequestFunc
+		_ kratos_http.DecodeRequestFunc
 
 		// 请求头解码函数。
-		_ kratoshttp.DecodeRequestFunc
+		_ kratos_http.DecodeRequestFunc
 
 		// 请求体解码函数。
-		_ kratoshttp.DecodeRequestFunc
+		_ kratos_http.DecodeRequestFunc
 
 		// 响应编码函数。
-		_ kratoshttp.EncodeResponseFunc
+		_ kratos_http.EncodeResponseFunc
 
 		// 错误编码函数。
-		_ kratoshttp.EncodeErrorFunc
+		_ kratos_http.EncodeErrorFunc
 
 		// 是否启用压缩。
 		_ bool
@@ -112,7 +111,7 @@ type (
 //
 // 返回值：
 //   - *mux.Router：gorilla/mux 路由器指针。
-func getRouter(s *kratoshttp.Server) *mux.Router {
+func getRouter(s *kratos_http.Server) *mux.Router {
 	// 检查是否为 nil，避免空指针异常
 	if nil == s {
 		return nil
@@ -131,7 +130,7 @@ func getRouter(s *kratoshttp.Server) *mux.Router {
 //
 // 返回值：
 //   - []RouteInfo：包含所有注册路由信息的切片
-func GetPaths(s *kratoshttp.Server) []RouteInfo {
+func GetPaths(s *kratos_http.Server) []RouteInfo {
 	// 初始化空的路由信息切片。
 	routeInfos := make([]RouteInfo, 0)
 
@@ -139,7 +138,7 @@ func GetPaths(s *kratoshttp.Server) []RouteInfo {
 	router := getRouter(s)
 
 	// 如果路由器为 nil，直接返回空切片
-	if router == nil {
+	if nil == router {
 		return routeInfos
 	}
 
@@ -147,14 +146,14 @@ func GetPaths(s *kratoshttp.Server) []RouteInfo {
 	_ = router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
 		// 获取路由路径模板。
 		path, err := route.GetPathTemplate()
-		if err != nil {
+		if nil != err {
 			// 如果获取路径模板失败，跳过此路由，继续处理下一个
 			return nil
 		}
 
 		// 获取路由支持的 HTTP 方法。
 		method, err := route.GetMethods()
-		if err != nil {
+		if nil != err {
 			// 如果获取方法失败，假设此路由支持 GET 方法
 			method = []string{"GET"}
 		}
@@ -178,9 +177,9 @@ func GetPaths(s *kratoshttp.Server) []RouteInfo {
 // 参数：
 //   - s：kratos http.Server 指针。
 //   - e：gin.Engine 指针。
-func Parse(s *kratoshttp.Server, e *gin.Engine) {
+func Parse(s *kratos_http.Server, e *gin.Engine) {
 	// 检查参数是否为 nil
-	if s == nil || e == nil {
+	if nil == s || nil == e {
 		return
 	}
 

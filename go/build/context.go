@@ -26,6 +26,49 @@ const (
 var (
 	// 确保 buildingContextValue 实现了 BuildingContext 接口。
 	_ BuildingContext = (*buildingContextValue)(nil)
+
+	// 存储构建信息的全局变量。
+	// 以下变量可以在编译时通过 go build 的 -ldflags 参数进行设置，例如：
+	// go build -ldflags "-X github.com/fsyyft-go/kit/go/build.version=v1.0.0 -X github.com/fsyyft-go/kit/go/build.gitVersion=abcdef1234567890"
+
+	// version 软件版本。
+	// 可通过：go build -ldflags "-X github.com/fsyyft-go/kit/go/build.version=v1.0.0" 设置。
+	version string
+
+	// gitVersion Git 版本。
+	// 可通过：go build -ldflags "-X github.com/fsyyft-go/kit/go/build.gitVersion=$(git rev-parse HEAD)" 设置。
+	gitVersion string
+
+	// libGitVersion 类库的 Git 版本。
+	// 可通过：go build -ldflags "-X github.com/fsyyft-go/kit/go/build.libGitVersion=$(git rev-parse HEAD)" 设置。
+	libGitVersion string
+
+	// buildTimeString 编译时间。
+	// 可通过：go build -ldflags "-X github.com/fsyyft-go/kit/go/build.buildTimeString=$(date +%Y%m%d%H%M%S%3N)" 设置。
+	buildTimeString string
+
+	// buildLibraryDirectory 编译时的类库所在目录。
+	// 可通过：go build -ldflags "-X github.com/fsyyft-go/kit/go/build.buildLibraryDirectory=/path/to/lib" 设置。
+	buildLibraryDirectory string
+
+	// buildWorkingDirectory 编译时的工作目录。
+	// 可通过：go build -ldflags "-X github.com/fsyyft-go/kit/go/build.buildWorkingDirectory=$(pwd)" 设置。
+	buildWorkingDirectory string
+
+	// buildGopathDirectory 编译时的 GOPATH 目录。
+	// 可通过：go build -ldflags "-X github.com/fsyyft-go/kit/go/build.buildGopathDirectory=$GOPATH" 设置。
+	buildGopathDirectory string
+
+	// buildGorootDirectory 编译时的 GOROOT 目录。
+	// 可通过：go build -ldflags "-X github.com/fsyyft-go/kit/go/build.buildGorootDirectory=$GOROOT" 设置。
+	buildGorootDirectory string
+
+	// isDebug 是否调试状态。
+	// 注意：此变量通常不需要手动设置，程序会自动检测运行环境。
+	isDebug bool
+
+	// CurrentBuildingContext 存储当前的构建上下文信息。
+	CurrentBuildingContext *buildingContextValue
 )
 
 type (
@@ -208,27 +251,9 @@ func (c *buildingContextValue) Debug() bool {
 	return c.debug
 }
 
-var (
-	version               string // 软件版本。
-	gitVersion            string // Git 版本。
-	libGitVersion         string // 类库的 Git 版本。
-	buildTimeString       string // 编译时间。
-	buildLibraryDirectory string // 编译时的类库所在目录。
-	buildWorkingDirectory string // 编译时的工作目录。
-	// buildWorkingDirectory = "/development/Learning/Go"
-	buildGopathDirectory string // 编译时的 GOPATH 目录。
-	// buildGopathDirectory = "/data/var/lib/go/path"
-	buildGorootDirectory string // 编译时的 GOROOT 目录。
-	isDebug              bool   // 是否调试状态。
-)
-
-var (
-	// CurrentBuildingContext 存储当前的构建上下文信息。
-	CurrentBuildingContext *buildingContextValue
-)
-
 // init 初始化构建上下文，设置默认值和运行时状态。
 func init() {
+	// 定义检查是否为调试模式的函数。
 	funcCheckDebug := func() bool {
 		// 获取临时构建目录。
 		goTmpDir := os.Getenv(GoEnvNameTmpDir)
@@ -301,19 +326,7 @@ func init() {
 		debug:                 isDebug,
 	}
 
-	// 获取当前运行环境的临时目录路径。
-	// goTmpBuild := os.Getenv(GoEnvNameTmpDir)
-	// 检查路径是否以分隔符结尾，如果没有则添加。
-	// noPathSeparator := len(goTmpBuild) > 0 && goTmpBuild[len(goTmpBuild)-1] != os.PathSeparator
-	// if noPathSeparator {
-	// 	goTmpBuild = filepath.Join(goTmpBuild, string(os.PathSeparator))
-	// }
-	// 拼接 go-build 目录路径。
-	// goTmpBuild = filepath.Join(goTmpBuild, "go-build")
-
-	// 通过检查执行文件路径判断是否为调试模式（go run 或 go test）。
-	// exeIndex := strings.Index(strings.ToLower(os.Args[0]), strings.ToLower(goTmpBuild))
-	// CurrentBuildingContext.debug = exeIndex >= 0 && exeIndex <= 7
+	// 设置是否为调试模式。
 	CurrentBuildingContext.debug = funcCheckDebug()
 
 	// 设置构建时间(如果未设置则使用当前时间)。
