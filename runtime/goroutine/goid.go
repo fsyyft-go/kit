@@ -4,7 +4,6 @@
 
 //go:build !arm64 && !amd64
 
-// Package goroutine 提供了用于获取和操作 Go 协程相关信息的工具函数。
 package goroutine
 
 // GetGoID 获取当前协程的 ID。
