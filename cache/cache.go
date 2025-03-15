@@ -2,39 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package cache 提供了一个统一的缓存接口和多种缓存实现。
-// 这个包的主要特性包括：
-//   - 支持多种缓存后端（默认使用 ristretto）
-//   - 提供统一的缓存接口
-//   - 支持泛型和类型安全
-//   - 支持 TTL（生存时间）设置
-//   - 支持全局缓存实例
-//   - 线程安全
-//
-// 基本使用示例：
-//
-//	// 创建缓存实例
-//	cache, err := cache.NewCache()  // 使用默认配置
-//	if err != nil {
-//	    panic(err)
-//	}
-//	defer cache.Close()
-//
-//	// 基本操作
-//	cache.Set("key", "value")                    // 设置永不过期的值
-//	cache.SetWithTTL("temp", "value", time.Hour) // 设置 1 小时后过期的值
-//
-//	// 获取值
-//	if val, exists := cache.Get("key"); exists {
-//	    fmt.Println(val)
-//	}
-//
-//	// 获取带 TTL 的值
-//	if val, exists, ttl := cache.GetWithTTL("temp"); exists {
-//	    fmt.Printf("值：%v，剩余时间：%v\n", val, ttl)
-//	}
-//
-// 更多示例请参考 example/cache 目录。
 package cache
 
 import (
