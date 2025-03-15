@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package rand 提供了一系列随机数生成的工具函数，包括数值范围随机和中文字符随机生成。
 package rand
 
 import (
