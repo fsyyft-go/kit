@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package md5 提供了计算字符串 MD5 哈希值的简便功能。
 package md5
 
 import (

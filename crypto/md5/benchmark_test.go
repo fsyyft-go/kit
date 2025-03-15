@@ -2,7 +2,7 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// 基准测试包，用于评估 md5 包中函数的性能。
+// md5_test 基准测试包，用于评估 md5 包中函数的性能。
 package md5_test
 
 import (

@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package aes 提供了 AES 加密和解密的实用函数，支持 GCM 模式并可处理多种数据格式。
 package aes
 
 import (
