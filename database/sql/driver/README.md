@@ -162,4 +162,4 @@ func (h *TimingHook) After(ctx *driver.HookContext) error {
 
 ## 许可证
 
-使用 BSD 许可证 - 查看 [LICENSE](LICENSE) 文件了解更多信息。 
+使用 BSD 许可证 - 查看 [LICENSE](../../../LICENSE) 文件了解更多信息。 
