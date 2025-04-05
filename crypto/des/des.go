@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package des 实现了 DES 加密算法相关的功能。
 package des
 
 import (

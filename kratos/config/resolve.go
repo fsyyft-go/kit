@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package config 提供配置解析和处理的功能，特别是对特殊格式配置值的处理。
 package config
 
 import (
@@ -12,13 +11,6 @@ import (
 	kit_crypto_des "github.com/fsyyft-go/kit/crypto/des"
 )
 
-var (
-	// defaultResolve 是默认的解析器实例，用于全局配置解析。
-	defaultResolve *resolve
-	// defaultDESKey 是默认的 DES 密钥。
-	defaultDESKey = kit_crypto_des.GetDefaultDESKey()
-)
-
 const (
 	// suffixBase64 定义了 base64 编码值的后缀标识，用于识别需要 base64 解码的配置项。
 	suffixBase64 = ".b64"
@@ -26,12 +18,12 @@ const (
 	suffixDES = ".des"
 )
 
-// init 函数在包初始化时执行，创建默认解析器并注册 base64 解析处理器。
-func init() {
-	defaultResolve = newResolve()
-	defaultResolve.register(suffixBase64, registerResolveBase64)
-	defaultResolve.register(suffixDES, registerResolveDES)
-}
+var (
+	// defaultResolve 是默认的解析器实例，用于全局配置解析。
+	defaultResolve *resolve
+	// defaultDESKey 是默认的 DES 密钥。
+	defaultDESKey = kit_crypto_des.GetDefaultDESKey()
+)
 
 type (
 	// ResolveItem 是配置解析处理函数类型，用于处理特定格式的配置项。
@@ -49,6 +41,13 @@ type (
 		resolvers map[string]ResolveItem
 	}
 )
+
+// init 函数在包初始化时执行，创建默认解析器并注册 base64 解析处理器。
+func init() {
+	defaultResolve = newResolve()
+	defaultResolve.register(suffixBase64, registerResolveBase64)
+	defaultResolve.register(suffixDES, registerResolveDES)
+}
 
 // newResolve 创建并返回一个新的 resolve 实例。
 // 返回值：
@@ -140,6 +139,16 @@ func registerResolveBase64(target map[string]interface{}, key, val string) error
 	return nil
 }
 
+// registerResolveDES 是处理 DES 加密配置值的解析函数。
+// 当配置键以 .des 后缀结尾时，尝试使用 DES 算法解密其值，并将解密后的值存储到去除后缀的键中。
+//
+// 参数：
+//   - target: 配置目标映射，存储解析后的配置。
+//   - key: 当前处理的配置键名。
+//   - val: 当前处理的配置值。
+//
+// 返回值：
+//   - error: 处理过程中可能发生的错误，成功时返回 nil。
 func registerResolveDES(target map[string]interface{}, key, val string) error {
 	// 检查键名是否以 .des 后缀结尾。
 	if strings.HasSuffix(key, suffixDES) {

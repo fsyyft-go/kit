@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 	"unsafe"
@@ -36,70 +37,65 @@ type (
 
 	// serverAccessor 是一个用于访问 kratos http.Server 内部字段的结构体。
 	// 通过 unsafe.Pointer 转换实现对私有字段的访问。
-	// 字段说明：
-	// - Server: 底层的 http.Server 实例。
-	// - router: gorilla/mux 路由器实例。
-	// 其他字段使用空标识符 _ 占位，保持内存布局与原始结构体一致。
 	serverAccessor struct {
-		// 标准库 http.Server 实例，处理 HTTP 请求和响应。
+		// Server 是标准库 http.Server 实例，处理 HTTP 请求和响应。
 		*http.Server
 
-		// 网络监听器，用于接受连接。
+		// listener 是网络监听器，用于接受连接。
 		_ net.Listener
 
-		// TLS 配置，用于 HTTPS 连接。
+		// tlsConf 是 TLS 配置，用于 HTTPS 连接。
 		_ *tls.Config
 
-		// 服务器 URL 信息。
+		// endpoint 是服务器 URL 信息。
 		_ *url.URL
 
-		// 服务器错误信息。
+		// err 是服务器错误信息。
 		_ error
 
-		// 服务器网络地址。
+		// network 是服务器网络地址。
 		_ string
 
-		// 服务器路径。
+		// path 是服务器路径。
 		_ string
 
-		// 请求超时时间。
+		// timeout 是请求超时时间。
 		_ time.Duration
 
-		// HTTP 过滤器函数列表。
+		// filter 是 HTTP 过滤器函数列表。
 		_ []kratoshttp.FilterFunc
 
-		// 中间件匹配器。
+		// matcher 是中间件匹配器。
 		_ matcher
 
-		// 请求解码函数，用于解析请求参数。
+		// decodeRequest 是请求解码函数，用于解析请求参数。
 		_ kratoshttp.DecodeRequestFunc
 
-		// 请求头解码函数。
+		// decodeHeader 是请求头解码函数。
 		_ kratoshttp.DecodeRequestFunc
 
-		// 请求体解码函数。
+		// decodeBody 是请求体解码函数。
 		_ kratoshttp.DecodeRequestFunc
 
-		// 响应编码函数。
+		// encodeResponse 是响应编码函数。
 		_ kratoshttp.EncodeResponseFunc
 
-		// 错误编码函数。
+		// encodeError 是错误编码函数。
 		_ kratoshttp.EncodeErrorFunc
 
-		// 是否启用压缩。
+		// enableCompression 是否启用压缩。
 		_ bool
 
-		// gorilla/mux 路由器实例，用于 HTTP 路由管理。
+		// router 是 gorilla/mux 路由器实例，用于 HTTP 路由管理。
 		router *mux.Router
 	}
 
 	// RouteInfo 结构体存储路由信息。
-	// 包含 HTTP 方法和路径。
 	RouteInfo struct {
-		// HTTP 请求方法（GET、POST、PUT 等）。
+		// method 是 HTTP 请求方法（GET、POST、PUT 等）。
 		method string
 
-		// 路由路径模板。
+		// path 是路由路径模板。
 		path string
 	}
 )
@@ -113,7 +109,7 @@ type (
 // 返回值：
 //   - *mux.Router：gorilla/mux 路由器指针。
 func getRouter(s *kratoshttp.Server) *mux.Router {
-	// 检查是否为 nil，避免空指针异常
+	// 检查输入参数是否为空，避免空指针异常。
 	if nil == s {
 		return nil
 	}
@@ -124,13 +120,12 @@ func getRouter(s *kratoshttp.Server) *mux.Router {
 }
 
 // GetPaths 获取 HTTP 服务器中注册的所有路由信息。
-// 遍历 mux.Router 中的所有路由，提取方法和路径信息。
 //
 // 参数：
-//   - s：kratos http.Server 指针
+//   - s：kratos http.Server 指针。
 //
 // 返回值：
-//   - []RouteInfo：包含所有注册路由信息的切片
+//   - []RouteInfo：包含所有注册路由信息的切片。
 func GetPaths(s *kratoshttp.Server) []RouteInfo {
 	// 初始化空的路由信息切片。
 	routeInfos := make([]RouteInfo, 0)
@@ -138,7 +133,7 @@ func GetPaths(s *kratoshttp.Server) []RouteInfo {
 	// 获取路由器实例。
 	router := getRouter(s)
 
-	// 如果路由器为 nil，直接返回空切片
+	// 如果路由器为空，直接返回空切片。
 	if router == nil {
 		return routeInfos
 	}
@@ -148,18 +143,18 @@ func GetPaths(s *kratoshttp.Server) []RouteInfo {
 		// 获取路由路径模板。
 		path, err := route.GetPathTemplate()
 		if err != nil {
-			// 如果获取路径模板失败，跳过此路由，继续处理下一个
+			// 如果获取路径模板失败，跳过此路由，继续处理下一个。
 			return nil
 		}
 
 		// 获取路由支持的 HTTP 方法。
 		method, err := route.GetMethods()
 		if err != nil {
-			// 如果获取方法失败，假设此路由支持 GET 方法
+			// 如果获取方法失败，默认使用 GET 方法。
 			method = []string{"GET"}
 		}
 
-		// 为每个 HTTP 方法创建一个路由信息对象并添加到结果切片中。
+		// 为每个 HTTP 方法创建路由信息对象并添加到结果切片中。
 		for _, m := range method {
 			routeInfos = append(routeInfos, RouteInfo{
 				method: m,
@@ -173,13 +168,12 @@ func GetPaths(s *kratoshttp.Server) []RouteInfo {
 }
 
 // Parse 将 kratos http.Server 中的路由注册到 gin.Engine 中。
-// 这个函数允许将 Kratos 的路由处理逻辑与 Gin 框架集成。
 //
 // 参数：
 //   - s：kratos http.Server 指针。
 //   - e：gin.Engine 指针。
 func Parse(s *kratoshttp.Server, e *gin.Engine) {
-	// 检查参数是否为 nil
+	// 检查输入参数是否为空。
 	if s == nil || e == nil {
 		return
 	}
@@ -189,23 +183,60 @@ func Parse(s *kratoshttp.Server, e *gin.Engine) {
 
 	// 遍历所有路由信息并注册到 Gin 引擎。
 	for _, routeInfo := range routeInfos {
-		// 处理带有查询参数的路径。
-		path := routeInfo.path
-
-		// 查找第一个问号位置，分割路径和查询参数部分。
-		if idx := strings.Index(path, "?"); idx >= 0 {
-			path = path[:idx]
-		}
-
-		// 确保路径不为空，空路径设置为根路径。
-		if path == "" {
-			path = "/"
-		}
+		// 将 Mux 路径格式转换为 Gin 路径格式。
+		path := parsePath(routeInfo.path)
 
 		// 在 Gin 中注册路由处理函数。
-		// 将请求代理到 Kratos HTTP 服务器处理。
 		e.Handle(routeInfo.method, path, func(c *gin.Context) {
+			// 将请求代理到 Kratos HTTP 服务器处理。
 			s.ServeHTTP(c.Writer, c.Request)
 		})
 	}
+}
+
+// parsePath 将 Mux 格式路由转换为 Gin 格式路由。
+//
+// 参数：
+//   - path：Mux 格式的路由路径。
+//
+// 返回值：
+//   - string：转换后的 Gin 格式路由路径。
+//
+// 示例：
+//   - /users/{id} -> /users/:id
+//   - /users/{name:[a-z]+} -> /users/:name
+//   - /users/{id}/posts/{postId} -> /users/:id/posts/:postId
+func parsePath(path string) string {
+	// 处理空路径的情况。
+	if path == "" {
+		return "/"
+	}
+
+	// 保存原始路径末尾是否有斜杠的状态。
+	hasTrailingSlash := strings.HasSuffix(path, "/")
+
+	// 使用正则表达式处理路径参数，包括带正则表达式的参数。
+	// 匹配 {param} 或 {param:pattern} 格式。
+	regexPattern := regexp.MustCompile(`{([^:}]+)(?::[^}]*)?}`)
+	path = regexPattern.ReplaceAllString(path, ":$1")
+
+	// 处理多个连续的斜杠，将其替换为单个斜杠。
+	path = regexp.MustCompile(`/+`).ReplaceAllString(path, "/")
+
+	// 确保路径以斜杠开头。
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	// 处理路径末尾的斜杠。
+	if path != "/" {
+		// 移除末尾的斜杠。
+		path = strings.TrimRight(path, "/")
+		// 如果原始路径有末尾斜杠，则保留。
+		if hasTrailingSlash {
+			path += "/"
+		}
+	}
+
+	return path
 }

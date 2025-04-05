@@ -2,58 +2,11 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package log 提供了一个统一的日志接口和多种日志实现。
-//
-// 这个包的主要特性包括：
-//   - 支持多种日志后端（标准输出、Logrus）。
-//   - 提供统一的日志接口。
-//   - 支持结构化日志记录。
-//   - 支持多个日志级别。
-//   - 支持文件和标准输出。
-//   - 支持函数式配置选项。
-//
-// 基本使用示例：
-//
-//	// 使用默认配置初始化日志
-//	if err := log.InitLogger(); err != nil {
-//	    panic(err)
-//	}
-//
-//	// 使用自定义配置初始化日志
-//	if err := log.InitLogger(
-//	    log.WithLogType(log.LogTypeLogrus),
-//	    log.WithLevel(log.DebugLevel),
-//	    log.WithOutput("/var/log/app.log"),
-//	); err != nil {
-//	    panic(err)
-//	}
-//
-//	// 使用日志功能
-//	log.Info("应用启动")
-//	log.WithField("user", "admin").Info("用户登录")
-//
-// 也可以直接创建日志实例：
-//
-//	logger, err := log.NewLogger(
-//	    log.WithLogType(log.LogTypeStd),
-//	    log.WithLevel(log.DebugLevel),
-//	)
-//	if err != nil {
-//	    panic(err)
-//	}
-//	logger.Info("使用独立的日志实例")
-//
-// 更多示例请参考 example/log 目录。
 package log
 
 import (
 	"fmt"
 	"time"
-)
-
-type (
-	// Level 定义了日志的级别类型，用于控制日志的输出粒度。
-	Level int
 )
 
 const (
@@ -78,11 +31,6 @@ const (
 	FatalLevel
 )
 
-type (
-	// LoggerFormatType 定义了日志输出格式的类型。
-	LoggerFormatType string
-)
-
 const (
 	// TextFormat 表示文本格式的日志输出。
 	TextFormat LoggerFormatType = "text"
@@ -90,7 +38,6 @@ const (
 	JSONFormat LoggerFormatType = "json"
 )
 
-// 日志格式化器的默认配置。
 var (
 	// timestampFormat 定义了日志时间戳的格式。
 	timestampFormat = "2006-01-02 15:04:05.000"
@@ -102,43 +49,13 @@ var (
 	prettyPrint = false
 )
 
-// String 返回日志级别的字符串表示。
-func (l Level) String() string {
-	switch l {
-	case DebugLevel:
-		return "debug"
-	case InfoLevel:
-		return "info"
-	case WarnLevel:
-		return "warn"
-	case ErrorLevel:
-		return "error"
-	case FatalLevel:
-		return "fatal"
-	default:
-		return "unknown"
-	}
-}
-
-// ParseLevel 从字符串解析日志级别。
-func ParseLevel(level string) (Level, error) {
-	switch level {
-	case "debug":
-		return DebugLevel, nil
-	case "info":
-		return InfoLevel, nil
-	case "warn":
-		return WarnLevel, nil
-	case "error":
-		return ErrorLevel, nil
-	case "fatal":
-		return FatalLevel, nil
-	default:
-		return InfoLevel, fmt.Errorf("unknown level: %s", level)
-	}
-}
-
 type (
+	// Level 定义了日志的级别类型，用于控制日志的输出粒度。
+	Level int
+
+	// LoggerFormatType 定义了日志输出格式的类型。
+	LoggerFormatType string
+
 	// Logger 定义了统一的日志接口。
 	// 这个接口提供了基本的日志记录功能和结构化日志支持，可以通过不同的实现来支持不同的日志后端。
 	Logger interface {
@@ -242,7 +159,49 @@ type (
 	Option func(*LoggerOptions)
 )
 
+// String 返回日志级别的字符串表示。
+func (l Level) String() string {
+	switch l {
+	case DebugLevel:
+		return "debug"
+	case InfoLevel:
+		return "info"
+	case WarnLevel:
+		return "warn"
+	case ErrorLevel:
+		return "error"
+	case FatalLevel:
+		return "fatal"
+	default:
+		return "unknown"
+	}
+}
+
+// ParseLevel 从字符串解析日志级别。
+func ParseLevel(level string) (Level, error) {
+	switch level {
+	case "debug":
+		return DebugLevel, nil
+	case "info":
+		return InfoLevel, nil
+	case "warn":
+		return WarnLevel, nil
+	case "error":
+		return ErrorLevel, nil
+	case "fatal":
+		return FatalLevel, nil
+	default:
+		return InfoLevel, fmt.Errorf("unknown level: %s", level)
+	}
+}
+
 // WithLogType 设置日志类型。
+//
+// 参数：
+//   - logType：要设置的日志类型。
+//
+// 返回值：
+//   - 返回一个配置选项函数，可用于配置日志实例。
 func WithLogType(logType LogType) Option {
 	return func(opts *LoggerOptions) {
 		opts.Type = logType
@@ -250,7 +209,12 @@ func WithLogType(logType LogType) Option {
 }
 
 // WithFormatType 设置日志输出格式类型。
-// formatType：日志输出格式类型，可选值包括 TextFormat、JSONFormat。
+//
+// 参数：
+//   - formatType：日志输出格式类型，可选值包括 TextFormat、JSONFormat。
+//
+// 返回值：
+//   - 返回一个配置选项函数，可用于配置日志实例。
 func WithFormatType(formatType LoggerFormatType) Option {
 	return func(opts *LoggerOptions) {
 		opts.FormatType = formatType
@@ -258,6 +222,12 @@ func WithFormatType(formatType LoggerFormatType) Option {
 }
 
 // WithLevel 设置日志级别。
+//
+// 参数：
+//   - level：要设置的日志级别。
+//
+// 返回值：
+//   - 返回一个配置选项函数，可用于配置日志实例。
 func WithLevel(level Level) Option {
 	return func(opts *LoggerOptions) {
 		opts.Level = level
@@ -265,6 +235,12 @@ func WithLevel(level Level) Option {
 }
 
 // WithOutput 设置日志输出路径。
+//
+// 参数：
+//   - output：日志文件的输出路径，空字符串表示输出到标准输出。
+//
+// 返回值：
+//   - 返回一个配置选项函数，可用于配置日志实例。
 func WithOutput(output string) Option {
 	return func(opts *LoggerOptions) {
 		opts.Output = output
@@ -272,6 +248,12 @@ func WithOutput(output string) Option {
 }
 
 // WithEnableRotate 设置是否启用日志滚动。
+//
+// 参数：
+//   - enable：是否启用日志滚动，true 表示启用，false 表示禁用。
+//
+// 返回值：
+//   - 返回一个配置选项函数，可用于配置日志实例。
 func WithEnableRotate(enable bool) Option {
 	return func(opts *LoggerOptions) {
 		opts.EnableRotate = enable
@@ -279,6 +261,12 @@ func WithEnableRotate(enable bool) Option {
 }
 
 // WithRotateTime 设置日志滚动时间间隔。
+//
+// 参数：
+//   - duration：日志滚动的时间间隔。
+//
+// 返回值：
+//   - 返回一个配置选项函数，可用于配置日志实例。
 func WithRotateTime(duration time.Duration) Option {
 	return func(opts *LoggerOptions) {
 		opts.RotateTime = duration
@@ -286,6 +274,12 @@ func WithRotateTime(duration time.Duration) Option {
 }
 
 // WithMaxAge 设置日志保留时间。
+//
+// 参数：
+//   - duration：日志文件的最大保留时间。
+//
+// 返回值：
+//   - 返回一个配置选项函数，可用于配置日志实例。
 func WithMaxAge(duration time.Duration) Option {
 	return func(opts *LoggerOptions) {
 		opts.MaxAge = duration
@@ -293,7 +287,13 @@ func WithMaxAge(duration time.Duration) Option {
 }
 
 // NewLogger 创建一个新的日志实例。
-// 使用可选的配置选项来配置日志行为。
+//
+// 参数：
+//   - options：可选的配置选项列表，用于自定义日志记录器的行为。
+//
+// 返回值：
+//   - Logger：返回创建的日志实例。
+//   - error：返回创建过程中可能发生的错误。
 func NewLogger(options ...Option) (Logger, error) {
 	// 默认配置。
 	opts := &LoggerOptions{
@@ -346,7 +346,7 @@ func NewLogger(options ...Option) (Logger, error) {
 		return nil, fmt.Errorf("不支持的日志类型：%s", opts.Type)
 	}
 
-	if err != nil {
+	if nil != err {
 		return nil, fmt.Errorf("创建日志实例失败：%v", err)
 	}
 

@@ -24,10 +24,10 @@ var (
 // 如果已经初始化过，该函数将不会执行任何操作。
 //
 // 参数：
-//   - options：可选的配置选项，如果不提供则使用默认配置
+//   - options：可选的配置选项，如果不提供则使用默认配置。
 //
 // 返回值：
-//   - error：如果初始化失败则返回错误
+//   - error：如果初始化失败则返回错误。
 //
 // 示例：
 //
@@ -64,13 +64,13 @@ func InitCache(options ...Option) error {
 // 如果全局缓存未初始化，将返回 (nil, false)。
 //
 // 参数：
-//   - key：要获取的缓存键
+//   - key：要获取的缓存键，可以是任意类型。
 //
 // 返回值：
-//   - value：缓存的值，如果不存在则为 nil
-//   - exists：值是否存在且未过期
+//   - value：缓存的值，如果不存在则为 nil。
+//   - exists：值是否存在且未过期。
 func Get(key interface{}) (interface{}, bool) {
-	if defaultCache == nil {
+	if nil == defaultCache {
 		return nil, false
 	}
 	return defaultCache.Get(key)
@@ -80,17 +80,17 @@ func Get(key interface{}) (interface{}, bool) {
 // 如果全局缓存未初始化，将返回 (nil, false, 0)。
 //
 // 参数：
-//   - key：要获取的缓存键
+//   - key：要获取的缓存键，可以是任意类型。
 //
 // 返回值：
-//   - value：缓存的值，如果不存在则为 nil
-//   - exists：值是否存在且未过期
+//   - value：缓存的值，如果不存在则为 nil。
+//   - exists：值是否存在且未过期。
 //   - remainingTTL：剩余过期时间：
-//   - 如果值不存在或已过期，返回 0
-//   - 如果值永不过期，返回 -1
-//   - 否则返回实际的剩余时间
+//   - 如果值不存在或已过期，返回 0。
+//   - 如果值永不过期，返回 -1。
+//   - 否则返回实际的剩余时间。
 func GetWithTTL(key interface{}) (interface{}, bool, time.Duration) {
-	if defaultCache == nil {
+	if nil == defaultCache {
 		return nil, false, 0
 	}
 	return defaultCache.GetWithTTL(key)
@@ -100,13 +100,13 @@ func GetWithTTL(key interface{}) (interface{}, bool, time.Duration) {
 // 如果全局缓存未初始化，将返回 false。
 //
 // 参数：
-//   - key：缓存键
-//   - value：要缓存的值
+//   - key：缓存键，可以是任意类型。
+//   - value：要缓存的值，可以是任意类型。
 //
 // 返回值：
-//   - bool：是否设置成功
+//   - bool：是否设置成功。
 func Set(key interface{}, value interface{}) bool {
-	if defaultCache == nil {
+	if nil == defaultCache {
 		return false
 	}
 	return defaultCache.Set(key, value)
@@ -116,14 +116,14 @@ func Set(key interface{}, value interface{}) bool {
 // 如果全局缓存未初始化，将返回 false。
 //
 // 参数：
-//   - key：缓存键
-//   - value：要缓存的值
-//   - ttl：过期时间，如果 <= 0 则表示永不过期
+//   - key：缓存键，可以是任意类型。
+//   - value：要缓存的值，可以是任意类型。
+//   - ttl：过期时间，如果 <= 0 则表示永不过期。
 //
 // 返回值：
-//   - bool：是否设置成功
+//   - bool：是否设置成功。
 func SetWithTTL(key interface{}, value interface{}, ttl time.Duration) bool {
-	if defaultCache == nil {
+	if nil == defaultCache {
 		return false
 	}
 	return defaultCache.SetWithTTL(key, value, ttl)
@@ -133,9 +133,9 @@ func SetWithTTL(key interface{}, value interface{}, ttl time.Duration) bool {
 // 如果全局缓存未初始化，该操作将被忽略。
 //
 // 参数：
-//   - key：要删除的缓存键
+//   - key：要删除的缓存键，可以是任意类型。
 func Delete(key interface{}) {
-	if defaultCache == nil {
+	if nil == defaultCache {
 		return
 	}
 	defaultCache.Delete(key)
@@ -145,7 +145,7 @@ func Delete(key interface{}) {
 // 如果全局缓存未初始化，该操作将被忽略。
 // 这个操作会立即使所有缓存项失效。
 func Clear() {
-	if defaultCache == nil {
+	if nil == defaultCache {
 		return
 	}
 	defaultCache.Clear()
@@ -156,9 +156,9 @@ func Clear() {
 // 关闭后的全局缓存不应该再被使用。
 //
 // 返回值：
-//   - error：如果关闭过程中发生错误则返回错误
+//   - error：如果关闭过程中发生错误则返回错误。
 func Close() error {
-	if defaultCache == nil {
+	if nil == defaultCache {
 		return nil
 	}
 	return defaultCache.Close()

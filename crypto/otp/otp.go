@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package otp 提供了基于时间的一次性密码（TOTP）算法的实现，支持各种常见哈希算法和自定义选项。
 package otp
 
 import (
