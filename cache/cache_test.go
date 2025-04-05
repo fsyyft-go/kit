@@ -17,7 +17,7 @@ func TestCache(t *testing.T) {
 	if nil != err {
 		t.Fatalf("创建缓存失败: %v", err)
 	}
-	defer cache.Close()
+	defer cache.Close() //nolint:errcheck
 
 	// 测试设置和获取
 	t.Run("Set and Get", func(t *testing.T) {
@@ -173,7 +173,7 @@ func TestTypedCache(t *testing.T) {
 	if nil != err {
 		t.Fatalf("创建缓存失败: %v", err)
 	}
-	defer baseCache.Close()
+	defer baseCache.Close() //nolint:errcheck
 
 	// 创建字符串类型的缓存
 	strCache := AsTypedCache[string](baseCache)
@@ -287,7 +287,7 @@ func BenchmarkCache(b *testing.B) {
 	if nil != err {
 		b.Fatalf("创建缓存失败: %v", err)
 	}
-	defer cache.Close()
+	defer cache.Close() //nolint:errcheck
 
 	b.Run("Set", func(b *testing.B) {
 		b.ResetTimer()
@@ -348,7 +348,7 @@ func BenchmarkTypedCache(b *testing.B) {
 	if nil != err {
 		b.Fatalf("创建缓存失败: %v", err)
 	}
-	defer baseCache.Close()
+	defer baseCache.Close() //nolint:errcheck
 
 	type User struct {
 		ID   int

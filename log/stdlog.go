@@ -6,6 +6,7 @@ package log
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -44,7 +45,7 @@ type (
 //   - Logger：返回创建的日志实例。
 //   - error：返回创建过程中可能发生的错误。
 func NewStdLogger(output string) (Logger, error) {
-	var writer *os.File = os.Stdout
+	var writer io.Writer = os.Stdout
 
 	// 如果指定了输出目录，配置文件输出。
 	if output != "" {

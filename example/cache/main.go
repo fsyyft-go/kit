@@ -28,7 +28,7 @@ func main() {
 	if err := cache.InitCache(); err != nil {
 		log.WithField("error", err).Fatal("初始化缓存失败")
 	}
-	defer cache.Close()
+	defer cache.Close() //nolint:errcheck
 
 	log.Info("开始缓存示例演示...")
 
@@ -69,7 +69,7 @@ func main() {
 	if err != nil {
 		log.WithField("error", err).Fatal("创建自定义缓存失败")
 	}
-	defer customCache.Close()
+	defer customCache.Close() //nolint:errcheck
 
 	// 使用自定义缓存实例。
 	customCache.Set("custom_key", "这是自定义缓存中的值")
