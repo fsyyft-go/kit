@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsyyft-go/kit/log"
+	kitlog "github.com/fsyyft-go/kit/log"
 )
 
 type (
@@ -18,7 +18,7 @@ type (
 		// namespace 是日志记录的命名空间。
 		namespace string
 		// logger 是用于记录慢查询信息的日志记录器。
-		logger log.Logger
+		logger kitlog.Logger
 		// threshold 是慢查询的时间阈值。
 		threshold time.Duration
 	}
@@ -33,7 +33,7 @@ type (
 //
 // 返回值：
 //   - *HookLogSlow：返回一个新创建的 HookLogSlow 实例。
-func NewHookLogSlow(namespace string, logger log.Logger, threshold time.Duration) *HookLogSlow {
+func NewHookLogSlow(namespace string, logger kitlog.Logger, threshold time.Duration) *HookLogSlow {
 	return &HookLogSlow{
 		namespace: namespace,
 		logger:    logger,

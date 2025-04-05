@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fsyyft-go/kit/log"
+	kitlog "github.com/fsyyft-go/kit/log"
 )
 
 type (
@@ -17,7 +17,7 @@ type (
 		// namespace 是日志记录的命名空间。
 		namespace string
 		// logger 是用于记录错误信息的日志记录器。
-		logger log.Logger
+		logger kitlog.Logger
 	}
 )
 
@@ -29,7 +29,7 @@ type (
 //
 // 返回值：
 //   - *HookLogError：返回一个新创建的 HookLogError 实例。
-func NewHookLogError(namespace string, logger log.Logger) *HookLogError {
+func NewHookLogError(namespace string, logger kitlog.Logger) *HookLogError {
 	return &HookLogError{
 		namespace: namespace,
 		logger:    logger,
