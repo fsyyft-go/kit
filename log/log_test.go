@@ -26,7 +26,7 @@ func TestLoggers(t *testing.T) {
 	err := os.MkdirAll(tmpDir, 0755)
 	assert.NoError(t, err)
 	// 测试完成后清理临时目录。
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	// 定义测试用例，包含不同类型的日志器测试。
 	testCases := []struct {
@@ -124,7 +124,7 @@ func TestNewLogger(t *testing.T) {
 	tmpDir := filepath.Join(os.TempDir(), "apisix-metric-test-new")
 	err := os.MkdirAll(tmpDir, 0755)
 	assert.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	// 测试默认配置。
 	logger, err := NewLogger()
@@ -162,7 +162,7 @@ func TestLogLevels(t *testing.T) {
 	tmpDir := filepath.Join(os.TempDir(), "apisix-metric-test-levels")
 	err := os.MkdirAll(tmpDir, 0755)
 	assert.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	// 设置日志文件路径。
 	logPath := filepath.Join(tmpDir, "all-levels.log")
@@ -207,7 +207,7 @@ func TestWithFieldsAndFormat(t *testing.T) {
 	tmpDir := filepath.Join(os.TempDir(), "apisix-metric-test-fields")
 	err := os.MkdirAll(tmpDir, 0755)
 	assert.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	// 设置日志文件路径。
 	logPath := filepath.Join(tmpDir, "fields.log")
