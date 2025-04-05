@@ -1,6 +1,6 @@
-// Copyright 2024 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Copyright 2025 fsyyft-go
+//
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 package driver
 
@@ -139,6 +139,14 @@ func (h *HookContext) StartTime() time.Time {
 //   - time.Time：返回操作的结束时间。
 func (h *HookContext) EndTime() time.Time {
 	return h.endTime
+}
+
+// Duration 返回操作持续时间。
+//
+// 返回值：
+//   - time.Duration：返回操作的持续时间。
+func (h *HookContext) Duration() time.Duration {
+	return h.endTime.Sub(h.startTime)
 }
 
 // OpType 返回操作类型。
