@@ -37,18 +37,21 @@ func main() {
 
 	// 检查数据库连接初始化是否成功。
 	if err != nil {
-		logger.Fatal(err)
+		logger.Error(err)
+		return
 	}
 
 	// 测试数据库连接是否正常。
 	if err := db.Ping(); err != nil {
-		logger.Fatal(err)
+		logger.Error(err)
+		return
 	}
 
 	// 执行 SHOW PROCESSLIST 命令查询当前数据库进程列表。
 	rows, err := db.Query("SHOW PROCESSLIST")
 	if err != nil {
-		logger.Fatal(err)
+		logger.Error(err)
+		return
 	}
 
 	// 遍历查询结果集。
@@ -64,7 +67,8 @@ func main() {
 		var info string
 		// 扫描当前行数据到变量中。
 		if err := rows.Scan(&id, &user, &host, &db, &command, &time, &state, &info); err != nil {
-			logger.Fatal(err)
+			logger.Error(err)
+			return
 		}
 		// 打印进程信息。
 		fmt.Println(id, user, host, db, command, time, state)
