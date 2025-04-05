@@ -32,6 +32,18 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 
 高性能进程内缓存：基于 ristretto 的缓存实现，支持过期时间设置、泛型接口和自动内存管理。[详细说明 →](cache/README.md)
 
+### database
+
+#### database/sql
+
+##### [database/sql/driver](database/sql/driver/README.md)
+
+数据库驱动接口：提供标准的数据库驱动接口定义，支持自定义驱动实现和连接管理。[详细说明 →](database/sql/driver/README.md)
+
+##### [database/sql/mysql](database/sql/mysql/README.md)
+
+MySQL 数据库工具：提供 MySQL 数据库连接池管理、查询构建器和事务处理等功能，支持读写分离和连接池配置。[详细说明 →](database/sql/mysql/README.md)
+
 ### crypto
 
 #### [crypto/aes](crypto/aes/README.md)
