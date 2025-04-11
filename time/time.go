@@ -65,142 +65,142 @@ func init() {
 // Now 返回当前时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示当前时间的 Carbon 实例
+//   - *carbon.Carbon: 表示当前时间的 Carbon 实例
 //
 // 示例:
 //
 //	now := time.Now()
 //	fmt.Println(now.ToDateTimeString()) // 输出类似：2025-01-02 15:04:05
-func Now() carbon.Carbon {
+func Now() *carbon.Carbon {
 	return carbon.Now()
 }
 
 // Yesterday 返回昨天同一时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示昨天同一时间的 Carbon 实例
+//   - *carbon.Carbon: 表示昨天同一时间的 Carbon 实例
 //
 // 示例:
 //
 //	yesterday := time.Yesterday()
 //	fmt.Println(yesterday.ToDateTimeString()) // 输出昨天的日期和当前时间
-func Yesterday() carbon.Carbon {
+func Yesterday() *carbon.Carbon {
 	return carbon.Yesterday()
 }
 
 // Tomorrow 返回明天同一时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示明天同一时间的 Carbon 实例
+//   - *carbon.Carbon: 表示明天同一时间的 Carbon 实例
 //
 // 示例:
 //
 //	tomorrow := time.Tomorrow()
 //	fmt.Println(tomorrow.ToDateTimeString()) // 输出明天的日期和当前时间
-func Tomorrow() carbon.Carbon {
+func Tomorrow() *carbon.Carbon {
 	return carbon.Tomorrow()
 }
 
 // DayAfterTomorrow 返回后天同一时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示后天同一时间的 Carbon 实例
+//   - *carbon.Carbon: 表示后天同一时间的 Carbon 实例
 //
 // 示例:
 //
 //	dayAfterTomorrow := time.DayAfterTomorrow()
 //	fmt.Println(dayAfterTomorrow.ToDateTimeString()) // 输出后天的日期和当前时间
-func DayAfterTomorrow() carbon.Carbon {
+func DayAfterTomorrow() *carbon.Carbon {
 	return carbon.Now().AddDays(2)
 }
 
 // DayBeforeYesterday 返回前天同一时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示前天同一时间的 Carbon 实例
+//   - *carbon.Carbon: 表示前天同一时间的 Carbon 实例
 //
 // 示例:
 //
 //	dayBeforeYesterday := time.DayBeforeYesterday()
 //	fmt.Println(dayBeforeYesterday.ToDateTimeString()) // 输出前天的日期和当前时间
-func DayBeforeYesterday() carbon.Carbon {
+func DayBeforeYesterday() *carbon.Carbon {
 	return carbon.Now().SubDays(2)
 }
 
 // LastWeek 返回上周同一时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示上周同一时间的 Carbon 实例
+//   - *carbon.Carbon: 表示上周同一时间的 Carbon 实例
 //
 // 示例:
 //
 //	lastWeek := time.LastWeek()
 //	fmt.Println(lastWeek.ToDateTimeString()) // 输出上周的日期和当前时间
-func LastWeek() carbon.Carbon {
+func LastWeek() *carbon.Carbon {
 	return carbon.Now().SubWeek()
 }
 
 // LastMonth 返回上个月同一时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示上个月同一时间的 Carbon 实例
+//   - *carbon.Carbon: 表示上个月同一时间的 Carbon 实例
 //
 // 示例:
 //
 //	lastMonth := time.LastMonth()
 //	fmt.Println(lastMonth.ToDateTimeString()) // 输出上个月的日期和当前时间
-func LastMonth() carbon.Carbon {
+func LastMonth() *carbon.Carbon {
 	return carbon.Now().SubMonth()
 }
 
 // NextWeek 返回下周同一时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示下周同一时间的 Carbon 实例
+//   - *carbon.Carbon: 表示下周同一时间的 Carbon 实例
 //
 // 示例:
 //
 //	nextWeek := time.NextWeek()
 //	fmt.Println(nextWeek.ToDateTimeString()) // 输出下周的日期和当前时间
-func NextWeek() carbon.Carbon {
+func NextWeek() *carbon.Carbon {
 	return carbon.Now().AddWeek()
 }
 
 // NextMonth 返回下个月同一时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示下个月同一时间的 Carbon 实例
+//   - *carbon.Carbon: 表示下个月同一时间的 Carbon 实例
 //
 // 示例:
 //
 //	nextMonth := time.NextMonth()
 //	fmt.Println(nextMonth.ToDateTimeString()) // 输出下个月的日期和当前时间
-func NextMonth() carbon.Carbon {
+func NextMonth() *carbon.Carbon {
 	return carbon.Now().AddMonth()
 }
 
 // LastYear 返回去年同一时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示去年同一时间的 Carbon 实例
+//   - *carbon.Carbon: 表示去年同一时间的 Carbon 实例
 //
 // 示例:
 //
 //	lastYear := time.LastYear()
 //	fmt.Println(lastYear.ToDateTimeString()) // 输出去年的日期和当前时间
-func LastYear() carbon.Carbon {
+func LastYear() *carbon.Carbon {
 	return carbon.Now().SubYear()
 }
 
 // NextYear 返回明年同一时间的 Carbon 实例。
 //
 // 返回值:
-//   - carbon.Carbon: 表示明年同一时间的 Carbon 实例
+//   - *carbon.Carbon: 表示明年同一时间的 Carbon 实例
 //
 // 示例:
 //
 //	nextYear := time.NextYear()
 //	fmt.Println(nextYear.ToDateTimeString()) // 输出明年的日期和当前时间
-func NextYear() carbon.Carbon {
+func NextYear() *carbon.Carbon {
 	return carbon.Now().AddYear()
 }

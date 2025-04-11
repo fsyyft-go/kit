@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/dgraph-io/ristretto v0.2.0
-	github.com/dromara/carbon/v2 v2.5.4
+	github.com/dromara/carbon/v2 v2.6.2
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-kratos/kratos/v2 v2.8.4
 	github.com/go-sql-driver/mysql v1.9.2

@@ -21,8 +21,8 @@ github.com/dgraph-io/ristretto v0.2.0 h1:XAfl+7cmoUDWW/2Lx8TGZQjjxIQ2Ley9DSf52dr
 github.com/dgraph-io/ristretto v0.2.0/go.mod h1:8uBHCU/PBV4Ag0CJrP47b9Ofby5dqWNh4FicAdoqFNU=
 github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 h1:fAjc9m62+UWV/WAFKLNi6ZS0675eEUC9y3AlwSbQu1Y=
 github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13/go.mod h1:SqUrOPUnsFjfmXRMNPybcSiG0BgUW2AuFH8PAnS2iTw=
-github.com/dromara/carbon/v2 v2.5.4 h1:BkftNHVCkEwzv6ZuFiB/R1rLHaw6ufbCVkyLDCf3GeY=
-github.com/dromara/carbon/v2 v2.5.4/go.mod h1:zyPlND2o27sKKkRmdgLbk/qYxkmmH6Z4eE8OoM0w3DM=
+github.com/dromara/carbon/v2 v2.6.2 h1:ETogW/+yLDJfiSYyG74uuN3yN6NvLTC7E0Vi5WKyJuo=
+github.com/dromara/carbon/v2 v2.6.2/go.mod h1:Baj3A1uBBctJmpZWJd6/+WWnmIuY2pobR6IOpB6xigc=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/fsnotify/fsnotify v1.6.0 h1:n+5WquG0fcWoWp6xPWfHdbskMCQaFnG6PfBrh1Ky4HY=
