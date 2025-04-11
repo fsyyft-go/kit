@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,7 +26,7 @@ var (
 // MySQL 连接的默认配置值。
 var (
 	// 默认的数据源名称（DSN）。
-	defaultDSN = "test:test@tcp(localhost:3306)/test"
+	defaultDSN = "test:test@tcp(localhost:3306)/test?parseTime=true&loc=Local&allowNativePasswords=true&interpolateParams=true"
 	// 默认的连接空闲超时时间。
 	defaultPoolIdleTime = 10 * time.Second
 	// 默认的连接最大空闲时间。
@@ -70,6 +71,45 @@ type (
 func WithDSN(dsn string) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.dns = dsn
+	}
+}
+
+// WithDSNParams 使用基础 DSN 和额外参数设置 MySQL 数据源名称。
+//
+// 参数：
+//   - baseDSN: 基础数据源名称字符串，如果为空则使用默认 DSN。
+//   - params: DSN 参数映射，key 为参数名，value 为参数值。
+//
+// 示例：
+//
+//	WithDSNParams("user:pass@tcp(host:port)/dbname", map[string]string{
+//	    "parseTime": "true",
+//	    "loc": "Local",
+//	})
+func WithDSNParams(baseDSN string, params map[string]string) MySQLOption {
+	return func(o *MySQLOptions) {
+		if len(params) == 0 {
+			o.dns = baseDSN
+			return
+		}
+
+		if baseDSN == "" {
+			baseDSN = defaultDSN
+		}
+
+		paramStr := ""
+		if !strings.Contains(baseDSN, "?") {
+			paramStr = "?"
+		} else {
+			paramStr = "&"
+		}
+
+		for key, value := range params {
+			paramStr += fmt.Sprintf("%s=%s&", key, value)
+		}
+		paramStr = strings.TrimRight(paramStr, "&")
+
+		o.dns = baseDSN + paramStr
 	}
 }
 
