@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	goSqlDriver "github.com/go-sql-driver/mysql"
+	gosqldriver "github.com/go-sql-driver/mysql"
 
 	kitdriver "github.com/fsyyft-go/kit/database/sql/driver"
 	kitlog "github.com/fsyyft-go/kit/log"
@@ -184,7 +184,7 @@ func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 		}
 
 		// 创建并注册带有钩子的 MySQL 驱动。
-		originalDriver := goSqlDriver.MySQLDriver{}
+		originalDriver := gosqldriver.MySQLDriver{}
 		kitDriver := kitdriver.NewKitDriver(originalDriver, options.hook)
 		sql.Register(driverName, kitDriver)
 	}

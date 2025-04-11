@@ -19,8 +19,9 @@ package md5_test
 import (
 	"testing"
 
-	"github.com/fsyyft-go/kit/crypto/md5"
 	"github.com/stretchr/testify/assert"
+
+	kitmd5 "github.com/fsyyft-go/kit/crypto/md5"
 )
 
 // TestHashString 测试 HashString 函数的各种情况。
@@ -81,7 +82,7 @@ func TestHashString(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 调用被测试函数。
-			result, err := md5.HashString(tt.input)
+			result, err := kitmd5.HashString(tt.input)
 
 			// 断言测试结果。
 			if tt.expectError {
@@ -168,7 +169,7 @@ func TestHashStringWithoutError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 调用被测试函数。
-			result := md5.HashStringWithoutError(tt.input)
+			result := kitmd5.HashStringWithoutError(tt.input)
 
 			// 断言测试结果。
 			assert.Equal(t, tt.expected, result, "MD5哈希值不匹配，期望: %s, 实际: %s", tt.expected, result)
@@ -187,7 +188,7 @@ func TestMD5WithoutError_ErrorHandling(t *testing.T) {
 		// 这里我们记录这一行为作为函数设计的文档。
 
 		// 正常情况下应该返回有效的MD5哈希值
-		result := md5.HashStringWithoutError("test")
+		result := kitmd5.HashStringWithoutError("test")
 		assert.Equal(t, "098f6bcd4621d373cade4e832627b4f6", result, "测试字符串的MD5哈希值不匹配")
 
 		// 即使在可能出错的情况下（如内存不足、IO错误等），函数也不会返回错误
