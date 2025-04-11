@@ -12,7 +12,7 @@ import (
 	"github.com/go-kratos/kratos/v2/config"
 	"github.com/go-kratos/kratos/v2/config/file"
 
-	kit_kratos_config "github.com/fsyyft-go/kit/kratos/config"
+	kitkratosconfig "github.com/fsyyft-go/kit/kratos/config"
 )
 
 // Config 结构体定义了配置文件的结构。
@@ -54,7 +54,7 @@ func example() {
 			file.NewSource(configPath),
 		),
 		// 设置自定义解码器，支持特殊格式处理（如 base64 解码）。
-		config.WithDecoder(kit_kratos_config.NewDecoder().Decode),
+		config.WithDecoder(kitkratosconfig.NewDecoder().Decode),
 	)
 	// 加载配置，如果出错则触发 panic。
 	if err := c.Load(); err != nil {

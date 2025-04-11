@@ -51,7 +51,7 @@ import (
     "fmt"
     "github.com/go-kratos/kratos/v2/config"
     "github.com/go-kratos/kratos/v2/config/file"
-    kit_kratos_config "github.com/fsyyft-go/kit/kratos/config"
+    kitkratosconfig "github.com/fsyyft-go/kit/kratos/config"
 )
 
 type Config struct {
@@ -67,7 +67,7 @@ func main() {
         config.WithSource(
             file.NewSource("config.yaml"),
         ),
-        config.WithDecoder(kit_kratos_config.NewDecoder().Decode),
+        config.WithDecoder(kitkratosconfig.NewDecoder().Decode),
     )
     
     if err := c.Load(); err != nil {
@@ -119,7 +119,7 @@ app:
 
 ```go
 func init() {
-    kit_kratos_config.RegisterResolve(".custom", func(target map[string]interface{}, key, val string) error {
+    kitkratosconfig.RegisterResolve(".custom", func(target map[string]interface{}, key, val string) error {
         // 自定义处理逻辑
         return nil
     })
@@ -158,7 +158,7 @@ type Decoder struct {
 type ResolveItem func(target map[string]interface{}, key, val string) error
 
 type version struct {
-    buildingContext kit_go_build.BuildingContext
+    buildingContext kitgobuild.BuildingContext
 }
 ```
 
