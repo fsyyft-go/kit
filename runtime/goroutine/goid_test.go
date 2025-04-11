@@ -11,13 +11,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	kitTesting "github.com/fsyyft-go/kit/testing"
+	kittesting "github.com/fsyyft-go/kit/testing"
 )
 
 func TestGetGoID(t *testing.T) {
 	t.Run("测试获取 GoroutineID", func(t *testing.T) {
 		if isDarwinArm64() {
-			kitTesting.Println("M CPU 架构的 Mac 未能实现此方法。")
+			kittesting.Println("M CPU 架构的 Mac 未能实现此方法。")
 		} else {
 			assertion := assert.New(t)
 
@@ -35,7 +35,7 @@ func TestGetGoID(t *testing.T) {
 			// 在没有复用的情况下，里的一般会比外的大。
 			assertion.LessOrEqual(idOuter, idInternal)
 			// fmt.Println(idInternal, idOuter)
-			kitTesting.Println(idOuter, idInternal)
+			kittesting.Println(idOuter, idInternal)
 		}
 	})
 }

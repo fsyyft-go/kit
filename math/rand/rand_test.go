@@ -28,8 +28,9 @@ import (
 	"time"
 	"unicode"
 
-	fsrand "github.com/fsyyft-go/kit/math/rand"
 	"github.com/stretchr/testify/assert"
+
+	kitrand "github.com/fsyyft-go/kit/math/rand"
 )
 
 // 测试用例结构体，用于表格驱动测试。
@@ -88,7 +89,7 @@ func TestInt63n(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for i := 0; i < tt.times; i++ {
-				result := fsrand.Int63n(tt.random, tt.min, tt.max)
+				result := kitrand.Int63n(tt.random, tt.min, tt.max)
 				tt.validate(t, result)
 			}
 		})
@@ -148,7 +149,7 @@ func TestIntn(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for i := 0; i < tt.times; i++ {
-				result := fsrand.Intn(tt.random, tt.min, tt.max)
+				result := kitrand.Intn(tt.random, tt.min, tt.max)
 				tt.validate(t, result)
 			}
 		})
@@ -199,7 +200,7 @@ func TestChinese(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for i := 0; i < tt.times; i++ {
-				result := fsrand.Chinese(tt.random)
+				result := kitrand.Chinese(tt.random)
 				tt.validate(t, result)
 			}
 		})
@@ -247,7 +248,7 @@ func TestChineseLastName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for i := 0; i < tt.times; i++ {
-				result := fsrand.ChineseLastName(tt.random)
+				result := kitrand.ChineseLastName(tt.random)
 				tt.validate(t, result)
 			}
 		})

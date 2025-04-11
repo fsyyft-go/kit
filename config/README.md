@@ -142,12 +142,12 @@ func main() {
 // version 结构体封装了应用程序的版本信息。
 type version struct {
     // buildingContext 包含了构建时的上下文信息。
-    buildingContext kit_go_build.BuildingContext
+    buildingContext kitgobuild.BuildingContext
 }
 
 // CurrentVersion 表示当前应用程序的版本信息实例。
 var CurrentVersion = version{
-    buildingContext: kit_go_build.CurrentBuildingContext,
+    buildingContext: kitgobuild.CurrentBuildingContext,
 }
 ```
 

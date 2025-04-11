@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"strings"
 
-	kit_go_build "github.com/fsyyft-go/kit/go/build"
+	kitgobuild "github.com/fsyyft-go/kit/go/build"
 )
 
 const (
@@ -20,22 +20,22 @@ const (
 
 var (
 	// 确保 version 类型实现了这些接口。
-	_ fmt.Stringer                 = (*version)(nil)
-	_ fmt.Formatter                = (*version)(nil)
-	_ kit_go_build.BuildingContext = (*version)(nil)
+	_ fmt.Stringer               = (*version)(nil)
+	_ fmt.Formatter              = (*version)(nil)
+	_ kitgobuild.BuildingContext = (*version)(nil)
 )
 
 var (
 	// CurrentVersion 表示当前应用程序的版本信息实例。
 	CurrentVersion = version{
-		buildingContext: kit_go_build.CurrentBuildingContext,
+		buildingContext: kitgobuild.CurrentBuildingContext,
 	}
 )
 
 // version 结构体封装了应用程序的版本信息。
 type version struct {
 	// buildingContext 包含了构建时的上下文信息。
-	buildingContext kit_go_build.BuildingContext
+	buildingContext kitgobuild.BuildingContext
 }
 
 // Version 获取软件版本号。

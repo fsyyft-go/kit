@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/fsyyft-go/kit/runtime/goroutine"
+	kitgoroutine "github.com/fsyyft-go/kit/runtime/goroutine"
 )
 
 func main() {
@@ -16,15 +16,15 @@ func main() {
 	var wg sync.WaitGroup
 
 	// 打印主 goroutine 的 ID。
-	fmt.Printf("主 goroutine ID: %d\n", goroutine.GetGoID()) // nolint:staticcheck
+	fmt.Printf("主 goroutine ID: %d\n", kitgoroutine.GetGoID()) // nolint:staticcheck
 
 	// 启动 3 个新的 goroutine。
 	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
-			id := goroutine.GetGoID() // nolint:staticcheck
-			idSlow := goroutine.GetGoIDSlow()
+			id := kitgoroutine.GetGoID() // nolint:staticcheck
+			idSlow := kitgoroutine.GetGoIDSlow()
 			fmt.Printf("goroutine %d 的 ID: %d %d\n", index+1, id, idSlow)
 		}(i)
 	}

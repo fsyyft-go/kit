@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	kratos_config "github.com/go-kratos/kratos/v2/config"
+	kratosconfig "github.com/go-kratos/kratos/v2/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -88,15 +88,15 @@ func TestDecode(t *testing.T) {
 
 	// 定义测试用例。
 	tests := []struct {
-		name          string                  // 测试用例名称。
-		src           *kratos_config.KeyValue // 源配置。
-		resolveFunc   Resolve                 // 解析函数。
-		expectedMap   map[string]interface{}  // 期望的映射结果。
-		expectedError bool                    // 是否期望错误。
+		name          string                 // 测试用例名称。
+		src           *kratosconfig.KeyValue // 源配置。
+		resolveFunc   Resolve                // 解析函数。
+		expectedMap   map[string]interface{} // 期望的映射结果。
+		expectedError bool                   // 是否期望错误。
 	}{
 		{
 			name: "空格式，简单键",
-			src: &kratos_config.KeyValue{
+			src: &kratosconfig.KeyValue{
 				Key:    "key",
 				Value:  []byte("value"),
 				Format: "",
@@ -109,7 +109,7 @@ func TestDecode(t *testing.T) {
 		},
 		{
 			name: "空格式，嵌套键",
-			src: &kratos_config.KeyValue{
+			src: &kratosconfig.KeyValue{
 				Key:    "a.b.c",
 				Value:  []byte("value"),
 				Format: "",
@@ -126,7 +126,7 @@ func TestDecode(t *testing.T) {
 		},
 		{
 			name: "JSON格式，成功解码",
-			src: &kratos_config.KeyValue{
+			src: &kratosconfig.KeyValue{
 				Key:    "config",
 				Value:  []byte(`{"key":"value","nested":{"inner":"data"}}`),
 				Format: "json",
@@ -142,7 +142,7 @@ func TestDecode(t *testing.T) {
 		},
 		{
 			name: "JSON格式，解析函数成功",
-			src: &kratos_config.KeyValue{
+			src: &kratosconfig.KeyValue{
 				Key:    "config",
 				Value:  []byte(`{"key":"value"}`),
 				Format: "json",
@@ -159,7 +159,7 @@ func TestDecode(t *testing.T) {
 		},
 		{
 			name: "JSON格式，解析函数失败",
-			src: &kratos_config.KeyValue{
+			src: &kratosconfig.KeyValue{
 				Key:    "config",
 				Value:  []byte(`{"key":"value"}`),
 				Format: "json",
@@ -172,7 +172,7 @@ func TestDecode(t *testing.T) {
 		},
 		{
 			name: "无效的JSON",
-			src: &kratos_config.KeyValue{
+			src: &kratosconfig.KeyValue{
 				Key:    "config",
 				Value:  []byte(`{"key":"value`), // 缺少结束括号。
 				Format: "json",
@@ -183,7 +183,7 @@ func TestDecode(t *testing.T) {
 		},
 		{
 			name: "不支持的格式",
-			src: &kratos_config.KeyValue{
+			src: &kratosconfig.KeyValue{
 				Key:    "config",
 				Value:  []byte(`{"key":"value"}`),
 				Format: "unsupported",
@@ -234,14 +234,14 @@ func TestDecode(t *testing.T) {
 func TestDecodeEmptyFormat(t *testing.T) {
 	// 定义测试用例。
 	tests := []struct {
-		name          string                  // 测试用例名称。
-		src           *kratos_config.KeyValue // 源配置。
-		expectedKey   string                  // 期望的键。
-		expectedValue []byte                  // 期望的值。
+		name          string                 // 测试用例名称。
+		src           *kratosconfig.KeyValue // 源配置。
+		expectedKey   string                 // 期望的键。
+		expectedValue []byte                 // 期望的值。
 	}{
 		{
 			name: "简单键",
-			src: &kratos_config.KeyValue{
+			src: &kratosconfig.KeyValue{
 				Key:    "key",
 				Value:  []byte("value"),
 				Format: "",
@@ -251,7 +251,7 @@ func TestDecodeEmptyFormat(t *testing.T) {
 		},
 		{
 			name: "嵌套键",
-			src: &kratos_config.KeyValue{
+			src: &kratosconfig.KeyValue{
 				Key:    "a.b.c",
 				Value:  []byte("value"),
 				Format: "",
@@ -319,7 +319,7 @@ func TestDecodeUnsupportedFormat(t *testing.T) {
 	decoder := NewDecoder()
 
 	// 准备源配置和目标映射。
-	src := &kratos_config.KeyValue{
+	src := &kratosconfig.KeyValue{
 		Key:    "config",
 		Value:  []byte(`{"key":"value"}`),
 		Format: "unsupported",
