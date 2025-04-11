@@ -10,9 +10,6 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
-
 	kitmysql "github.com/fsyyft-go/kit/database/sql/mysql"
 	kitlog "github.com/fsyyft-go/kit/log"
 )
@@ -396,18 +393,9 @@ func main() {
 	}
 	logger.Info(fmt.Sprintf("删除数据成功，影响行数：%d", affected))
 
-	gormExample()
-
 	// 关闭数据库连接。
 	if err := db.Close(); err != nil {
 		logger.Error(fmt.Errorf("关闭数据库连接失败：%w", err))
 		return
-	}
-}
-
-func gormExample() {
-	_, err := gorm.Open(mysql.Open("test:test@tcp(localhost:3306)/test"), &gorm.Config{})
-	if err != nil {
-		panic(err)
 	}
 }
