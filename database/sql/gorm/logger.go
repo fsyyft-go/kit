@@ -88,7 +88,7 @@ func (l *gormLogger) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
 //   - data：可选的格式化参数。
 func (l *gormLogger) Info(ctx context.Context, msg string, data ...interface{}) {
 	if l.level >= gormlogger.Info {
-		l.logger.Info(fmt.Sprintf(msg, data...))
+		go l.logger.Info(fmt.Sprintf(msg, data...))
 	}
 }
 
@@ -100,7 +100,7 @@ func (l *gormLogger) Info(ctx context.Context, msg string, data ...interface{}) 
 //   - data：可选的格式化参数。
 func (l *gormLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	if l.level >= gormlogger.Warn {
-		l.logger.Warn(fmt.Sprintf(msg, data...))
+		go l.logger.Warn(fmt.Sprintf(msg, data...))
 	}
 }
 
@@ -112,7 +112,7 @@ func (l *gormLogger) Warn(ctx context.Context, msg string, data ...interface{}) 
 //   - data：可选的格式化参数。
 func (l *gormLogger) Error(ctx context.Context, msg string, data ...interface{}) {
 	if l.level >= gormlogger.Error {
-		l.logger.Error(fmt.Sprintf(msg, data...))
+		go l.logger.Error(fmt.Sprintf(msg, data...))
 	}
 }
 
@@ -136,10 +136,10 @@ func (l *gormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 
 	switch {
 	case err != nil && l.level >= gormlogger.Error:
-		l.logger.Error(logMsg, "err", err)
+		go l.logger.Error(logMsg, "err", err)
 	case elapsed > time.Second && l.level >= gormlogger.Warn:
-		l.logger.Warn(logMsg, "elapsed", elapsed)
+		go l.logger.Warn(logMsg, "elapsed", elapsed)
 	case l.level >= gormlogger.Info:
-		l.logger.Info(logMsg)
+		go l.logger.Info(logMsg)
 	}
 }
