@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	kit_testing "github.com/fsyyft-go/kit/testing"
+	kittesting "github.com/fsyyft-go/kit/testing"
 )
 
 /*
@@ -607,9 +607,9 @@ func TestHotp(t *testing.T) {
 	assertions.Nil(err)
 	veryfyPassword = newOneTimePassword.VeryfyPassword(password)
 	assertions.True(veryfyPassword)
-	kit_testing.Println(password)
+	kittesting.Println(password)
 	url = newOneTimePassword.GenerateURL()
-	kit_testing.Println(url)
+	kittesting.Println(url)
 
 	// otpauth://totp/%E5%AF%86%E9%92%A5%E6%98%AF%EF%BC%9Atesting?secret=ORSXG5DJNZTQ&issuer=Golang%20%E5%8D%95%E5%85%83%E6%B5%8B%E8%AF%95&algorithm=SHA512&digits=8&period=10
 	newOneTimePassword, err = NewOneTimePassword(secret,
@@ -623,7 +623,7 @@ func TestHotp(t *testing.T) {
 	assertions.Nil(err)
 	veryfyPassword = newOneTimePassword.VeryfyPassword(password)
 	assertions.True(veryfyPassword)
-	kit_testing.Println(password)
+	kittesting.Println(password)
 	url = newOneTimePassword.GenerateURL()
-	kit_testing.Println(url)
+	kittesting.Println(url)
 }

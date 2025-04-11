@@ -8,7 +8,7 @@ import (
 	"encoding/base64"
 	"strings"
 
-	kit_crypto_des "github.com/fsyyft-go/kit/crypto/des"
+	kitcryptodes "github.com/fsyyft-go/kit/crypto/des"
 )
 
 const (
@@ -22,7 +22,7 @@ var (
 	// defaultResolve 是默认的解析器实例，用于全局配置解析。
 	defaultResolve *resolve
 	// defaultDESKey 是默认的 DES 密钥。
-	defaultDESKey = kit_crypto_des.GetDefaultDESKey()
+	defaultDESKey = kitcryptodes.GetDefaultDESKey()
 )
 
 type (
@@ -153,7 +153,7 @@ func registerResolveDES(target map[string]interface{}, key, val string) error {
 	// 检查键名是否以 .des 后缀结尾。
 	if strings.HasSuffix(key, suffixDES) {
 		// 尝试解密 DES 值。
-		if v, err := kit_crypto_des.DecryptStringCBCPkCS7PaddingStringHex(defaultDESKey, val); nil != err {
+		if v, err := kitcryptodes.DecryptStringCBCPkCS7PaddingStringHex(defaultDESKey, val); nil != err {
 			target[strings.TrimSuffix(key, suffixDES)] = err.Error()
 			return err
 		} else {

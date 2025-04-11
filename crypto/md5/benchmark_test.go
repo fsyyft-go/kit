@@ -8,7 +8,7 @@ package md5_test
 import (
 	"testing"
 
-	"github.com/fsyyft-go/kit/crypto/md5"
+	kitmd5 "github.com/fsyyft-go/kit/crypto/md5"
 )
 
 // 基准测试数据集，用于测试不同大小和类型的输入数据。
@@ -45,7 +45,7 @@ func BenchmarkHashStringVariousData(b *testing.B) {
 
 			// 执行 b.N 次测试，b.N 由测试框架自动确定。
 			for i := 0; i < b.N; i++ {
-				_, _ = md5.HashString(input)
+				_, _ = kitmd5.HashString(input)
 			}
 		})
 	}
@@ -67,7 +67,7 @@ func BenchmarkHashStringWithoutErrorVariousData(b *testing.B) {
 
 			// 执行 b.N 次测试，b.N 由测试框架自动确定。
 			for i := 0; i < b.N; i++ {
-				_ = md5.HashStringWithoutError(input)
+				_ = kitmd5.HashStringWithoutError(input)
 			}
 		})
 	}
@@ -84,7 +84,7 @@ func BenchmarkHashStringParallel(b *testing.B) {
 	// 使用 RunParallel 进行并行基准测试。
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _ = md5.HashString(input)
+			_, _ = kitmd5.HashString(input)
 		}
 	})
 }
@@ -100,7 +100,7 @@ func BenchmarkHashStringWithoutErrorParallel(b *testing.B) {
 	// 使用 RunParallel 进行并行基准测试。
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_ = md5.HashStringWithoutError(input)
+			_ = kitmd5.HashStringWithoutError(input)
 		}
 	})
 }

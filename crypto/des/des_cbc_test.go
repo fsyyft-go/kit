@@ -27,7 +27,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/fsyyft-go/kit/crypto/des"
+	kitdes "github.com/fsyyft-go/kit/crypto/des"
 )
 
 // TestEncryptStringCBCPkCS7PaddingStringHex 测试使用 UTF-8 编码的字符串密钥进行 DES CBC 加密。
@@ -104,7 +104,7 @@ func TestEncryptStringCBCPkCS7PaddingStringHex(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 加密
-			encrypted, err := des.EncryptStringCBCPkCS7PaddingStringHex(tt.key, tt.data)
+			encrypted, err := kitdes.EncryptStringCBCPkCS7PaddingStringHex(tt.key, tt.data)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -118,7 +118,7 @@ func TestEncryptStringCBCPkCS7PaddingStringHex(t *testing.T) {
 				assert.Equal(t, tt.want, encrypted, "加密结果与预期不符")
 
 				// 解密验证
-				decrypted, err := des.DecryptStringCBCPkCS7PaddingStringHex(tt.key, encrypted)
+				decrypted, err := kitdes.DecryptStringCBCPkCS7PaddingStringHex(tt.key, encrypted)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.data, decrypted, "解密结果与原始数据不符")
 			}
@@ -168,7 +168,7 @@ func TestDecryptStringCBCPkCS7PaddingStringHex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := des.DecryptStringCBCPkCS7PaddingStringHex(tt.key, tt.data)
+			_, err := kitdes.DecryptStringCBCPkCS7PaddingStringHex(tt.key, tt.data)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -228,7 +228,7 @@ func TestEncryptDecryptCBCPkCS7Padding(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 先加密
-			encrypted, err := des.EncryptCBCPkCS7Padding(tt.key, tt.data)
+			encrypted, err := kitdes.EncryptCBCPkCS7Padding(tt.key, tt.data)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -236,7 +236,7 @@ func TestEncryptDecryptCBCPkCS7Padding(t *testing.T) {
 			assert.NoError(t, err)
 
 			// 再解密
-			decrypted, err := des.DecryptCBCPkCS7Padding(tt.key, encrypted)
+			decrypted, err := kitdes.DecryptCBCPkCS7Padding(tt.key, encrypted)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.data, decrypted)
 		})
@@ -302,7 +302,7 @@ func TestEncryptDecryptCBCPkCS7PaddingAloneIV(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 先加密
-			encrypted, err := des.EncryptCBCPkCS7PaddingAloneIV(tt.key, tt.iv, tt.data)
+			encrypted, err := kitdes.EncryptCBCPkCS7PaddingAloneIV(tt.key, tt.iv, tt.data)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -310,7 +310,7 @@ func TestEncryptDecryptCBCPkCS7PaddingAloneIV(t *testing.T) {
 			assert.NoError(t, err)
 
 			// 再解密
-			decrypted, err := des.DecryptCBCPkCS7PaddingAloneIV(tt.key, tt.iv, encrypted)
+			decrypted, err := kitdes.DecryptCBCPkCS7PaddingAloneIV(tt.key, tt.iv, encrypted)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.data, decrypted)
 		})

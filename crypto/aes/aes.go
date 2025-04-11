@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"strings"
 
-	kit_bytes "github.com/fsyyft-go/kit/bytes"
+	kitbytes "github.com/fsyyft-go/kit/bytes"
 )
 
 // EncryptStringGCMBase64 已知混淆值字节数组长度和 Base64 格式的密钥和 UTF-8 编码的字符串明文，使用 GCM 模式加密，获得 Base64 格式的字符串密文。
@@ -161,7 +161,7 @@ func EncryptGCMNonceLength(key []byte, nonceLength int, data []byte) ([]byte, er
 	var err error
 
 	// 生成指定长度的随机 nonce（混淆值）。
-	if nonce, errNonce := kit_bytes.GenerateNonce(nonceLength); nil != errNonce {
+	if nonce, errNonce := kitbytes.GenerateNonce(nonceLength); nil != errNonce {
 		// 如果 nonce 生成失败，保存错误。
 		err = errNonce
 	} else {

@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	kitTesting "github.com/fsyyft-go/kit/testing"
+	kittesting "github.com/fsyyft-go/kit/testing"
 )
 
 // TestGetGoIDSlow 使用 assert 包来验证 getGoIDSlow 函数的行为。
@@ -41,6 +41,6 @@ func TestGetGoIDSlow(t *testing.T) {
 		// 在没有复用的情况下，里的一般会比外的大。
 		a.LessOrEqual(idOuter, idInternal)
 		// fmt.Println(idInternal, idOuter)
-		kitTesting.Println(idOuter, idInternal)
+		kittesting.Println(idOuter, idInternal)
 	})
 }
