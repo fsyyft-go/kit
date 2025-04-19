@@ -9,13 +9,33 @@ package bloom
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/spaolacci/murmur3"
+	"github.com/spf13/cast"
+
+	kitlog "github.com/fsyyft-go/kit/log"
+)
+
+var (
+	// bloomNames 保存所有布隆过滤器名称，创建时避免名称重复。
+	bloomNames = make(map[string]string)
+)
+
+var (
+	ErrBloomNameEmpty                = errors.New("bloom: bloom name can‘t be empty")
+	ErrBloomNameRepeated             = errors.New("bloom: bloom name can't repeated")
+	ErrBloomFalseProbabilityThanOne  = errors.New("bloom: bloom false probability can't than 1")
+	ErrBloomFalseProbabilityNegative = errors.New("bloom: bloom false probability can't be negative")
 )
 
 type (
+	// Option 定义了布隆过滤器的配置选项类型。
+	Option func(b *bloom)
+
 	// Bloom 定义了布隆过滤器的核心接口。
 	// 该接口提供了基本的元素判断和添加功能，以及分组操作的支持。
 	// 布隆过滤器的主要特点是空间效率高，但可能存在误判（假阳性）。
@@ -105,6 +125,8 @@ type (
 		name  string // name 是布隆过滤器的名称，用于区分不同的过滤器实例
 		store Store  // store 是底层存储接口的实现
 
+		logger *kitlog.Logger
+
 		n uint64  // n 是预计要存储的元素数量
 		m uint64  // m 是位数组的大小（二进制位的总数）
 		p float64 // p 是期望的误判率
@@ -112,25 +134,117 @@ type (
 	}
 )
 
+// WithName 设置布隆过滤器的名称。
+//
+// 参数：
+//   - name：布隆过滤器的名称。
+//
+// 返回值：
+//   - Option：配置选项函数。
+func WithName(name string) Option {
+	return func(b *bloom) {
+		b.name = name
+	}
+}
+
+// WithStore 设置布隆过滤器的存储接口。
+//
+// 参数：
+//   - store：存储接口实现。
+//
+// 返回值：
+//   - Option：配置选项函数。
+func WithStore(store Store) Option {
+	return func(b *bloom) {
+		b.store = store
+	}
+}
+
+// WithLogger 设置布隆过滤器的日志记录器。
+//
+// 参数：
+//   - logger：日志记录器实例。
+//
+// 返回值：
+//   - Option：配置选项函数。
+func WithLogger(logger *kitlog.Logger) Option {
+	return func(b *bloom) {
+		b.logger = logger
+	}
+}
+
+// WithExpectedElements 设置布隆过滤器预计要存储的元素数量。
+//
+// 参数：
+//   - n：预计元素数量。
+//
+// 返回值：
+//   - Option：配置选项函数。
+func WithExpectedElements(n uint64) Option {
+	return func(b *bloom) {
+		b.n = n
+	}
+}
+
+// WithFalsePositiveRate 设置布隆过滤器的期望误判率。
+//
+// 参数：
+//   - p：期望误判率。
+//
+// 返回值：
+//   - Option：配置选项函数。
+func WithFalsePositiveRate(p float64) Option {
+	return func(b *bloom) {
+		b.p = p
+	}
+}
+
 // NewBloom 创建一个新的布隆过滤器实例。
 //
 // 参数：
-//   - name：布隆过滤器的名称，用于区分不同的过滤器实例
-//   - store：底层存储接口的实现，用于实际的数据存储和查询
-//   - n：预计要存储的元素数量，用于计算布隆过滤器的参数
-//   - m：位数组的大小，决定了布隆过滤器的空间占用
-//   - p：期望的误判率，值越小误判率越低，但需要更多的存储空间
+//   - opts：配置选项列表。
 //
 // 返回值：
-//   - Bloom：实现了 Bloom 接口的布隆过滤器实例
-func NewBloom(name string, store Store, n uint64, m uint64, p float64) Bloom {
-	return &bloom{
-		name:  name,
-		store: store,
-		n:     n,
-		m:     m,
-		p:     p,
+//   - Bloom：实现了 Bloom 接口的布隆过滤器实例。
+func NewBloom(opts ...Option) (Bloom, func(), error) {
+	b := &bloom{
+		name:  "default",
+		store: NewMemoryStore(0),
+		n:     0,
+		m:     0,
+		p:     0.01, // 默认误判率为 1%。
+		k:     0,
 	}
+
+	// 应用用户提供的配置选项。
+	for _, opt := range opts {
+		opt(b)
+	}
+	if strings.TrimSpace(b.name) == "" {
+		return nil, nil, ErrBloomNameEmpty
+	}
+
+	_, ok := bloomNames[b.name]
+	if ok {
+		return nil, nil, ErrBloomNameRepeated
+	}
+	if b.p > 1 {
+		return nil, nil, ErrBloomFalseProbabilityThanOne
+	}
+	if b.p < 0 {
+		return nil, nil, ErrBloomFalseProbabilityNegative
+	}
+
+	// 根据元素总量，误判率计算最优二进制位总量和哈希次数。
+	mm := -cast.ToFloat64(b.n) * math.Log(b.p) / (math.Log(2) * math.Log(2)) //nolint:mnd
+	m := cast.ToUint64(mm)
+	kk := math.Max(1, math.Round(mm/cast.ToFloat64(b.n)*math.Log(2))) //nolint:mnd
+	k := cast.ToUint(kk)
+
+	b.k = k
+	b.m = m
+
+	return b, nil, nil
 }
 
 // Contain 实现了 Bloom 接口的 Contain 方法，用于判断指定元素是否可能存在于布隆过滤器中。
