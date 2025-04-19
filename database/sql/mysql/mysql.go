@@ -169,6 +169,13 @@ func WithSlowThreshold(slowThreshold time.Duration) MySQLOption {
 	}
 }
 
+// WithHookManager 设置钩子管理器。
+func WithHookManager(hook *kitdriver.HookManager) MySQLOption {
+	return func(o *MySQLOptions) {
+		o.hook = hook
+	}
+}
+
 // NewMySQL 创建并返回一个新的 MySQL 数据库连接实例。
 //
 // 参数：
@@ -190,7 +197,6 @@ func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 		poolMaxIdleTime:  defaultPoolMaxIdleTime,
 		poolMaxOpenConns: defaultPoolMaxOpenConns,
 		poolMaxIdleConns: defaultPoolMaxIdleConns,
-		hook:             kitdriver.NewHookManager(),
 	}
 	// 应用用户提供的配置选项。
 	for _, opt := range opts {
@@ -204,23 +210,14 @@ func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 	// 检查驱动是否已注册。
 	registered := sql.Drivers()
 	if !slices.Contains(registered, driverName) {
-		// 如果启用了错误日志记录，初始化日志记录器。
-		if options.logError {
-			if nil == options.logger {
-				options.logger, err = kitlog.NewLogger()
-				if nil != err {
-					return nil, nil, err
-				}
+		// 配置钩子。
+		if nil == options.hook {
+			// 如果钩子管理器为空，则创建一个新的钩子管理器。
+			options.hook = kitdriver.NewHookManager()
+			// 配置钩子。
+			if err = configureHooks(options.hook, options); nil != err {
+				return nil, nil, err
 			}
-			// 添加错误日志记录钩子。
-			h := kitdriver.NewHookLogError(options.namespace, options.logger)
-			options.hook.AddHook(h)
-		}
-
-		// 如果设置了慢查询阈值，添加慢查询日志记录钩子。
-		if options.slowThreshold > 0 {
-			h := kitdriver.NewHookLogSlow(options.namespace, options.logger, options.slowThreshold)
-			options.hook.AddHook(h)
 		}
 
 		// 创建并注册带有钩子的 MySQL 驱动。
@@ -252,4 +249,35 @@ func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 	}
 
 	return db, cleanup, err
+}
+
+// configureHooks 根据 MySQL 选项配置钩子管理器。
+//
+// 参数：
+//   - hook: 需要配置的钩子管理器。
+//   - opts: MySQL 配置选项。
+//
+// 返回值：
+//   - error: 如果配置过程中发生错误，返回相应的错误信息。
+func configureHooks(hook *kitdriver.HookManager, opts *MySQLOptions) error {
+	var err error
+	// 配置错误日志钩子。
+	if opts.logError {
+		if nil == opts.logger {
+			opts.logger, err = kitlog.NewLogger()
+			if nil != err {
+				return err
+			}
+		}
+		h := kitdriver.NewHookLogError(opts.namespace, opts.logger)
+		hook.AddHook(h)
+	}
+
+	// 配置慢查询日志钩子。
+	if opts.slowThreshold > 0 {
+		h := kitdriver.NewHookLogSlow(opts.namespace, opts.logger, opts.slowThreshold)
+		hook.AddHook(h)
+	}
+
+	return nil
 }

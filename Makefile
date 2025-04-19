@@ -28,6 +28,7 @@ test:
 	@echo "构建示例程序..."
 	@chmod +x example/cache/build.sh \
 		example/config/version/build.sh \
+		example/database/sql/gorm/build.sh \
 		example/database/sql/mysql/build.sh \
 		example/kratos/config/build.sh \
 		example/log/build.sh \
@@ -46,6 +47,11 @@ test:
 	@echo "===================================================="
 	@echo "构建并运行 kratos config 示例..."
 	@example/kratos/config/build.sh
+	@echo "====================================================\n"
+	
+	@echo "===================================================="
+	@echo "构建并运行 GORM 示例..."
+	@example/database/sql/gorm/build.sh
 	@echo "====================================================\n"
 	
 	@echo "===================================================="
