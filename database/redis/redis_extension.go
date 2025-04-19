@@ -7,12 +7,56 @@ package redis
 
 import (
 	"context"
+	"time"
 )
 
 type (
 	// RedisExtension 定义了 Redis 扩展接口，继承自基础 Redis 接口，提供额外的功能扩展。
 	RedisExtension interface {
 		Redis
+
+		// Get 获取指定键的值。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制命令的执行
+		//   - key：要获取的键名
+		//
+		// 返回值：
+		//   - *Cmd：命令执行结果
+		Get(ctx context.Context, key string) *Cmd
+
+		// Set 设置指定键的值。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制命令的执行
+		//   - key：要设置的键名
+		//   - value：要设置的值
+		//   - expiration：键的过期时间
+		//
+		// 返回值：
+		//   - *Cmd：命令执行结果
+		Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *Cmd
+
+		// Del 删除指定的键。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制命令的执行
+		//   - key：要删除的键名
+		//
+		// 返回值：
+		//   - *Cmd：命令执行结果
+		Del(ctx context.Context, key string) *Cmd
+
+		// Expire 设置指定键的过期时间。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制命令的执行
+		//   - key：要设置过期时间的键名
+		//   - expiration：过期时间
+		//
+		// 返回值：
+		//   - *Cmd：命令执行结果
+		Expire(ctx context.Context, key string, expiration time.Duration) *Cmd
 	}
 
 	// redisExtension 是 RedisExtension 接口的具体实现。
@@ -173,4 +217,55 @@ func (r *redisExtension) ScriptExists(ctx context.Context, hashes ...string) *Bo
 //   - *StringCmd：脚本的 SHA1 值
 func (r *redisExtension) ScriptLoad(ctx context.Context, script string) *StringCmd {
 	return r.redis.ScriptLoad(ctx, script)
+}
+
+// Get 获取指定键的值。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制命令的执行
+//   - key：要获取的键名
+//
+// 返回值：
+//   - *Cmd：命令执行结果
+func (r *redisExtension) Get(ctx context.Context, key string) *Cmd {
+	return r.redis.Do(ctx, "GET", key)
+}
+
+// Set 设置指定键的值。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制命令的执行
+//   - key：要设置的键名
+//   - value：要设置的值
+//   - expiration：键的过期时间
+//
+// 返回值：
+//   - *Cmd：命令执行结果
+func (r *redisExtension) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *Cmd {
+	return r.redis.Do(ctx, "SET", key, value, "EX", expiration.Seconds())
+}
+
+// Del 删除指定的键。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制命令的执行
+//   - key：要删除的键名
+//
+// 返回值：
+//   - *Cmd：命令执行结果
+func (r *redisExtension) Del(ctx context.Context, key string) *Cmd {
+	return r.redis.Do(ctx, "DEL", key)
+}
+
+// Expire 设置指定键的过期时间。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制命令的执行
+//   - key：要设置过期时间的键名
+//   - expiration：过期时间
+//
+// 返回值：
+//   - *Cmd：命令执行结果
+func (r *redisExtension) Expire(ctx context.Context, key string, expiration time.Duration) *Cmd {
+	return r.redis.Do(ctx, "EXPIRE", key, expiration.Seconds())
 }

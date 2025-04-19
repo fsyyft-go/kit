@@ -12,9 +12,10 @@ import (
 
 func TestRedis(t *testing.T) {
 	redis := NewRedis()
+	redisExtension := NewRedisExtension(redis)
 
-	redis.Do(context.Background(), "SET", "key", "value")
-	val, err := redis.Do(context.Background(), "GET", "key").Result()
+	redisExtension.Set(context.Background(), "key", "value", time.Second*10)
+	val, err := redisExtension.Get(context.Background(), "key").Result()
 	if err != nil {
 		t.Fatal(err)
 	}
