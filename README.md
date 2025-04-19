@@ -96,7 +96,7 @@ HTTP 适配器：提供 Kratos HTTP 服务器到 Gin 引擎的转换功能，支
 
 #### [runtime/goroutine](runtime/goroutine/README.md)
 
-⚠️ 低级工具：用于获取 goroutine ID，仅用于特殊调试场景。[详细说明 →](runtime/goroutine/README.md)
+goroutine 管理工具：提供 goroutine ID 获取和高效的协程池实现。支持任务调度、资源管理和性能监控等功能，适用于并发任务处理和性能优化场景。[详细说明 →](runtime/goroutine/README.md)
 
 ### [testing](testing/README.md)
 
