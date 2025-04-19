@@ -10,6 +10,7 @@ import (
 	"time"
 
 	kitlog "github.com/fsyyft-go/kit/log"
+	kitgoroutine "github.com/fsyyft-go/kit/runtime/goroutine"
 )
 
 type (
@@ -88,7 +89,9 @@ func (h *HookLogSlow) After(ctx *HookContext) error {
 	}
 
 	// 记录慢查询日志。
-	go h.logger.WithFields(m).Warn("")
+	_ = kitgoroutine.Submit(func() {
+		h.logger.WithFields(m).Warn("")
+	})
 
 	return nil
 }
