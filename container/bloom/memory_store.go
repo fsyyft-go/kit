@@ -74,8 +74,12 @@ type memoryStore struct {
 }
 
 // NewMemoryStore 创建一个新的内存存储实例。
+//
 // 参数：
-// - size：内存块大小，以 byte 为单位。如果为 0，则使用默认大小。
+//   - size：内存块大小，以 byte 为单位。如果为 0，则使用默认大小。
+//
+// 返回值：
+//   - *memoryStore：新的内存存储实例
 func NewMemoryStore(size int) *memoryStore {
 	// 设计考虑：
 	// 1. 内存分配：
@@ -95,6 +99,9 @@ func NewMemoryStore(size int) *memoryStore {
 }
 
 // setBit 设置指定位置的位为 1。
+//
+// 参数：
+//   - pos：要设置的位的位置
 func (s *memoryStore) setBit(pos uint64) {
 	// 计算 byte 位置和 bit 位置。
 	// 设计原理：
@@ -114,6 +121,12 @@ func (s *memoryStore) setBit(pos uint64) {
 }
 
 // getBit 获取指定位置的位的值。
+//
+// 参数：
+//   - pos：要获取的位的位置
+//
+// 返回值：
+//   - bool：位的值，true 表示 1，false 表示 0
 func (s *memoryStore) getBit(pos uint64) bool {
 	// 计算 byte 位置和 bit 位置。
 	// 设计原理：
@@ -131,11 +144,18 @@ func (s *memoryStore) getBit(pos uint64) bool {
 	return (s.data[bytePos] & (1 << bitPos)) != 0
 }
 
-// Exist 判断指定 key 对应的所有 hash 值是否都已存在。
-// 返回值说明：
-// - false：至少有一个 hash 值不存在。
-// - true：所有 hash 值都存在。
-// - error：查询过程中发生的错误。
+// Exist 实现了 Store 接口的 Exist 方法，判断指定 key 对应的所有 hash 值是否都已存在。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制请求的生命周期
+//   - key：存储键名
+//   - hash：要判断的哈希值列表
+//
+// 返回值：
+//   - bool：所有哈希值是否都已存在
+//   - false：至少有一个哈希值不存在
+//   - true：所有哈希值都存在
+//   - error：查询过程中发生的错误
 func (s *memoryStore) Exist(_ context.Context, key string, hash []uint64) (bool, error) {
 	// 设计原理：
 	// 1. 查询流程：
@@ -165,9 +185,15 @@ func (s *memoryStore) Exist(_ context.Context, key string, hash []uint64) (bool,
 	return true, nil
 }
 
-// Add 将一组 hash 值添加到存储中。
-// 返回值说明：
-// - error：添加过程中发生的错误。
+// Add 实现了 Store 接口的 Add 方法，将一组 hash 值添加到存储中。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制请求的生命周期
+//   - key：存储键名
+//   - hash：要添加的哈希值列表
+//
+// 返回值：
+//   - error：添加过程中发生的错误
 func (s *memoryStore) Add(_ context.Context, key string, hash []uint64) error {
 	// 设计原理：
 	// 1. 添加流程：

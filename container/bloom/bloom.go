@@ -4,54 +4,221 @@
 
 // Package bloom 提供了布隆过滤器的接口定义和实现。
 // 布隆过滤器是一种空间效率很高的概率型数据结构，用于判断一个元素是否在集合中。
+// 它通过多个哈希函数将元素映射到位数组中的多个位置，从而实现高效的成员查询。
 package bloom
 
 import (
 	"context"
+	"fmt"
+	"math"
+
+	"github.com/spaolacci/murmur3"
 )
 
 type (
 	// Bloom 定义了布隆过滤器的核心接口。
 	// 该接口提供了基本的元素判断和添加功能，以及分组操作的支持。
+	// 布隆过滤器的主要特点是空间效率高，但可能存在误判（假阳性）。
 	Bloom interface {
-		// Contain 用于判断指定元素是否可能存在于布隆过滤器中。
-		// 返回值说明：
-		// - false：元素肯定不存在。
-		// - true：元素可能存在（存在误判可能）。
-		// - error：操作过程中发生的错误。
+		// Contain 判断指定元素是否可能存在于布隆过滤器中。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制请求的生命周期
+		//   - value：要判断是否存在的元素值
+		//
+		// 返回值：
+		//   - bool：元素是否可能存在于布隆过滤器中
+		//     - false：元素肯定不存在
+		//     - true：元素可能存在（存在误判可能）
+		//   - error：操作过程中发生的错误
 		Contain(ctx context.Context, value string) (bool, error)
 
 		// Put 将指定元素添加到布隆过滤器中。
-		// 返回值说明：
-		// - error：添加过程中发生的错误。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制请求的生命周期
+		//   - value：要添加到布隆过滤器中的元素值
+		//
+		// 返回值：
+		//   - error：添加过程中发生的错误
 		Put(ctx context.Context, value string) error
 
-		// GroupContain 用于判断指定分组中是否可能包含指定元素。
-		// 返回值说明：
-		// - false：元素在指定分组中肯定不存在。
-		// - true：元素在指定分组中可能存在（存在误判可能）。
-		// - error：操作过程中发生的错误。
+		// GroupContain 判断指定分组中是否可能包含指定元素。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制请求的生命周期
+		//   - group：分组名称，用于区分不同的数据集合
+		//   - value：要判断是否存在的元素值
+		//
+		// 返回值：
+		//   - bool：元素是否可能存在于指定分组中
+		//     - false：元素在指定分组中肯定不存在
+		//     - true：元素在指定分组中可能存在（存在误判可能）
+		//   - error：操作过程中发生的错误
 		GroupContain(ctx context.Context, group string, value string) (bool, error)
 
 		// GroupPut 将指定元素添加到指定分组的布隆过滤器中。
-		// 返回值说明：
-		// - error：添加过程中发生的错误。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制请求的生命周期
+		//   - group：分组名称，用于区分不同的数据集合
+		//   - value：要添加到布隆过滤器中的元素值
+		//
+		// 返回值：
+		//   - error：添加过程中发生的错误
 		GroupPut(ctx context.Context, group string, value string) error
 	}
 
 	// Store 定义了布隆过滤器底层数据存储的接口。
 	// 该接口负责实际的数据存储和查询操作。
+	// 不同的存储实现可以支持不同的后端存储系统，如内存、Redis 等。
 	Store interface {
-		// Exist 用于判断指定 key 对应的所有 hash 值是否都已存在。
-		// 返回值说明：
-		// - false：至少有一个 hash 值不存在。
-		// - true：所有 hash 值都存在。
-		// - error：查询过程中发生的错误。
+		// Exist 判断指定 key 对应的所有 hash 值是否都已存在。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制请求的生命周期
+		//   - key：存储键名
+		//   - hash：要判断的哈希值列表
+		//
+		// 返回值：
+		//   - bool：所有哈希值是否都已存在
+		//     - false：至少有一个哈希值不存在
+		//     - true：所有哈希值都存在
+		//   - error：查询过程中发生的错误
 		Exist(ctx context.Context, key string, hash []uint64) (bool, error)
 
 		// Add 将一组 hash 值添加到指定 key 对应的存储中。
-		// 返回值说明：
-		// - error：添加过程中发生的错误。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制请求的生命周期
+		//   - key：存储键名
+		//   - hash：要添加的哈希值列表
+		//
+		// 返回值：
+		//   - error：添加过程中发生的错误
 		Add(ctx context.Context, key string, hash []uint64) error
 	}
+
+	// bloom 是布隆过滤器的具体实现结构体。
+	// 它包含了布隆过滤器所需的所有配置参数和存储接口。
+	bloom struct {
+		name  string // name 是布隆过滤器的名称，用于区分不同的过滤器实例
+		store Store  // store 是底层存储接口的实现
+
+		n uint64  // n 是预计要存储的元素数量
+		m uint64  // m 是位数组的大小（二进制位的总数）
+		p float64 // p 是期望的误判率
+		k uint    // k 是使用的哈希函数的数量
+	}
 )
+
+// NewBloom 创建一个新的布隆过滤器实例。
+//
+// 参数：
+//   - name：布隆过滤器的名称，用于区分不同的过滤器实例
+//   - store：底层存储接口的实现，用于实际的数据存储和查询
+//   - n：预计要存储的元素数量，用于计算布隆过滤器的参数
+//   - m：位数组的大小，决定了布隆过滤器的空间占用
+//   - p：期望的误判率，值越小误判率越低，但需要更多的存储空间
+//
+// 返回值：
+//   - Bloom：实现了 Bloom 接口的布隆过滤器实例
+func NewBloom(name string, store Store, n uint64, m uint64, p float64) Bloom {
+	return &bloom{
+		name:  name,
+		store: store,
+		n:     n,
+		m:     m,
+		p:     p,
+	}
+}
+
+// Contain 实现了 Bloom 接口的 Contain 方法，用于判断指定元素是否可能存在于布隆过滤器中。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制请求的生命周期
+//   - value：要判断是否存在的元素值
+//
+// 返回值：
+//   - bool：元素是否可能存在于布隆过滤器中
+//   - false：元素肯定不存在
+//   - true：元素可能存在（存在误判可能）
+//   - error：操作过程中发生的错误
+func (b *bloom) Contain(ctx context.Context, value string) (bool, error) {
+	hash := b.multiHash(value)
+	return b.store.Exist(ctx, b.name, hash)
+}
+
+// Put 实现了 Bloom 接口的 Put 方法，用于将指定元素添加到布隆过滤器中。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制请求的生命周期
+//   - value：要添加到布隆过滤器中的元素值
+//
+// 返回值：
+//   - error：添加过程中发生的错误
+func (b *bloom) Put(ctx context.Context, value string) error {
+	hash := b.multiHash(value)
+	return b.store.Add(ctx, b.name, hash)
+}
+
+// GroupContain 实现了 Bloom 接口的 GroupContain 方法，用于判断指定分组中是否可能包含指定元素。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制请求的生命周期
+//   - group：分组名称，用于区分不同的数据集合
+//   - value：要判断是否存在的元素值
+//
+// 返回值：
+//   - bool：元素是否可能存在于指定分组中
+//   - false：元素在指定分组中肯定不存在
+//   - true：元素在指定分组中可能存在（存在误判可能）
+//   - error：操作过程中发生的错误
+func (b *bloom) GroupContain(ctx context.Context, group string, value string) (bool, error) {
+	hash := b.multiHash(value)
+	return b.store.Exist(ctx, b.buildGroupKey(group), hash)
+}
+
+// GroupPut 实现了 Bloom 接口的 GroupPut 方法，用于将指定元素添加到指定分组的布隆过滤器中。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制请求的生命周期
+//   - group：分组名称，用于区分不同的数据集合
+//   - value：要添加到布隆过滤器中的元素值
+//
+// 返回值：
+//   - error：添加过程中发生的错误
+func (b *bloom) GroupPut(ctx context.Context, group string, value string) error {
+	hash := b.multiHash(value)
+	return b.store.Add(ctx, b.buildGroupKey(group), hash)
+}
+
+// multiHash 使用多个哈希函数计算输入值的哈希值。
+// 该方法使用 murmur3 哈希算法生成两个基础哈希值，然后通过线性组合生成 k 个不同的哈希值。
+//
+// 参数：
+//   - value：要计算哈希值的字符串
+//
+// 返回值：
+//   - []uint64：包含 k 个哈希值的切片，每个哈希值对应位数组中的一个位置
+func (b *bloom) multiHash(value string) []uint64 {
+	hash := make([]uint64, b.k)
+	hash1, hash2 := murmur3.Sum128([]byte(value))
+	for i := uint(0); i < b.k; i++ {
+		k := uint64(i)
+		h := hash1 + k*hash2 + k*k
+		hash[i] = (h & math.MaxUint64) % b.m
+	}
+	return hash
+}
+
+// buildGroupKey 构建分组键名，将布隆过滤器名称和分组名称组合成一个唯一的键名。
+//
+// 参数：
+//   - group：分组名称，用于区分不同的数据集合
+//
+// 返回值：
+//   - string：组合后的键名，格式为 "name:group"
+func (b *bloom) buildGroupKey(group string) string {
+	return fmt.Sprintf("%s:%s", b.name, group)
+}
