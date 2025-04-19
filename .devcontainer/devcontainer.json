@@ -1,0 +1,36 @@
+{
+    "name": "Go Development",
+    "dockerFile": "Dockerfile",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "golang.go",
+                "ms-azuretools.vscode-docker",
+                "eamodio.gitlens",
+                "streetsidesoftware.code-spell-checker",
+                "redhat.vscode-yaml",
+                "editorconfig.editorconfig"
+            ],
+            "settings": {
+                "go.toolsManagement.checkForUpdates": "local",
+                "go.useLanguageServer": true,
+                "go.gopath": "/go",
+                "go.goroot": "/usr/local/go",
+                "go.toolsEnvVars": {
+                    "GOFLAGS": "-mod=vendor"
+                },
+                "editor.formatOnSave": true,
+                "editor.codeActionsOnSave": {
+                    "source.organizeImports": true
+                },
+                "files.eol": "\n",
+                "files.insertFinalNewline": true,
+                "files.trimTrailingWhitespace": true
+            }
+        }
+    },
+    "remoteUser": "root",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+    "workspaceFolder": "/workspace",
+    "postCreateCommand": "go mod download"
+} 
