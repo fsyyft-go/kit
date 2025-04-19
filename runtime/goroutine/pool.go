@@ -6,30 +6,37 @@ package goroutine
 
 import (
 	"math"
+	"sync"
 	"time"
 
 	"github.com/panjf2000/ants/v2"
+
+	kitlog "github.com/fsyyft-go/kit/log"
 )
 
 // 默认配置值。
 var (
-	// 协程池的默认大小。
+	// sizeDefault 定义了协程池的默认大小，设置为 int 的最大值。
 	sizeDefault = math.MaxInt32
-	// 协程池中协程的默认过期时间。
+	// expiryDefault 定义了协程池中协程的默认过期时间，设置为 1 秒。
 	expiryDefault = time.Second
-	// 是否默认预创建协程。
+	// preAllocDefault 定义了是否默认预创建协程，默认为 false。
 	preAllocDefault = false
-	// 是否默认使用非阻塞模式。
+	// nonBlockingDefault 定义了是否默认使用非阻塞模式，默认为 false。
 	nonBlockingDefault = false
-	// 默认的最大阻塞数量。
+	// maxBlockingDefault 定义了默认的最大阻塞数量，默认为 0。
 	maxBlockingDefault = 0
-	// 默认的 panic 处理函数。
+	// panicHandlerDefault 定义了默认的 panic 处理函数，默认为空函数。
 	panicHandlerDefault = func(r interface{}) {}
-	// 是否默认提供指标信息。
+	// metricsDefault 定义了是否默认提供指标信息，默认为 true。
 	metricsDefault = true
+
+	// poolDefault 是默认的协程池实例。
+	poolDefault *goroutinePool
+	// poolDefaultLocker 用于保护默认协程池的并发访问。
+	poolDefaultLocker sync.RWMutex
 )
 
-// 类型定义。
 type (
 	// Option 定义了协程池的配置选项类型。
 	Option func(p *goroutinePool)
@@ -82,25 +89,25 @@ type goroutinePool struct {
 	// pool 是底层的 ants.Pool 实例，用于实际的任务调度和执行。
 	pool *ants.Pool
 
-	// 协程池大小（默认为 int 最大值）。
+	// size 定义了协程池的大小（默认为 int 最大值）。
 	size int
-	// 协程池中协程的过期时间（默认为 1 秒）。
+	// expiry 定义了协程池中协程的过期时间（默认为 1 秒）。
 	expiry time.Duration
-	// 是否在初始化协程池时预创建协程（默认为 false）。
+	// preAlloc 定义了是否在初始化协程池时预创建协程（默认为 false）。
 	preAlloc bool
-	// 是否非阻塞模式，非阻塞模式下添加任务时没有空闲协程会返回 err（默认为 false）。
+	// nonBlocking 定义了是否非阻塞模式，非阻塞模式下添加任务时没有空闲协程会返回 err（默认为 false）。
 	nonBlocking bool
-	// 最大阻塞数量（默认为 0，表示不限制）。
+	// maxBlocking 定义了最大阻塞数量（默认为 0，表示不限制）。
 	maxBlocking int
-	// 子协程 panic 时回调方法（默认为空）。
+	// panicHandler 定义了子协程 panic 时回调方法（默认为空）。
 	panicHandler func(interface{})
 
-	// 协程池实例的名称，用于监控时区分不同实例（默认为空）。
+	// name 定义了协程池实例的名称，用于监控时区分不同实例（默认为空）。
 	name string
-	// 是否提供指标信息（默认为 true）。
+	// metrics 定义了是否提供指标信息（默认为 true）。
 	metrics bool
 
-	// 用于通知子协程退出的通道。
+	// closed 用于通知子协程退出的通道。
 	closed chan struct{}
 }
 
@@ -253,6 +260,10 @@ func NewGoroutinePool(opts ...Option) (GoroutinePool, func(), error) {
 	}
 	p.pool = pool
 
+	if p.metrics {
+		go stat(p)
+	}
+
 	return p, cleanup, nil
 }
 
@@ -306,4 +317,34 @@ func (p *goroutinePool) Waiting() int {
 //   - bool：如果协程池已关闭则返回 true。
 func (p *goroutinePool) IsClosed() bool {
 	return p.pool.IsClosed()
+}
+
+// Submit 提交一个任务到协程池中执行。
+// 参数：
+//   - task：要执行的任务函数。
+//
+// 返回值：
+//   - error：如果提交失败则返回错误。
+func Submit(task func()) error {
+	if nil == poolDefault {
+		poolDefaultLocker.Lock()
+		defer poolDefaultLocker.Unlock()
+		if nil == poolDefault {
+			if p, cleanup, err := NewGoroutinePool(WithName("default")); nil == err {
+				poolDefault = p.(*goroutinePool)
+			} else {
+				cleanup()
+				return err
+			}
+		}
+	}
+
+	return poolDefault.Submit(func() {
+		defer func() {
+			if r := recover(); nil != r {
+				kitlog.Error("goroutine panic", r)
+			}
+		}()
+		task()
+	})
 }
