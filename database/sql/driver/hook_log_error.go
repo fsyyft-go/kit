@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	kitlog "github.com/fsyyft-go/kit/log"
+	kitgoroutine "github.com/fsyyft-go/kit/runtime/goroutine"
 )
 
 type (
@@ -82,7 +83,9 @@ func (h *HookLogError) After(ctx *HookContext) error {
 	}
 
 	// 记录错误日志。
-	go h.logger.WithFields(m).Error(ctx.OriginError())
+	_ = kitgoroutine.Submit(func() {
+		h.logger.WithFields(m).Error(ctx.OriginError())
+	})
 
 	return nil
 }

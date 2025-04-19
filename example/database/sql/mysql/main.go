@@ -8,6 +8,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"math/rand"
 	"time"
 
 	kitmysql "github.com/fsyyft-go/kit/database/sql/mysql"
@@ -183,6 +184,9 @@ func deleteRow(db *sql.DB, _ kitlog.Logger, id int64) (int64, error) {
 // 返回：
 //   - error：事务执行过程中的错误信息。
 func transactionDemo(db *sql.DB, logger kitlog.Logger) error {
+	// 创建一个本地随机数生成器。
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	// 开始事务。
 	tx, err := db.Begin()
 	if err != nil {
@@ -217,9 +221,13 @@ func transactionDemo(db *sql.DB, logger kitlog.Logger) error {
 		return fmt.Errorf("表 `example_user` 中部分记录不存在：`id=2` 存在=%v，`id=3` 存在=%v", exists1, exists2)
 	}
 
+	// 生成两个随机年龄。
+	age1 := r.Intn(61) + 10 // 生成 10 ~ 70 之间的随机数。
+	age2 := r.Intn(61) + 10 // 生成 10 ~ 70 之间的随机数。
+
 	// 更新第一条记录。
-	sqlStr1 := "UPDATE `example_user` SET `age`=30 WHERE `id`=? LIMIT 1;"
-	ret1, err := tx.Exec(sqlStr1, 2)
+	sqlStr := "UPDATE `example_user` SET `age`=? WHERE `id`=? LIMIT 1;"
+	ret1, err := tx.Exec(sqlStr, age1, 2)
 	if err != nil {
 		return fmt.Errorf("执行表 `example_user` 第一次更新失败：%w", err)
 	}
@@ -228,10 +236,7 @@ func transactionDemo(db *sql.DB, logger kitlog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("获取第一次更新影响行数失败：%w", err)
 	}
-
-	// 更新第二条记录。
-	sqlStr2 := "UPDATE `example_user` SET `age`=40 WHERE `id`=? LIMIT 1;"
-	ret2, err := tx.Exec(sqlStr2, 3)
+	ret2, err := tx.Exec(sqlStr, age2, 3)
 	if err != nil {
 		return fmt.Errorf("执行表 `example_user` 第二次更新失败：%w", err)
 	}
