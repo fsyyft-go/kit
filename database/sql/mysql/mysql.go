@@ -39,6 +39,11 @@ var (
 
 type (
 	// MySQLOptions 定义了 MySQL 数据库连接的配置选项。
+	// 该结构体提供了以下功能：
+	// - 配置数据库连接的基本参数。
+	// - 管理连接池的行为。
+	// - 控制日志记录和监控。
+	// - 支持钩子机制。
 	MySQLOptions struct {
 		// dns 定义数据库的连接字符串。
 		dns string
@@ -50,7 +55,6 @@ type (
 		poolMaxOpenConns int
 		// poolMaxIdleConns 定义连接池中允许的最大空闲连接数。
 		poolMaxIdleConns int
-
 		// hook 用于管理数据库操作的钩子函数。
 		hook *kitdriver.HookManager
 		// namespace 定义数据库连接的命名空间。
@@ -68,6 +72,16 @@ type (
 )
 
 // WithDSN 设置 MySQL 数据源名称（DSN）。
+// 该函数提供了以下功能：
+// - 配置数据库连接的基本信息。
+// - 支持完整的 DSN 格式。
+// - 支持自定义连接参数。
+//
+// 参数：
+//   - dsn：数据库连接字符串，格式为 "user:password@tcp(host:port)/dbname?param1=value1&param2=value2"。
+//
+// 返回值：
+//   - MySQLOption：返回配置函数。
 func WithDSN(dsn string) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.dns = dsn
@@ -75,17 +89,17 @@ func WithDSN(dsn string) MySQLOption {
 }
 
 // WithDSNParams 使用基础 DSN 和额外参数设置 MySQL 数据源名称。
+// 该函数提供了以下功能：
+// - 支持基础 DSN 和额外参数的组合。
+// - 自动处理参数分隔符。
+// - 支持参数值的 URL 编码。
 //
 // 参数：
 //   - baseDSN: 基础数据源名称字符串，如果为空则使用默认 DSN。
 //   - params: DSN 参数映射，key 为参数名，value 为参数值。
 //
-// 示例：
-//
-//	WithDSNParams("user:pass@tcp(host:port)/dbname", map[string]string{
-//	    "parseTime": "true",
-//	    "loc": "Local",
-//	})
+// 返回值：
+//   - MySQLOption：返回配置函数。
 func WithDSNParams(baseDSN string, params map[string]string) MySQLOption {
 	return func(o *MySQLOptions) {
 		if len(params) == 0 {

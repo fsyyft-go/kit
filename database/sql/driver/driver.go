@@ -84,7 +84,11 @@ func (d *KitDriver) Open(name string) (driver.Conn, error) {
 	}, nil
 }
 
-// kitConn 是一个数据库连接包装器，实现了多个数据库连接相关的接口。
+// kitConn 实现了 driver.Conn 接口，用于包装原始的数据库连接。
+// 该结构体提供了以下功能：
+// - 支持钩子机制，可以在数据库操作前后执行自定义逻辑。
+// - 实现了所有必需的数据库连接接口。
+// - 提供了事务、查询和执行等操作的包装。
 type kitConn struct {
 	// 原始数据库连接实例。
 	driver.Conn
@@ -314,7 +318,11 @@ func (c *kitConn) ResetSession(ctx context.Context) error {
 	return nil
 }
 
-// kitStmt 是一个预处理语句包装器，用于在执行预处理语句时添加钩子功能。
+// kitStmt 实现了 driver.Stmt 接口，用于包装原始的预处理语句。
+// 该结构体提供了以下功能：
+// - 支持钩子机制，可以在语句执行前后执行自定义逻辑。
+// - 实现了所有必需的预处理语句接口。
+// - 提供了查询和执行操作的包装。
 type kitStmt struct {
 	// 原始预处理语句实例。
 	driver.Stmt
@@ -420,7 +428,11 @@ func (s *kitStmt) Close() error {
 	return err
 }
 
-// kitTx 是一个事务包装器，用于在事务操作时添加钩子功能。
+// kitTx 实现了 driver.Tx 接口，用于包装原始的事务。
+// 该结构体提供了以下功能：
+// - 支持钩子机制，可以在事务操作前后执行自定义逻辑。
+// - 实现了所有必需的事务接口。
+// - 提供了提交和回滚操作的包装。
 type kitTx struct {
 	// 原始事务实例。
 	driver.Tx
