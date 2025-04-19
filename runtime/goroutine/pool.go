@@ -5,54 +5,77 @@
 package goroutine
 
 import (
+	"math"
 	"time"
 
 	"github.com/panjf2000/ants/v2"
 )
 
-// Option 定义了协程池的配置选项类型。
-type Option func(p *goroutinePool)
+// 默认配置值。
+var (
+	// 协程池的默认大小。
+	sizeDefault = math.MaxInt32
+	// 协程池中协程的默认过期时间。
+	expiryDefault = time.Second
+	// 是否默认预创建协程。
+	preAllocDefault = false
+	// 是否默认使用非阻塞模式。
+	nonBlockingDefault = false
+	// 默认的最大阻塞数量。
+	maxBlockingDefault = 0
+	// 默认的 panic 处理函数。
+	panicHandlerDefault = func(r interface{}) {}
+	// 是否默认提供指标信息。
+	metricsDefault = true
+)
 
-// GoroutinePool 定义了协程池的接口。
-// 该接口提供了协程池的基本操作，包括任务提交、容量调整和状态查询等功能。
-type GoroutinePool interface {
-	// Submit 提交一个任务到协程池中执行。
-	// 参数：
-	//   - task：要执行的任务函数。
-	// 返回值：
-	//   - error：如果提交失败则返回错误。
-	Submit(task func()) error
+// 类型定义。
+type (
+	// Option 定义了协程池的配置选项类型。
+	Option func(p *goroutinePool)
 
-	// Tune 调整协程池的大小。
-	// 参数：
-	//   - size：新的协程池大小。
-	Tune(size int)
+	// GoroutinePool 定义了协程池的接口。
+	// 该接口提供了协程池的基本操作，包括任务提交、容量调整和状态查询等功能。
+	GoroutinePool interface {
+		// Submit 提交一个任务到协程池中执行。
+		// 参数：
+		//   - task：要执行的任务函数。
+		//
+		// 返回值：
+		//   - error：如果提交失败则返回错误。
+		Submit(task func()) error
 
-	// Cap 获取协程池的容量大小。
-	// 返回值：
-	//   - int：协程池的容量。
-	Cap() int
+		// Tune 调整协程池的大小。
+		// 参数：
+		//   - size：新的协程池大小。
+		Tune(size int)
 
-	// Running 获取协程池中正在运行的协程数量。
-	// 返回值：
-	//   - int：正在运行的协程数量。
-	Running() int
+		// Cap 获取协程池的容量大小。
+		// 返回值：
+		//   - int：协程池的容量。
+		Cap() int
 
-	// Free 获取协程池中空闲的协程数量。
-	// 返回值：
-	//   - int：空闲的协程数量。
-	Free() int
+		// Running 获取协程池中正在运行的协程数量。
+		// 返回值：
+		//   - int：正在运行的协程数量。
+		Running() int
 
-	// Waiting 获取协程池中等待执行的任务数量。
-	// 返回值：
-	//   - int：等待执行的任务数量。
-	Waiting() int
+		// Free 获取协程池中空闲的协程数量。
+		// 返回值：
+		//   - int：空闲的协程数量。
+		Free() int
 
-	// IsClosed 检查协程池是否已经关闭。
-	// 返回值：
-	//   - bool：如果协程池已关闭则返回 true。
-	IsClosed() bool
-}
+		// Waiting 获取协程池中等待执行的任务数量。
+		// 返回值：
+		//   - int：等待执行的任务数量。
+		Waiting() int
+
+		// IsClosed 检查协程池是否已经关闭。
+		// 返回值：
+		//   - bool：如果协程池已关闭则返回 true。
+		IsClosed() bool
+	}
+)
 
 // goroutinePool 实现了 GoroutinePool 接口，是协程池的具体实现。
 type goroutinePool struct {
@@ -78,7 +101,7 @@ type goroutinePool struct {
 	metrics bool
 
 	// 用于通知子协程退出的通道。
-	_ chan struct{}
+	closed chan struct{}
 }
 
 // WithSize 设置协程池的大小。
@@ -183,13 +206,54 @@ func WithMetrics(metrics bool) Option {
 //
 // 返回值：
 //   - GoroutinePool：新的协程池实例。
-func NewGoroutinePool(opts ...Option) GoroutinePool {
-	p := &goroutinePool{}
+//   - func()：清理函数，用于释放协程池资源。
+//   - error：如果创建失败则返回错误。
+func NewGoroutinePool(opts ...Option) (GoroutinePool, func(), error) {
+	// 创建协程池实例并设置默认值。
+	p := &goroutinePool{
+		size:         sizeDefault,
+		expiry:       expiryDefault,
+		preAlloc:     preAllocDefault,
+		nonBlocking:  nonBlockingDefault,
+		maxBlocking:  maxBlockingDefault,
+		panicHandler: panicHandlerDefault,
+		metrics:      metricsDefault,
+		closed:       make(chan struct{}, 1),
+	}
+
+	// 应用用户提供的配置选项。
 	for _, opt := range opts {
 		opt(p)
 	}
 
-	return p
+	// 定义清理函数，用于释放协程池资源。
+	cleanup := func() {
+		// 通知协程池关闭。
+		p.closed <- struct{}{}
+		// 如果底层池已创建，则释放资源。
+		if p.pool != nil {
+			errRelease := p.pool.ReleaseTimeout(10 * time.Second)
+			if errRelease != nil {
+				return
+			}
+		}
+	}
+
+	// 创建底层的 ants.Pool 实例。
+	pool, errNewPool := ants.NewPool(
+		p.size,
+		ants.WithExpiryDuration(p.expiry),
+		ants.WithPreAlloc(p.preAlloc),
+		ants.WithNonblocking(p.nonBlocking),
+		ants.WithMaxBlockingTasks(p.maxBlocking),
+		ants.WithPanicHandler(p.panicHandler),
+	)
+	if errNewPool != nil {
+		return nil, nil, errNewPool
+	}
+	p.pool = pool
+
+	return p, cleanup, nil
 }
 
 // Submit 提交一个任务到协程池中执行。
