@@ -10,9 +10,31 @@ import (
 	"time"
 )
 
+// testRedisConnected 测试 Redis 连接是否可用。
+//
+// 参数：
+//   - redis：Redis 扩展实例
+//
+// 返回值：
+//   - bool：如果连接成功返回 true，否则返回 false
+func testRedisConnected(redis RedisExtension) bool {
+	// 设置一个较短的超时时间
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	// 尝试执行一个简单的 PING 命令
+	_, err := redis.Do(ctx, "PING").Result()
+	return err == nil
+}
+
 func TestRedis(t *testing.T) {
 	redis := NewRedis()
 	redisExtension := NewRedisExtension(redis)
+
+	if !testRedisConnected(redisExtension) {
+		t.Log("Redis 连接失败，跳过测试")
+		return
+	}
 
 	redisExtension.Set(context.Background(), "key", "value", time.Second*10)
 	val, err := redisExtension.Get(context.Background(), "key").Result()
@@ -25,6 +47,13 @@ func TestRedis(t *testing.T) {
 func TestRedis_EvalSha(t *testing.T) {
 	// 创建 Redis 实例
 	redis := NewRedis()
+
+	redisExtension := NewRedisExtension(redis)
+
+	if !testRedisConnected(redisExtension) {
+		t.Log("Redis 连接失败，跳过测试")
+		return
+	}
 
 	// 生成唯一的测试键名
 	testKey := "test:counter:" + time.Now().Format("20060102150405")
