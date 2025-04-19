@@ -57,100 +57,158 @@ type (
 	LoggerFormatType string
 
 	// Logger 定义了统一的日志接口。
-	// 这个接口提供了基本的日志记录功能和结构化日志支持，可以通过不同的实现来支持不同的日志后端。
+	// 该接口提供了以下功能：
+	// - 支持多个日志级别（Debug、Info、Warn、Error、Fatal）。
+	// - 提供格式化和非格式化的日志记录方法。
+	// - 支持结构化日志记录。
+	// - 支持日志级别的动态调整。
+	// - 提供上下文信息的添加和管理。
 	Logger interface {
 		// SetLevel 设置日志级别。
 		// 只有大于或等于设置级别的日志才会被记录。
+		//
+		// 参数：
+		//   - level：要设置的日志级别。
 		SetLevel(level Level)
 
 		// GetLevel 获取当前的日志级别。
+		//
+		// 返回值：
+		//   - Level：当前的日志级别。
 		GetLevel() Level
 
 		// Debug 记录调试级别的日志。
 		// 参数 args 支持任意类型的值，这些值会被转换为字符串并连接。
 		// 调试日志应该包含有助于诊断问题的详细信息。
+		//
+		// 参数：
+		//   - args：要记录的日志内容，支持多个参数。
 		Debug(args ...interface{})
 
 		// Debugf 记录格式化的调试级别日志。
 		// 参数 format 是格式化字符串，args 是对应的参数。
 		// 支持标准的 Printf 风格的格式化。
+		//
+		// 参数：
+		//   - format：格式化字符串。
+		//   - args：格式化参数。
 		Debugf(format string, args ...interface{})
 
 		// Info 记录信息级别的日志。
 		// 参数 args 支持任意类型的值，这些值会被转换为字符串并连接。
 		// 信息日志应该记录系统的正常运行状态。
+		//
+		// 参数：
+		//   - args：要记录的日志内容，支持多个参数。
 		Info(args ...interface{})
 
 		// Infof 记录格式化的信息级别日志。
 		// 参数 format 是格式化字符串，args 是对应的参数。
 		// 支持标准的 Printf 风格的格式化。
+		//
+		// 参数：
+		//   - format：格式化字符串。
+		//   - args：格式化参数。
 		Infof(format string, args ...interface{})
 
 		// Warn 记录警告级别的日志。
 		// 参数 args 支持任意类型的值，这些值会被转换为字符串并连接。
 		// 警告日志应该包含可能导致问题的情况。
+		//
+		// 参数：
+		//   - args：要记录的日志内容，支持多个参数。
 		Warn(args ...interface{})
 
 		// Warnf 记录格式化的警告级别日志。
 		// 参数 format 是格式化字符串，args 是对应的参数。
 		// 支持标准的 Printf 风格的格式化。
+		//
+		// 参数：
+		//   - format：格式化字符串。
+		//   - args：格式化参数。
 		Warnf(format string, args ...interface{})
 
 		// Error 记录错误级别的日志。
 		// 参数 args 支持任意类型的值，这些值会被转换为字符串并连接。
 		// 错误日志应该包含错误的详细信息和上下文。
+		//
+		// 参数：
+		//   - args：要记录的日志内容，支持多个参数。
 		Error(args ...interface{})
 
 		// Errorf 记录格式化的错误级别日志。
 		// 参数 format 是格式化字符串，args 是对应的参数。
 		// 支持标准的 Printf 风格的格式化。
+		//
+		// 参数：
+		//   - format：格式化字符串。
+		//   - args：格式化参数。
 		Errorf(format string, args ...interface{})
 
 		// Fatal 记录致命错误级别的日志。
 		// 参数 args 支持任意类型的值，这些值会被转换为字符串并连接。
 		// 记录日志后会导致程序以状态码 1 退出。
 		// 这个方法应该只在程序无法继续运行时使用。
+		//
+		// 参数：
+		//   - args：要记录的日志内容，支持多个参数。
 		Fatal(args ...interface{})
 
 		// Fatalf 记录格式化的致命错误级别日志。
 		// 参数 format 是格式化字符串，args 是对应的参数。
 		// 支持标准的 Printf 风格的格式化。
 		// 记录日志后会导致程序以状态码 1 退出。
+		//
+		// 参数：
+		//   - format：格式化字符串。
+		//   - args：格式化参数。
 		Fatalf(format string, args ...interface{})
 
 		// WithField 添加一个字段到日志上下文。
 		// 参数 key 是字段名，value 是字段值。
 		// 返回一个新的 Logger 实例，原实例不会被修改。
 		// 这个方法用于添加结构化的上下文信息到日志中。
+		//
+		// 参数：
+		//   - key：字段名。
+		//   - value：字段值。
+		//
+		// 返回值：
+		//   - Logger：新的日志实例。
 		WithField(key string, value interface{}) Logger
 
 		// WithFields 添加多个字段到日志上下文。
 		// 参数 fields 是要添加的字段映射。
 		// 返回一个新的 Logger 实例，原实例不会被修改。
 		// 这个方法用于一次性添加多个结构化字段。
+		//
+		// 参数：
+		//   - fields：字段映射。
+		//
+		// 返回值：
+		//   - Logger：新的日志实例。
 		WithFields(fields map[string]interface{}) Logger
 	}
 
 	// LoggerOptions 定义了日志配置选项。
+	// 该结构体提供了以下功能：
+	// - 配置日志的基本行为。
+	// - 控制日志的输出目标。
+	// - 管理日志的滚动策略。
+	// - 设置日志的格式类型。
 	LoggerOptions struct {
 		// Type 指定日志实现类型。
 		Type LogType
-
 		// Level 指定日志级别。
 		Level Level
-
 		// Output 指定日志输出路径。
 		Output string
-
 		// EnableRotate 是否启用日志滚动。
 		EnableRotate bool
-
 		// RotateTime 日志滚动时间间隔。
 		RotateTime time.Duration
-
 		// MaxAge 日志保留时间。
 		MaxAge time.Duration
-
 		// FormatType 指定日志输出格式类型。
 		FormatType LoggerFormatType
 	}
