@@ -32,8 +32,7 @@ func TestRedis(t *testing.T) {
 	redisExtension := NewRedisExtension(redis)
 
 	if !testRedisConnected(redisExtension) {
-		t.Log("Redis 连接失败，跳过测试")
-		return
+		t.Skip("Redis 连接失败，跳过测试")
 	}
 
 	redisExtension.Set(context.Background(), "key", "value", time.Second*10)
@@ -51,8 +50,7 @@ func TestRedis_EvalSha(t *testing.T) {
 	redisExtension := NewRedisExtension(redis)
 
 	if !testRedisConnected(redisExtension) {
-		t.Log("Redis 连接失败，跳过测试")
-		return
+		t.Skip("Redis 连接失败，跳过测试")
 	}
 
 	// 生成唯一的测试键名
