@@ -88,11 +88,12 @@ type (
 	//
 	// 通过组合 http.Client 及自定义配置，实现统一的 HTTP 请求封装。
 	client struct {
-		name                string        // 客户端名称。
-		timeout             time.Duration // 超时时间。
-		maxConnsPerHost     int           // 每主机最大连接数。
-		maxIdleConnsPerHost int           // 每主机最大空闲连接数。
-		maxIdleConns        int           // 全局最大空闲连接数。
+		name                string                                // 客户端名称。
+		timeout             time.Duration                         // 超时时间。
+		proxy               func(*http.Request) (*url.URL, error) // 网络代理配置。
+		maxConnsPerHost     int                                   // 每主机最大连接数。
+		maxIdleConnsPerHost int                                   // 每主机最大空闲连接数。
+		maxIdleConns        int                                   // 全局最大空闲连接数。
 
 		transport *http.Transport // 传输层配置。
 
@@ -115,6 +116,7 @@ func NewClient(opts ...Option) Client {
 	c := &client{
 		name:                nameDefault,
 		timeout:             timeoutDefault,
+		proxy:               proxyDefault,
 		maxConnsPerHost:     maxConnsPerHostDefault,
 		maxIdleConnsPerHost: maxIdleConnsPerHostDefault,
 		maxIdleConns:        maxIdleConnsDefault,
@@ -127,7 +129,7 @@ func NewClient(opts ...Option) Client {
 
 	if nil == c.transport {
 		c.transport = &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
+			Proxy: c.proxy,
 			DialContext: (&net.Dialer{
 				Timeout:   dialTimeoutDefault,
 				KeepAlive: dialKeepAliveDefault,

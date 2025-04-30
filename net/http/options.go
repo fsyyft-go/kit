@@ -9,6 +9,7 @@ package http
 
 import (
 	"net/http"
+	"net/url"
 	"time"
 
 	kiglog "github.com/fsyyft-go/kit/log"
@@ -28,6 +29,8 @@ var (
 	nameDefault = "kit-defulat-http-client"
 	// timeoutDefault 为 HTTP 客户端默认超时时间。
 	timeoutDefault = 30 * time.Second
+	// proxyDefault 为 HTTP 客户端默认网络代理配置。
+	proxyDefault = http.ProxyFromEnvironment
 	// maxConnsPerHostDefault 为每个主机的最大连接数默认值。
 	maxConnsPerHostDefault = 128
 	// maxIdleConnsPerHostDefault 为每个主机的最大空闲连接数默认值。
@@ -74,6 +77,19 @@ func WithName(name string) Option {
 func WithTimeout(timeout time.Duration) Option {
 	return func(c *client) {
 		c.timeout = timeout
+	}
+}
+
+// WithProxy 设置 HTTP 客户端代理。
+//
+// 参数：
+//   - proxy func(*http.Request) (*url.URL, error)：自定义代理函数，用于根据请求返回代理 URL。
+//
+// 返回值：
+//   - Option：用于设置代理的配置项。
+func WithProxy(proxy func(*http.Request) (*url.URL, error)) Option {
+	return func(c *client) {
+		c.proxy = proxy
 	}
 }
 
