@@ -26,6 +26,11 @@ type Config struct {
 		// Addr 是应用程序地址，可能是从 base64 编码后解码得到的。
 		Addr string `json:"addr"`
 	} `json:"app"`
+	// Env 是环境变量配置。
+	Env struct {
+		// Lang 是系统语言。
+		Lang string `json:"lang"`
+	} `json:"env"`
 }
 
 // example 函数展示了配置的基本用法。
@@ -69,7 +74,8 @@ func example() {
 	}
 
 	// 打印配置信息。
-	fmt.Printf("%+v\n", cfg.App.Name)
-	fmt.Printf("%+v\n", cfg.App.Password)
-	fmt.Printf("%+v\n", cfg.App.Addr)
+	fmt.Printf("App Name: %+v\n", cfg.App.Name)
+	fmt.Printf("App Password: %+v\n", cfg.App.Password)
+	fmt.Printf("App Addr: %+v\n", cfg.App.Addr)
+	fmt.Printf("Env Lang: %+v\n", cfg.Env.Lang)
 }
