@@ -22,15 +22,19 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 
 ## 模块列表
 
-### bytes
-
-#### [bytes](bytes/README.md)
+### [bytes](bytes/README.md)
 
 字节操作工具：提供安全的随机字节生成功能，基于加密安全的随机数生成器，适用于生成nonce、salt、会话令牌等安全场景。[详细说明 →](bytes/README.md)
 
 ### [cache](cache/README.md)
 
 高性能进程内缓存：基于 ristretto 的缓存实现，支持过期时间设置、泛型接口和自动内存管理。[详细说明 →](cache/README.md)
+
+### container
+
+#### [container/bloom](container/bloom/README.md)
+
+高效布隆过滤器：支持分组、可插拔存储、误判率灵活配置，适合缓存预判、唯一性校验等大规模集合判定场景。[详细说明 →](container/bloom/README.md)
 
 ### crypto
 
@@ -55,6 +59,10 @@ MD5 哈希工具：提供便捷的字符串 MD5 哈希计算功能，支持带�
 RSA 加密工具：提供 RSA 加密/解密功能，支持公钥加密/私钥解密和私钥加密/公钥解密（数字签名）操作，以及 PEM 格式密钥处理。[详细说明 →](crypto/rsa/README.md)
 
 ### database
+
+#### [database/redis](database/redis/README.md)
+
+高性能 Redis 客户端：支持原生命令、管道、事务、Lua 脚本、发布订阅、基础 KV 操作等，兼容 go-redis v9。[详细说明 →](database/redis/README.md)
 
 #### database/sql
 
@@ -89,6 +97,12 @@ HTTP 适配器：提供 Kratos HTTP 服务器到 Gin 引擎的转换功能，支
 #### [math/rand](math/rand/README.md)
 
 随机数生成工具：提供范围内的随机数生成和中文字符（汉字、姓氏）随机生成功能，支持自定义随机数生成器。[详细说明 →](math/rand/README.md)
+
+### net
+
+#### [net/http](net/http/README.md)
+
+功能丰富的 HTTP 客户端：支持 GET/POST/HEAD/表单/JSON、超时、代理、钩子、慢请求日志、trace、全局方法等。[详细说明 →](net/http/README.md)
 
 ### [runtime](runtime/README.md)
 
