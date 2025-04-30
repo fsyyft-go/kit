@@ -6,6 +6,7 @@ package config
 
 import (
 	"encoding/base64"
+	"os"
 	"strings"
 
 	kitcryptodes "github.com/fsyyft-go/kit/crypto/des"
@@ -16,6 +17,8 @@ const (
 	suffixBase64 = ".b64"
 	// suffixDES 定义了 DES 加密值的后缀标识，用于识别需要 DES 解密的配置项。
 	suffixDES = ".des"
+	// suffixEnv 定义了 env 文件的后缀标识，用于识别需要 env 解析的配置项。
+	suffixEnv = ".env"
 )
 
 var (
@@ -47,6 +50,7 @@ func init() {
 	defaultResolve = newResolve()
 	defaultResolve.register(suffixBase64, registerResolveBase64)
 	defaultResolve.register(suffixDES, registerResolveDES)
+	defaultResolve.register(suffixEnv, registerResolveEnv)
 }
 
 // newResolve 创建并返回一个新的 resolve 实例。
@@ -163,5 +167,24 @@ func registerResolveDES(target map[string]interface{}, key, val string) error {
 		}
 	}
 
+	return nil
+}
+
+// registerResolveEnv 是处理 env 文件配置值的解析函数。
+// 当配置键以 .env 后缀结尾时，尝试从环境变量中获取其值，并将获取到的值存储到去除后缀的键中。
+//
+// 参数：
+//   - target: 配置目标映射，存储解析后的配置。
+//   - key: 当前处理的配置键名。
+//   - val: 当前处理的配置值。
+func registerResolveEnv(target map[string]interface{}, key, val string) error {
+	// 检查键名是否以 .env 后缀结尾。
+	if strings.HasSuffix(key, suffixEnv) {
+		// 尝试从环境变量中获取值。
+		if v, ok := os.LookupEnv(val); ok {
+			// 如果存在，将值存储到去除后缀的键中。
+			target[strings.TrimSuffix(key, suffixEnv)] = v
+		}
+	}
 	return nil
 }
