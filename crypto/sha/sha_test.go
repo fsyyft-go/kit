@@ -241,3 +241,130 @@ func BenchmarkSHA256HashStringWithoutErrorParallel(b *testing.B) {
 		}
 	})
 }
+
+// TestSHA1HashString 测试 SHA1HashString 函数的各种情况。
+func TestSHA1HashString(t *testing.T) {
+	// 定义测试用例表格，包含输入值和期望的输出值。
+	tests := []struct {
+		name        string // 测试用例名称
+		input       string // 输入字符串
+		expected    string // 期望的 SHA1 哈希值
+		expectError bool   // 是否期望出现错误
+	}{
+		{
+			name:        "空字符串测试",
+			input:       "",
+			expected:    "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+			expectError: false,
+		},
+		{
+			name:        "简单ASCII字符串测试",
+			input:       "hello world",
+			expected:    "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed",
+			expectError: false,
+		},
+		{
+			name:        "数字字符串测试",
+			input:       "12345",
+			expected:    "8cb2237d0679ca88db6464eac60da96345513964",
+			expectError: false,
+		},
+		{
+			name:        "中文字符串测试",
+			input:       "你好，世界",
+			expected:    "3becb03b015ed48050611c8d7afe4b88f70d5a20",
+			expectError: false,
+		},
+		{
+			name:        "特殊字符测试",
+			input:       "!@#$%^&*()_+",
+			expected:    "d0b9abafaf5a393954f53e47715c833f0c18075d",
+			expectError: false,
+		},
+		{
+			name:        "长文本测试",
+			input:       "这是一段较长的文本，用于测试SHA256哈希函数对长文本的处理能力。SHA256会生成固定长度的哈希值，无论输入多长。",
+			expected:    "ddff78fe3dc4b7bbad08f1b6e3ee15b2a268c572",
+			expectError: false,
+		},
+		{
+			name:        "大数据量测试",
+			input:       string(make([]byte, 1024*1024)), // 1MB 的数据
+			expected:    "3b71f43ff30f4b15b5cd85dd9e95ebc7e84eb5a3",
+			expectError: false,
+		},
+	}
+
+	// 遍历测试用例表格，执行测试。
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 调用被测试函数。
+			result, err := kitsha.SHA1HashString(tt.input)
+
+			// 断言测试结果。
+			if tt.expectError {
+				assert.Error(t, err, "期望返回错误，但实际无错误发生。")
+			} else {
+				assert.NoError(t, err, "不期望错误，但实际发生了错误: %v", err)
+				assert.Equal(t, tt.expected, result, "SHA1哈希值不匹配，期望: %s, 实际: %s", tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestSHA1HashStringWithoutError 测试 SHA1HashStringWithoutError 函数的各种情况。
+func TestSHA1HashStringWithoutError(t *testing.T) {
+	// 定义测试用例表格，包含输入值和期望的输出值。
+	tests := []struct {
+		name     string // 测试用例名称
+		input    string // 输入字符串
+		expected string // 期望的 SHA1 哈希值
+	}{
+		{
+			name:     "空字符串测试",
+			input:    "",
+			expected: "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+		},
+		{
+			name:     "简单ASCII字符串测试",
+			input:    "hello world",
+			expected: "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed",
+		},
+		{
+			name:     "数字字符串测试",
+			input:    "12345",
+			expected: "8cb2237d0679ca88db6464eac60da96345513964",
+		},
+		{
+			name:     "中文字符串测试",
+			input:    "你好，世界",
+			expected: "3becb03b015ed48050611c8d7afe4b88f70d5a20",
+		},
+		{
+			name:     "特殊字符测试",
+			input:    "!@#$%^&*()_+",
+			expected: "d0b9abafaf5a393954f53e47715c833f0c18075d",
+		},
+		{
+			name:     "长文本测试",
+			input:    "这是一段较长的文本，用于测试SHA256哈希函数对长文本的处理能力。SHA256会生成固定长度的哈希值，无论输入多长。",
+			expected: "ddff78fe3dc4b7bbad08f1b6e3ee15b2a268c572",
+		},
+		{
+			name:     "大数据量测试",
+			input:    string(make([]byte, 1024*1024)), // 1MB 的数据
+			expected: "3b71f43ff30f4b15b5cd85dd9e95ebc7e84eb5a3",
+		},
+	}
+
+	// 遍历测试用例表格，执行测试。
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 调用被测试函数。
+			result := kitsha.SHA1HashStringWithoutError(tt.input)
+
+			// 断言测试结果。
+			assert.Equal(t, tt.expected, result, "SHA1哈希值不匹配，期望: %s, 实际: %s", tt.expected, result)
+		})
+	}
+}
