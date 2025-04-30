@@ -29,6 +29,8 @@ var (
 	nameDefault = "kit-defulat-http-client"
 	// timeoutDefault 为 HTTP 客户端默认超时时间。
 	timeoutDefault = 30 * time.Second
+	// traceEnableDefault 为 HTTP 客户端默认开启追踪。
+	traceEnableDefault = false
 	// proxyDefault 为 HTTP 客户端默认网络代理配置。
 	proxyDefault = http.ProxyFromEnvironment
 	// maxConnsPerHostDefault 为每个主机的最大连接数默认值。
@@ -77,6 +79,20 @@ func WithName(name string) Option {
 func WithTimeout(timeout time.Duration) Option {
 	return func(c *client) {
 		c.timeout = timeout
+	}
+}
+
+// WithTraceEnable 设置 HTTP 客户端的追踪功能开关。
+//
+// 参数：
+//   - enable bool：是否启用追踪功能。
+//
+// 返回值：
+//   - Option：用于设置追踪功能的配置项。
+
+func WithTraceEnable(enable bool) Option {
+	return func(c *client) {
+		c.traceEnable = enable
 	}
 }
 

@@ -90,6 +90,7 @@ type (
 	client struct {
 		name                string                                // 客户端名称。
 		timeout             time.Duration                         // 超时时间。
+		traceEnable         bool                                  // 开启追踪。
 		proxy               func(*http.Request) (*url.URL, error) // 网络代理配置。
 		maxConnsPerHost     int                                   // 每主机最大连接数。
 		maxIdleConnsPerHost int                                   // 每主机最大空闲连接数。
@@ -116,6 +117,7 @@ func NewClient(opts ...Option) Client {
 	c := &client{
 		name:                nameDefault,
 		timeout:             timeoutDefault,
+		traceEnable:         traceEnableDefault,
 		proxy:               proxyDefault,
 		maxConnsPerHost:     maxConnsPerHostDefault,
 		maxIdleConnsPerHost: maxIdleConnsPerHostDefault,
@@ -149,6 +151,10 @@ func NewClient(opts ...Option) Client {
 
 	if nil == c.hook {
 		hm := NewHookManager()
+		if c.traceEnable {
+			th := NewTraceHook(c.logger)
+			hm.AddHook(th)
+		}
 		c.hook = hm
 	}
 
@@ -172,10 +178,13 @@ func NewClient(opts ...Option) Client {
 func (c *client) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
 	if nil != c.hook {
 		hc := NewHookContext(ctx, req.Method, req.URL.String(), req)
-		_ = c.hook.Before(hc)
-		resp, err := c.client.Do(req)
+		if err := c.hook.Before(hc); nil != err {
+			// 开始时的有些操作，是必要的，例如增加 Trace；一般不会出错，如果出错了，就返回。
+			return nil, err
+		}
+		resp, err := c.client.Do(hc.Request())
 		hc.SetResult(resp, err)
-		_ = c.hook.After(hc)
+		_ = c.hook.After(hc) // 不论是否出错，操作完成已经是既定事实。
 		return resp, err
 	} else {
 		return c.client.Do(req)
