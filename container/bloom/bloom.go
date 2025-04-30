@@ -26,7 +26,7 @@ var (
 )
 
 var (
-	ErrBloomNameEmpty                = errors.New("bloom: bloom name can‘t be empty")
+	ErrBloomNameEmpty                = errors.New("bloom: bloom name can't be empty")
 	ErrBloomNameRepeated             = errors.New("bloom: bloom name can't repeated")
 	ErrBloomFalseProbabilityThanOne  = errors.New("bloom: bloom false probability can't than 1")
 	ErrBloomFalseProbabilityNegative = errors.New("bloom: bloom false probability can't be negative")
@@ -125,7 +125,7 @@ type (
 		name  string // name 是布隆过滤器的名称，用于区分不同的过滤器实例
 		store Store  // store 是底层存储接口的实现
 
-		logger *kitlog.Logger
+		logger kitlog.Logger
 
 		n uint64  // n 是预计要存储的元素数量
 		m uint64  // m 是位数组的大小（二进制位的总数）
@@ -167,7 +167,7 @@ func WithStore(store Store) Option {
 //
 // 返回值：
 //   - Option：配置选项函数。
-func WithLogger(logger *kitlog.Logger) Option {
+func WithLogger(logger kitlog.Logger) Option {
 	return func(b *bloom) {
 		b.logger = logger
 	}

@@ -22,6 +22,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+
+	kitlog "github.com/fsyyft-go/kit/log"
 )
 
 // TestBloom_Contain 测试布隆过滤器的 Contain 方法
@@ -293,4 +295,72 @@ func TestBloom_GroupPut(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNewBloom_Errors 测试 NewBloom 的所有错误分支和边界条件
+func TestNewBloom_Errors(t *testing.T) {
+	// 名称为空
+	b, _, err := NewBloom(WithName("   "))
+	assert.Nil(t, b)
+	assert.Equal(t, ErrBloomNameEmpty, err)
+
+	// 名称重复
+	bloomNames["dup"] = "dup"
+	b, _, err = NewBloom(WithName("dup"))
+	assert.Nil(t, b)
+	assert.Equal(t, ErrBloomNameRepeated, err)
+	delete(bloomNames, "dup")
+
+	// p > 1
+	b, _, err = NewBloom(WithName("test2"), WithFalsePositiveRate(1.1))
+	assert.Nil(t, b)
+	assert.Equal(t, ErrBloomFalseProbabilityThanOne, err)
+
+	// p < 0
+	b, _, err = NewBloom(WithName("test3"), WithFalsePositiveRate(-0.1))
+	assert.Nil(t, b)
+	assert.Equal(t, ErrBloomFalseProbabilityNegative, err)
+}
+
+// TestBloom_WithLogger 测试 WithLogger Option
+func TestBloom_WithLogger(t *testing.T) {
+	logger, err := kitlog.NewLogger()
+	assert.NoError(t, err)
+	b, _, err := NewBloom(WithName("withlogger"), WithLogger(logger))
+	assert.NoError(t, err)
+	assert.NotNil(t, b)
+	// 断言 logger 字段被正确设置
+	bb, ok := b.(*bloom)
+	assert.True(t, ok)
+	assert.Equal(t, logger, bb.logger)
+}
+
+// TestMockBloom_AllMethods 形式化覆盖 MockBloom 所有方法
+func TestMockBloom_AllMethods(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockBloom(ctrl)
+	mock.EXPECT().Contain(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+	mock.EXPECT().GroupContain(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+	mock.EXPECT().GroupPut(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mock.EXPECT().Put(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	_, _ = mock.Contain(context.Background(), "v")
+	_, _ = mock.GroupContain(context.Background(), "g", "v")
+	_ = mock.GroupPut(context.Background(), "g", "v")
+	_ = mock.Put(context.Background(), "v")
+}
+
+// TestMockStore_AllMethods 形式化覆盖 MockStore 所有方法
+func TestMockStore_AllMethods(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockStore(ctrl)
+	mock.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mock.EXPECT().Exist(gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+
+	_ = mock.Add(context.Background(), "k", []uint64{1, 2})
+	_, _ = mock.Exist(context.Background(), "k", []uint64{1, 2})
 }
