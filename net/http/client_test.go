@@ -51,7 +51,11 @@ func mockHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte("post-" + string(b)))
 	case "/form":
-		r.ParseForm()
+		if err := r.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("parse form error"))
+			return
+		}
 		w.Header().Set("Content-Type", "application/x-www-form-urlencoded")
 		_, _ = w.Write([]byte(r.Form.Encode()))
 	case "/json":
@@ -97,8 +101,8 @@ func TestClient_AllScenarios(t *testing.T) {
 			want:   http.StatusOK,
 			check: func(t *testing.T, resp *http.Response, err error) {
 				assert.NoError(t, err)
-				assert.Equal(t, http.StatusOK, resp.StatusCode)
 				if resp != nil {
+					assert.Equal(t, http.StatusOK, resp.StatusCode)
 					b, _ := io.ReadAll(resp.Body)
 					_ = resp.Body.Close()
 					t.Logf("GET body: %s", string(b))
@@ -113,8 +117,8 @@ func TestClient_AllScenarios(t *testing.T) {
 			want:   http.StatusNoContent,
 			check: func(t *testing.T, resp *http.Response, err error) {
 				assert.NoError(t, err)
-				assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 				if resp != nil {
+					assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 					_ = resp.Body.Close()
 				}
 			},

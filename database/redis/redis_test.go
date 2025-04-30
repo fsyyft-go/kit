@@ -370,7 +370,11 @@ func TestRedis_BusinessCases(t *testing.T) {
 		// 订阅频道
 		channel := "test:pubsub:channel"
 		pubsub := redis.Subscribe(ctx, channel)
-		defer pubsub.Close()
+		defer func() {
+			if err := pubsub.Close(); err != nil {
+				t.Errorf("pubsub.Close() 应无错误: %v", err)
+			}
+		}()
 		// 发布消息
 		msg := "hello_pubsub"
 		go func() {
