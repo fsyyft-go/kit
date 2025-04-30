@@ -98,7 +98,9 @@ type (
 
 		transport *http.Transport // 传输层配置。
 
-		hook Hook // 钩子实现。
+		hook     Hook          // 钩子实现。
+		logSlow  time.Duration // 慢请求阈值。
+		logError bool          // 是否记录错误。
 
 		logger kiglog.Logger // 日志记录器。
 
@@ -122,6 +124,8 @@ func NewClient(opts ...Option) Client {
 		maxConnsPerHost:     maxConnsPerHostDefault,
 		maxIdleConnsPerHost: maxIdleConnsPerHostDefault,
 		maxIdleConns:        maxIdleConnsDefault,
+		logSlow:             logSlowDefault,
+		logError:            logErrorDefault,
 		logger:              kiglog.GetLogger(),
 	}
 
@@ -151,9 +155,17 @@ func NewClient(opts ...Option) Client {
 
 	if nil == c.hook {
 		hm := NewHookManager()
+		if c.logSlow > 0 {
+			ls := NewSlowHook(c.logger, c.logSlow)
+			hm.AddHook(ls)
+		}
 		if c.traceEnable {
 			th := NewTraceHook(c.logger)
 			hm.AddHook(th)
+		}
+		if c.logError {
+			le := NewLogErrorHook(c.logger)
+			hm.AddHook(le)
 		}
 		c.hook = hm
 	}

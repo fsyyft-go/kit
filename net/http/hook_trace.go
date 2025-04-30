@@ -11,6 +11,7 @@ import (
 	"time"
 
 	kitlog "github.com/fsyyft-go/kit/log"
+	kitgoroutine "github.com/fsyyft-go/kit/runtime/goroutine"
 )
 
 type (
@@ -201,7 +202,9 @@ func (h *traceHook) After(ctx *HookContext) error {
 				l = l.WithField("remoteAddr", i.DNSDoneInfo.Addrs[0].String())
 			}
 		}
-		l.Debug("")
+		_ = kitgoroutine.Submit(func() {
+			l.Debug("")
+		})
 
 	}
 	return nil

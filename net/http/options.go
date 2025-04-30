@@ -40,6 +40,11 @@ var (
 	// maxIdleConnsDefault 为所有主机的最大空闲连接数默认值。
 	maxIdleConnsDefault = 1024
 
+	// logSlowDefault 为慢请求阈值默认值。
+	logSlowDefault = 10 * time.Second
+	// logErrorDefault 为是否记录错误默认值。
+	logErrorDefault = true
+
 	// dialTimeoutDefault 为拨号超时时间默认值。
 	dialTimeoutDefault = 5 * time.Second
 	// dialKeepAliveDefault 为拨号保持活动时间默认值。
@@ -158,6 +163,32 @@ func WithMaxIdleConnsPerHost(maxIdleConnsPerHost int) Option {
 func WithMaxIdleConns(maxIdleConns int) Option {
 	return func(c *client) {
 		c.maxIdleConns = maxIdleConns
+	}
+}
+
+// WithLogSlow 设置 HTTP 客户端的慢请求阈值。
+//
+// 参数：
+//   - logSlow time.Duration：自定义的慢请求阈值。
+//
+// 返回值：
+//   - Option：用于设置慢请求阈值的配置项。
+func WithLogSlow(logSlow time.Duration) Option {
+	return func(c *client) {
+		c.logSlow = logSlow
+	}
+}
+
+// WithLogError 设置 HTTP 客户端的错误记录功能开关。
+//
+// 参数：
+//   - logError bool：是否启用错误记录功能。
+//
+// 返回值：
+//   - Option：用于设置错误记录功能的配置项。
+func WithLogError(logError bool) Option {
+	return func(c *client) {
+		c.logError = logError
 	}
 }
 
