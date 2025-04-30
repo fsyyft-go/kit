@@ -10,6 +10,15 @@ type (
 	Option func(*redisClient)
 )
 
+// 以下为 Redis 客户端的默认参数配置。
+// 可通过 Option 机制覆盖。
+var (
+	// addrDefault 为 Redis 服务器默认地址。
+	addrDefault = "127.0.0.1:6379"
+	// passwordDefault 为 Redis 服务器默认密码。
+	passwordDefault = "redis*2025"
+)
+
 // WithAddr 设置 Redis 服务器的地址。
 //
 // 参数：

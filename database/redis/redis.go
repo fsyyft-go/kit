@@ -81,13 +81,6 @@ type (
 	}
 )
 
-var (
-	// addrDefault 是 Redis 服务器的默认地址。
-	addrDefault = "127.0.0.1:6379"
-	// passwordDefault 是 Redis 服务器的默认密码。
-	passwordDefault = "redis*2025"
-)
-
 // NewRedis 创建一个新的 Redis 客户端实例。
 //
 // 参数：
