@@ -33,9 +33,6 @@ var (
 )
 
 type (
-	// Option 定义了布隆过滤器的配置选项类型。
-	Option func(b *bloom)
-
 	// Bloom 定义了布隆过滤器的核心接口。
 	// 该接口提供了基本的元素判断和添加功能，以及分组操作的支持。
 	// 布隆过滤器的主要特点是空间效率高，但可能存在误判（假阳性）。
@@ -122,9 +119,8 @@ type (
 	// bloom 是布隆过滤器的具体实现结构体。
 	// 它包含了布隆过滤器所需的所有配置参数和存储接口。
 	bloom struct {
-		name  string // name 是布隆过滤器的名称，用于区分不同的过滤器实例
-		store Store  // store 是底层存储接口的实现
-
+		name   string // name 是布隆过滤器的名称，用于区分不同的过滤器实例
+		store  Store  // store 是底层存储接口的实现
 		logger kitlog.Logger
 
 		n uint64  // n 是预计要存储的元素数量
@@ -133,71 +129,6 @@ type (
 		k uint    // k 是使用的哈希函数的数量
 	}
 )
-
-// WithName 设置布隆过滤器的名称。
-//
-// 参数：
-//   - name：布隆过滤器的名称。
-//
-// 返回值：
-//   - Option：配置选项函数。
-func WithName(name string) Option {
-	return func(b *bloom) {
-		b.name = name
-	}
-}
-
-// WithStore 设置布隆过滤器的存储接口。
-//
-// 参数：
-//   - store：存储接口实现。
-//
-// 返回值：
-//   - Option：配置选项函数。
-func WithStore(store Store) Option {
-	return func(b *bloom) {
-		b.store = store
-	}
-}
-
-// WithLogger 设置布隆过滤器的日志记录器。
-//
-// 参数：
-//   - logger：日志记录器实例。
-//
-// 返回值：
-//   - Option：配置选项函数。
-func WithLogger(logger kitlog.Logger) Option {
-	return func(b *bloom) {
-		b.logger = logger
-	}
-}
-
-// WithExpectedElements 设置布隆过滤器预计要存储的元素数量。
-//
-// 参数：
-//   - n：预计元素数量。
-//
-// 返回值：
-//   - Option：配置选项函数。
-func WithExpectedElements(n uint64) Option {
-	return func(b *bloom) {
-		b.n = n
-	}
-}
-
-// WithFalsePositiveRate 设置布隆过滤器的期望误判率。
-//
-// 参数：
-//   - p：期望误判率。
-//
-// 返回值：
-//   - Option：配置选项函数。
-func WithFalsePositiveRate(p float64) Option {
-	return func(b *bloom) {
-		b.p = p
-	}
-}
 
 // NewBloom 创建一个新的布隆过滤器实例。
 //
@@ -208,12 +139,13 @@ func WithFalsePositiveRate(p float64) Option {
 //   - Bloom：实现了 Bloom 接口的布隆过滤器实例。
 func NewBloom(opts ...Option) (Bloom, func(), error) {
 	b := &bloom{
-		name:  "default",
-		store: NewMemoryStore(0),
-		n:     0,
-		m:     0,
-		p:     0.01, // 默认误判率为 1%。
-		k:     0,
+		name:   nameDefault,
+		store:  storeDefault,
+		n:      expectedElementsDefault,
+		m:      0,
+		p:      falsePositiveRateDefault, // 默认误判率为 1%。
+		k:      0,
+		logger: kitlog.GetLogger(),
 	}
 
 	// 应用用户提供的配置选项。
