@@ -57,6 +57,24 @@ type (
 		// 返回值：
 		//   - *Cmd：命令执行结果
 		Expire(ctx context.Context, key string, expiration time.Duration) *Cmd
+
+		// ScriptFlush 清空脚本缓存。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制命令的执行
+		//
+		// 返回值：
+		//   - *StatusCmd：命令执行状态
+		ScriptFlush(ctx context.Context) *StatusCmd
+
+		// ScriptKill 终止当前正在执行的脚本。
+		//
+		// 参数：
+		//   - ctx：上下文对象，用于控制命令的执行
+		//
+		// 返回值：
+		//   - *StatusCmd：命令执行状态
+		ScriptKill(ctx context.Context) *StatusCmd
 	}
 
 	// redisExtension 是 RedisExtension 接口的具体实现。
@@ -268,4 +286,33 @@ func (r *redisExtension) Del(ctx context.Context, key string) *Cmd {
 //   - *Cmd：命令执行结果
 func (r *redisExtension) Expire(ctx context.Context, key string, expiration time.Duration) *Cmd {
 	return r.redis.Do(ctx, "EXPIRE", key, expiration.Seconds())
+}
+
+// ScriptFlush 清空脚本缓存。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制命令的执行
+//
+// 返回值：
+//   - *StatusCmd：命令执行状态
+func (r *redisExtension) ScriptFlush(ctx context.Context) *StatusCmd {
+	// 通过类型断言调用底层实现，确保兼容接口
+	if c, ok := r.redis.(*redisClient); ok {
+		return c.ScriptFlush(ctx)
+	}
+	return nil
+}
+
+// ScriptKill 终止当前正在执行的脚本。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制命令的执行
+//
+// 返回值：
+//   - *StatusCmd：命令执行状态
+func (r *redisExtension) ScriptKill(ctx context.Context) *StatusCmd {
+	if c, ok := r.redis.(*redisClient); ok {
+		return c.ScriptKill(ctx)
+	}
+	return nil
 }
