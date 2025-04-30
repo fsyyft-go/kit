@@ -8,12 +8,15 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-kratos/kratos/v2 v2.8.4
 	github.com/go-sql-driver/mysql v1.9.2
+	github.com/golang/mock v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/prometheus/client_golang v1.22.0
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/sirupsen/logrus v1.9.3
+	github.com/spaolacci/murmur3 v1.1.0
+	github.com/spf13/cast v1.7.1
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
 	gorm.io/driver/mysql v1.5.7
@@ -49,7 +52,6 @@ require (
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lestrrat-go/strftime v1.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
