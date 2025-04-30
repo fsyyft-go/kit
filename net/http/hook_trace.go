@@ -59,6 +59,26 @@ type (
 	}
 )
 
+func (i *traceInfo) DNSUseTime() time.Duration {
+	if i.TimeDNSDone.IsZero() || i.TimeDNSStart.IsZero() {
+		return 0
+	}
+	return i.TimeDNSDone.Sub(i.TimeDNSStart)
+}
+
+func (i *traceInfo) ConnectUseTime() time.Duration {
+	if i.TimeGetConn.IsZero() || i.TimeGotConn.IsZero() {
+		return 0
+	}
+	return i.TimeGotConn.Sub(i.TimeGetConn)
+}
+
+func (i *traceInfo) TLSUseTime() time.Duration {
+	if i.TimeTLSHandshakeStart.IsZero() || i.TimeTLSHandshakeDone.IsZero() {
+		return 0
+	}
+	return i.TimeTLSHandshakeDone.Sub(i.TimeTLSHandshakeStart)
+}
 func (h *traceHook) Before(ctx *HookContext) error {
 	traceInfo := &traceInfo{
 		TimeConnectStart:    make([]time.Time, 0),
@@ -171,8 +191,18 @@ func (h *traceHook) Before(ctx *HookContext) error {
 }
 
 func (h *traceHook) After(ctx *HookContext) error {
-	if traceInfo, ok := ctx.GetHookValue("traceInfo"); ok {
-		h.logger.Debug(traceInfo)
+	if ti, ok := ctx.GetHookValue("traceInfo"); ok {
+		l := h.logger
+		if i, ok := ti.(*traceInfo); ok {
+			l = l.WithField("dnsUseTime", i.DNSUseTime())
+			l = l.WithField("connectUseTime", i.ConnectUseTime())
+			l = l.WithField("tlsUseTime", i.TLSUseTime())
+			if nil != i.DNSDoneInfo.Addrs {
+				l = l.WithField("remoteAddr", i.DNSDoneInfo.Addrs[0].String())
+			}
+		}
+		l.Debug("")
+
 	}
 	return nil
 }
