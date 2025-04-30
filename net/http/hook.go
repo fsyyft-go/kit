@@ -14,6 +14,8 @@ import (
 var (
 	// 断言 HookContext 实现了 context.Context 接口。
 	_ context.Context = (*HookContext)(nil)
+	// 断言 HookManager 实现了 Hook 接口。
+	_ Hook = (*HookManager)(nil)
 )
 
 type (
@@ -36,7 +38,7 @@ type (
 		// 原始操作返回的错误。
 		originError error
 		// 原始操作的结果。
-		originResult any
+		originResult *http.Response
 		// 用于存储钩子相关的键值对数据。
 		hookMap sync.Map
 	}
@@ -65,10 +67,10 @@ func NewHookContext(ctx context.Context, method, url string, request *http.Reque
 // SetResult 设置操作结果和结束时间。
 //
 // 参数：
-//   - result：操作的结果，可以是任意类型。
+//   - response：HTTP 返回对象。
 //   - err：操作过程中产生的错误，如果没有错误则为 nil。
-func (h *HookContext) SetResult(result any, err error) {
-	h.originResult = result
+func (h *HookContext) SetResult(response *http.Response, err error) {
+	h.originResult = response
 	h.originError = err
 	h.endTime = time.Now()
 }
