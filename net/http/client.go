@@ -293,7 +293,7 @@ func (c *client) PostJSON(ctx context.Context, url string, data any) (*http.Resp
 var (
 	// clientDefault 为全局默认 HTTP 客户端实例。
 	clientDefault       Client
-	clientDefaultLocker sync.Locker
+	clientDefaultLocker sync.Locker = &sync.Mutex{}
 )
 
 // clientDef 获取全局默认 HTTP 客户端实例。
