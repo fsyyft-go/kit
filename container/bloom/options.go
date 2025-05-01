@@ -5,6 +5,7 @@
 package bloom
 
 import (
+	kitredis "github.com/fsyyft-go/kit/database/redis"
 	kitlog "github.com/fsyyft-go/kit/log"
 )
 
@@ -22,7 +23,7 @@ var (
 	// storeDefault 为布隆过滤器默认存储实现。
 	storeDefault = NewMemoryStore(0)
 	// expectedElementsDefault 为布隆过滤器默认预计元素数量。
-	expectedElementsDefault uint64 = 0
+	expectedElementsDefault uint64 = 65536
 	// falsePositiveRateDefault 为布隆过滤器默认误判率。
 	falsePositiveRateDefault float64 = 0.01
 )
@@ -49,6 +50,22 @@ func WithName(name string) Option {
 //   - Option：配置选项函数。
 func WithStore(store Store) Option {
 	return func(b *bloom) {
+		b.store = store
+	}
+}
+
+// WithRedis 设置布隆过滤器的 Redis 客户端。
+//
+// 参数：
+//   - redis：Redis 客户端实例。
+//
+// 返回值：
+func WithRedis(redis kitredis.Redis) Option {
+	return func(b *bloom) {
+		store, err := NewRedisStore(redis)
+		if err != nil {
+			panic(err)
+		}
 		b.store = store
 	}
 }

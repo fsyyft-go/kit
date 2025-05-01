@@ -176,7 +176,7 @@ func NewBloom(opts ...Option) (Bloom, func(), error) {
 	b.k = k
 	b.m = m
 
-	return b, nil, nil
+	return b, func() {}, nil
 }
 
 // Contain 实现了 Bloom 接口的 Contain 方法，用于判断指定元素是否可能存在于布隆过滤器中。
