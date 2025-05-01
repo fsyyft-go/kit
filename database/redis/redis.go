@@ -67,6 +67,12 @@ type (
 		// 返回值：
 		//   - *PubSub：发布订阅客户端对象
 		PSubscribe(ctx context.Context, channels ...string) *PubSub
+
+		// Close 关闭 Redis 客户端。
+		//
+		// 返回值：
+		//   - error：关闭过程中发生的错误
+		Close() error
 	}
 
 	// redisClient 是 Redis 接口的具体实现。
@@ -100,6 +106,8 @@ func NewRedis(opts ...Option) Redis {
 		Addr:     o.addr,
 		Password: o.password,
 	})
+
+	o.client.Close()
 	return o
 }
 
@@ -265,4 +273,12 @@ func (c *redisClient) ScriptFlush(ctx context.Context) *StatusCmd {
 //   - *StatusCmd：命令执行状态
 func (c *redisClient) ScriptKill(ctx context.Context) *StatusCmd {
 	return c.client.ScriptKill(ctx)
+}
+
+// Close 关闭 Redis 客户端。
+//
+// 返回值：
+//   - error：关闭过程中发生的错误
+func (c *redisClient) Close() error {
+	return c.client.Close()
 }

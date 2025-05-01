@@ -316,3 +316,11 @@ func (r *redisExtension) ScriptKill(ctx context.Context) *StatusCmd {
 	}
 	return nil
 }
+
+// Close 关闭 Redis 客户端。
+//
+// 返回值：
+//   - error：关闭过程中发生的错误
+func (r *redisExtension) Close() error {
+	return r.redis.Close()
+}
