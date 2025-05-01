@@ -6,6 +6,7 @@ package config
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -319,4 +320,70 @@ func TestInit(t *testing.T) {
 	val, exists := target["key"]
 	assert.True(t, exists, "默认解析器未能解析 base64 值")
 	assert.Equal(t, "Hello World", val, "默认解析器解析 base64 值不正确")
+}
+
+// TestRegisterResolveEnv 测试 registerResolveEnv 函数是否正确处理环境变量解析。
+func TestRegisterResolveEnv(t *testing.T) {
+	// 定义测试用例。
+	tests := []struct {
+		name           string                 // 测试用例名称。
+		envKey         string                 // 环境变量名。
+		envVal         string                 // 环境变量值。
+		target         map[string]interface{} // 目标映射。
+		key            string                 // 键名。
+		val            string                 // 值。
+		expectedTarget map[string]interface{} // 期望的目标映射。
+		setEnv         bool                   // 是否设置环境变量。
+	}{
+		{
+			name:   "环境变量存在",
+			envKey: "TEST_ENV_KEY",
+			envVal: "test_env_value",
+			target: map[string]interface{}{"key.env": "TEST_ENV_KEY"},
+			key:    "key.env",
+			val:    "TEST_ENV_KEY",
+			expectedTarget: map[string]interface{}{
+				"key.env": "TEST_ENV_KEY",
+				"key":     "test_env_value",
+			},
+			setEnv: true,
+		},
+		{
+			name:   "环境变量不存在",
+			envKey: "NOT_EXIST_ENV_KEY",
+			envVal: "",
+			target: map[string]interface{}{"key.env": "NOT_EXIST_ENV_KEY"},
+			key:    "key.env",
+			val:    "NOT_EXIST_ENV_KEY",
+			expectedTarget: map[string]interface{}{
+				"key.env": "NOT_EXIST_ENV_KEY",
+			},
+			setEnv: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setEnv {
+				// 设置环境变量。
+				err := os.Setenv(tt.envKey, tt.envVal)
+				assert.NoError(t, err, "设置环境变量失败")
+				defer func() {
+					_ = os.Unsetenv(tt.envKey)
+				}()
+			} else {
+				_ = os.Unsetenv(tt.envKey)
+			}
+
+			// 调用 registerResolveEnv 函数。
+			_ = registerResolveEnv(tt.target, tt.key, tt.val)
+
+			// 验证目标映射是否符合预期。
+			for k, expectedV := range tt.expectedTarget {
+				actualV, exists := tt.target[k]
+				assert.True(t, exists, "目标映射中缺少键 %s", k)
+				assert.Equal(t, expectedV, actualV, "键 %s 的值不匹配", k)
+			}
+		})
+	}
 }

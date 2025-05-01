@@ -73,6 +73,11 @@ func (o OpType) String() string {
 }
 
 // HookContext 包含数据库操作的上下文信息。
+// 该结构体提供了以下功能：
+// - 记录数据库操作的详细信息，包括操作类型、SQL 语句和参数。
+// - 跟踪操作的执行时间和结果。
+// - 提供自定义数据的存储和访问。
+// - 支持上下文传递和取消。
 type HookContext struct {
 	// 原始上下文对象。
 	originContext context.Context
@@ -247,6 +252,11 @@ func (h *HookContext) Value(key interface{}) interface{} {
 }
 
 // Hook 定义数据库操作的钩子接口。
+// 该接口提供了以下功能：
+// - 在数据库操作执行前后执行自定义逻辑。
+// - 支持错误处理和日志记录。
+// - 支持性能监控和统计。
+// - 支持自定义的数据处理。
 type Hook interface {
 	// Before 在操作执行前调用。
 	//
@@ -268,6 +278,11 @@ type Hook interface {
 }
 
 // HookManager 管理多个 Hook 的执行。
+// 该结构体提供了以下功能：
+// - 注册和管理多个钩子
+// - 按顺序执行钩子链
+// - 支持钩子的动态添加和移除
+// - 提供钩子执行的错误处理
 type HookManager struct {
 	// hooks 存储注册的所有钩子。
 	hooks []Hook

@@ -7,6 +7,7 @@
 - 支持对带特定后缀的配置值进行自动解码
 - 支持 base64 解码（使用 .b64 后缀）
 - 支持 DES 解密（使用 .des 后缀）
+- 支持环境变量取值（使用 .env 后缀）
 - 与 Kratos 配置系统无缝集成
 - 提供命令行工具进行 DES 加密解密操作
 
@@ -43,6 +44,8 @@ app:
   name: example-kratos-config
   password.des: A16121360A42757F6B6307A8AD8C37163647D18BE7921339  # DES 加密的密码
   addr.b63: 5oiR5pivIGJhc2U2NCDov4fnmoQgdGVzdA==  # base64 编码的地址
+env:
+  lang.env: "LANG"
 ```
 
 ### 3. 代码示例
@@ -50,32 +53,63 @@ app:
 #### 基本配置加载
 
 ```go
-// 创建配置管理器实例
-c := config.New(
-    // 设置配置源为文件源，指定配置文件路径
-    config.WithSource(
-        file.NewSource(configPath),
-    ),
-    // 设置自定义解码器，支持特殊格式处理
-    config.WithDecoder(kitkratosconfig.NewDecoder().Decode),
+package main
+
+import (
+    "fmt"
+    
+    "github.com/go-kratos/kratos/v2/config"
+    "github.com/go-kratos/kratos/v2/config/file"
+    
+    kitkratosconfig "github.com/fsyyft-go/kit/kratos/config"
 )
 
-// 加载配置
-if err := c.Load(); err != nil {
-    panic(err)
+// Config 结构体定义了配置文件的结构。
+type Config struct {
+	// App 嵌套结构体包含应用程序相关配置。
+	App struct {
+		// Name 是应用程序名称。
+		Name string `json:"name"`
+		// Password 是应用程序密码，可能是从 DES 解密后解码得到的。
+		Password string `json:"password"`
+		// Addr 是应用程序地址，可能是从 base64 编码后解码得到的。
+		Addr string `json:"addr"`
+	} `json:"app"`
+	// Env 是环境变量配置。
+	Env struct {
+		// Lang 是系统语言。
+		Lang string `json:"lang"`
+	} `json:"env"`
 }
 
-// 声明配置结构体
-var cfg Config
-// 将加载的配置扫描到结构体中
-if err := c.Scan(&cfg); err != nil {
-    panic(err)
-}
+func main() {
+    // 创建配置管理器实例。
+	c := config.New(
+		// 设置配置源为文件源，指定配置文件路径。
+		config.WithSource(
+			file.NewSource(configPath),
+		),
+		// 设置自定义解码器，支持特殊格式处理（如 base64 解码）。
+		config.WithDecoder(kitkratosconfig.NewDecoder().Decode),
+	)
+	// 加载配置，如果出错则触发 panic。
+	if err := c.Load(); err != nil {
+		panic(err)
+	}
 
-// 使用配置（已自动解码）
-fmt.Printf("%+v\n", cfg.App.Name)
-fmt.Printf("%+v\n", cfg.App.Password)  // 已自动解密
-fmt.Printf("%+v\n", cfg.App.Addr)      // 已自动解码
+	// 声明配置结构体变量。
+	var cfg Config
+	// 将加载的配置扫描到结构体中，如果出错则触发 panic。
+	if err := c.Scan(&cfg); err != nil {
+		panic(err)
+	}
+
+	// 打印配置信息。
+	fmt.Printf("App Name: %+v\n", cfg.App.Name)
+	fmt.Printf("App Password: %+v\n", cfg.App.Password)
+	fmt.Printf("App Addr: %+v\n", cfg.App.Addr)
+	fmt.Printf("Env Lang: %+v\n", cfg.Env.Lang)
+}
 ```
 
 #### 使用 DES 加密/解密工具
@@ -94,65 +128,16 @@ fmt.Printf("%+v\n", cfg.App.Addr)      // 已自动解码
 ### 4. 输出示例
 
 ```
-pwd /path/to/example/kratos/config
-example-kratos-config
-password123
-我是 base64 编码的 test
-```
-
-### 5. 在其他项目中使用
-
-```go
-package main
-
-import (
-    "fmt"
-    
-    "github.com/go-kratos/kratos/v2/config"
-    "github.com/go-kratos/kratos/v2/config/file"
-    kitkratosconfig "github.com/fsyyft-go/kit/kratos/config"
-)
-
-// 定义配置结构
-type Config struct {
-    App struct {
-        Name     string `json:"name"`
-        Password string `json:"password"`  // 对应 password.des
-        ApiKey   string `json:"apiKey"`    // 对应 apiKey.b64
-    } `json:"app"`
-}
-
-func main() {
-    // 创建配置实例
-    c := config.New(
-        config.WithSource(
-            file.NewSource("config.yaml"),
-        ),
-        // 设置自定义解码器
-        config.WithDecoder(kitkratosconfig.NewDecoder().Decode),
-    )
-    
-    // 加载配置
-    if err := c.Load(); err != nil {
-        panic(err)
-    }
-
-    // 解析配置到结构体
-    var cfg Config
-    if err := c.Scan(&cfg); err != nil {
-        panic(err)
-    }
-
-    // 使用配置（已自动解码）
-    fmt.Printf("App Name: %s\n", cfg.App.Name)
-    fmt.Printf("Password (decoded): %s\n", cfg.App.Password)
-    fmt.Printf("API Key (decoded): %s\n", cfg.App.ApiKey)
-}
+pwd /development/github.com/fsyyft-go/kit
+App Name: example-kratos-config
+App Password: 中文配置示例
+App Addr: 我是 base64 过的 test
+Env Lang: zh_CN.UTF-8
 ```
 
 ## 注意事项
 
-- 配置键名需要使用特定后缀（.b64、.des）才能触发自动解码
+- 配置键名需要使用特定后缀（.b64、.des、.env）才能触发自动解码
 - 解码后的值会存储在去除后缀的键名下
 - DES 加密默认使用内置密钥，可以通过命令行工具指定自定义密钥
 - 确保 base64 编码和 DES 加密的值格式正确，否则会导致解码错误

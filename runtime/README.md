@@ -121,6 +121,7 @@ type Runner interface {
 runtime 包包含以下子包：
 
 - [goroutine](./goroutine/README.md) - 提供与 goroutine 相关的功能，如获取 goroutine ID 等
+- [retry](./retry/README.md) - 提供通用的重试机制，支持带上下文和指数退避的函数重试，适用于网络请求、数据库操作等易失败场景
 
 ## 相关文档
 
@@ -141,7 +142,3 @@ runtime 包包含以下子包：
 ## 许可证
 
 本项目采用 MIT 许可证。查看 [LICENSE](../LICENSE) 文件了解更多信息。
-
-## 补充说明
-
-本文的大部分信息，由 AI 使用[模板](../ai/templates/docs/package_readme_template.md)根据[提示词](../ai/prompts/docs/package_readme_generator.md)自动生成，如有任何问题，请随时联系我。 

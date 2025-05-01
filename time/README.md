@@ -218,7 +218,3 @@ time 包的函数返回 `carbon.Carbon` 实例，不会返回错误。如果需�
 ## 许可证
 
 本项目采用 MIT 许可证。查看 [LICENSE](../LICENSE) 文件了解更多信息。
-
-## 补充说明
-
-本文的大部分信息，由 AI 使用[模板](../ai/templates/docs/package_readme_template.md)根据[提示词](../ai/prompts/docs/package_readme_generator.md)自动生成，如有任何问题，请随时联系我。
