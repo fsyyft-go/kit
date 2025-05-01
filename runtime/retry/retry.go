@@ -7,6 +7,7 @@ package retry
 
 import (
 	"context"
+	"time"
 )
 
 type (
@@ -62,6 +63,31 @@ func Retry(fn RetryableFunc, opts ...BackoffOption) error {
 //
 // 当前实现仅为占位，实际重试逻辑需后续补充。
 func RetryWithContext(ctx context.Context, fn RetryableFuncWithContext, opts ...BackoffOption) error {
-	// TODO: 实现重试逻辑。
-	return nil
+	var err error
+
+	b := NewBackoff(opts...)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			err = fn(ctx)
+			if err == nil {
+				// 执行成功，返回 nil，退出重试。
+				return nil
+			}
+
+			// 执行失败，等待下一次重试。
+			delay := b.Duration()
+			select {
+			case <-ctx.Done():
+				// 上下文已取消，返回错误。
+				return ctx.Err()
+			case <-time.After(delay):
+				// 等待下一次重试。
+				continue
+			}
+		}
+	}
 }
