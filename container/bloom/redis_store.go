@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	kitredis "github.com/fsyyft-go/kit/database/redis"
 )
@@ -87,7 +88,7 @@ func (s *redisStore) Exist(ctx context.Context, key string, hash []uint64) (bool
 	// 生成 Redis 脚本所需的 KEYS 和 ARGS 参数。
 	keys, args := s.generateKeysAndArgs(key, hash)
 	// 执行 Lua 脚本，批量获取所有哈希位的值。
-	result, err := s.redis.EvalSha(ctx, s.getScriptHash, keys, args...).Result()
+	result, err := s.evalScript(ctx, s.getScriptHash, bloomGetScript, keys, args)
 	if err != nil {
 		return false, err
 	}
@@ -118,11 +119,46 @@ func (s *redisStore) Add(ctx context.Context, key string, hash []uint64) error {
 	// 生成 Redis 脚本所需的 KEYS 和 ARGS 参数。
 	keys, args := s.generateKeysAndArgs(key, hash)
 	// 执行 Lua 脚本，批量设置所有哈希位为 1。
-	_, err := s.redis.EvalSha(ctx, s.setScriptHash, keys, args...).Result()
+	_, err := s.evalScript(ctx, s.setScriptHash, bloomSetScript, keys, args)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// evalScript 执行 Redis 脚本，并处理脚本不存在（NOSCRIPT）错误。
+//
+// 参数：
+//   - ctx：上下文对象，用于控制请求的生命周期。
+//   - scriptHash：脚本在 Redis 中的哈希值。
+//   - script：脚本内容。
+//   - keys：脚本所需的 KEYS 参数。
+//   - args：脚本所需的 ARGS 参数。
+//
+// 返回值：
+//   - any：脚本执行结果。
+//   - error：执行过程中发生的错误。
+func (s *redisStore) evalScript(ctx context.Context, scriptHash string, script string, keys []string, args []any) (any, error) {
+	result, err := s.redis.EvalSha(ctx, scriptHash, keys, args...).Result()
+	if err != nil {
+		// 检查是否为脚本不存在（NOSCRIPT）错误。
+		// Redis 返回的错误字符串通常包含 "NOSCRIPT" 关键字。
+		if strings.Contains(err.Error(), "NOSCRIPT") {
+			// 重新加载脚本。
+			_, loadErr := s.redis.ScriptLoad(ctx, script).Result()
+			if loadErr != nil {
+				return false, loadErr
+			}
+			// 再次尝试执行脚本。
+			result, err = s.redis.EvalSha(ctx, scriptHash, keys, args...).Result()
+			if err != nil {
+				return false, err
+			}
+		} else {
+			return false, err
+		}
+	}
+	return result, nil
 }
 
 // generateKeysAndArgs 生成 Redis 脚本调用所需的 KEYS 和 ARGS 参数列表。
