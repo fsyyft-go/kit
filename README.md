@@ -116,6 +116,10 @@ HTTP 适配器：提供 Kratos HTTP 服务器到 Gin 引擎的转换功能，支
 
 goroutine 管理工具：提供 goroutine ID 获取和高效的协程池实现。支持任务调度、资源管理和性能监控等功能，适用于并发任务处理和性能优化场景。[详细说明 →](runtime/goroutine/README.md)
 
+#### [runtime/retry](runtime/retry/)
+
+重试机制工具：提供通用的重试机制，支持带上下文和指数退避的函数重试，适用于网络请求、数据库操作等易失败场景。[详细说明 →](runtime/retry/README.md)
+
 ### [testing](testing/)
 
 测试日志工具：提供带有统一前缀的测试日志输出功能，使测试输出更加清晰易读。[详细说明 →](testing/README.md)
