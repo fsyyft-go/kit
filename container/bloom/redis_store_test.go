@@ -33,6 +33,12 @@ func TestRedisStoreSimple(t *testing.T) {
 		t.Skip("Redis 连接失败，跳过测试")
 	}
 
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Fatalf("Failed to close Redis client: %v", err)
+		}
+	}()
+
 	redisClient.Do(t.Context(), "DEL", "kit:bloom:test_bloom")
 
 	bloom, cleanup, err := NewBloom(WithRedis(redisClient), WithName("test_bloom"))
