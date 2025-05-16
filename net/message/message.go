@@ -52,9 +52,14 @@ type (
 	}
 
 	// GenerateMessageFunc 生成消息包结构体的方法类型，实现 Generator 接口。
-	// messageType 消息类型。
-	// payload 消息对应的字节数组的表示形式（不包含消息类型和长度）。
-	// 返回消息包。
+	//
+	// 参数：
+	//   - messageType: 消息类型。
+	//   - payload: 消息对应的字节数组的表示形式（不包含消息类型和长度）。
+	//
+	// 返回值：
+	//   - Message: 生成的消息包。
+	//   - error: 错误信息。
 	GenerateMessageFunc func(uint16, []byte) (Message, error)
 )
 

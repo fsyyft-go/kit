@@ -306,34 +306,70 @@ LoopSend:
 // generateMessage 生成消息，从 bufio.Scanner 解析出完整消息并还原为 Message 实例。
 //
 // 参数：
-//   - scanner: 消息包扫描器。
+//   - scanner: 消息包扫描器，负责从底层流中分割出完整的消息包字节数据。
+//     该 scanner 必须使用自定义的 scanMessage 分割函数，确保每次 Scan() 都返回一条完整的消息包。
+//     若为 nil，则无法进行消息解析。
 //
 // 返回值：
-//   - Message: 生成的消息实例。
-//   - error: 错误信息。
+//   - Message: 还原得到的消息对象，若解析失败则为 nil。
+//   - error:   解析过程中遇到的错误信息，若无错误则为 nil。
+//
+// 详细说明：
+//  1. 首先检查 scanner 是否为 nil，防止空指针异常。
+//  2. 检查 scanner 是否已发生错误（scanner.Err），若有则直接返回包装后的错误。
+//  3. 调用 scanner.Scan()，尝试扫描下一个完整的消息包（token）。
+//     - 若返回 false，说明数据流已结束或无更多消息，直接返回 nil。
+//  4. 获取扫描到的字节数据（data），该数据应为完整的消息包：
+//     - 前 2 字节为消息类型（uint16, BigEndian）。
+//     - 第 3-4 字节为 payload 长度（uint16, BigEndian），已在 scanMessage 阶段校验。
+//     - 第 5 字节起为 payload 数据。
+//  5. 解析消息类型字段，若解包失败则返回错误。
+//  6. 跳过前 4 字节，提取 payload 部分。
+//  7. 调用 FactoryGenerate，根据消息类型和 payload 生成具体的消息对象。
+//     - 若工厂未注册该类型或 payload 不合法，则返回包装后的错误。
+//  8. 返回生成的消息对象和错误信息。
+//
+// 异常处理：
+//   - 若 scanner 为 nil 或已出错，或消息类型解包失败，或工厂生成失败，均返回详细错误信息。
+//   - 若数据流结束或无消息，返回 (nil, nil)。
 func (c *conn) generateMessage(scanner *bufio.Scanner) (Message, error) {
+	// 定义返回的消息对象和错误变量。
 	var message Message
 	var err error
 
+	// 检查传入的 scanner 是否为 nil，防止空指针异常。
 	if nil == scanner {
+		// 如果 scanner 为空，返回错误。
 		err = cockroachdberrors.Newf("扫描器不能为空。")
+		// 检查 scanner 是否已经发生错误。
 	} else if errScanner := scanner.Err(); nil != errScanner {
+		// 如果 scanner 内部有错误，进行错误包装并返回。
 		err = cockroachdberrors.Wrap(errScanner, "扫描出错。")
+		// 调用 scanner.Scan()，尝试扫描下一个 token（即一条完整消息包）。
 	} else if scanner.Scan() {
+		// 获取扫描到的字节数据。
 		data := scanner.Bytes()
+		// 定义消息类型变量，初始为 0。
 		messageType := uint16(0)
+		// 从数据包前两个字节读取消息类型，采用大端序。
 		if errReadType := binary.Read(bytes.NewReader(data[:2]), binary.BigEndian, &messageType); nil != errReadType {
+			// 如果读取类型失败，进行错误包装并返回。
 			err = cockroachdberrors.Wrap(errReadType, "解包数据类型发生异常。")
 		} else {
+			// 跳过前 4 字节（2 字节类型 + 2 字节长度），获取 payload 部分。
 			payload := data[4:]
+			// 调用工厂方法，根据消息类型和 payload 生成具体的消息对象。
 			if msg, errGenerate := FactoryGenerate(messageType, payload); nil != errGenerate {
+				// 如果生成消息失败，进行错误包装并返回。
 				err = cockroachdberrors.Wrap(errGenerate, "数据包转消息发生异常。")
 			} else {
+				// 生成成功，赋值给返回变量。
 				message = msg
 			}
 		}
 	}
 
+	// 返回生成的消息对象和错误信息。
 	return message, err
 }
 
