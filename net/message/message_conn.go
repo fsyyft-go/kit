@@ -9,11 +9,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"math"
 	"net"
 	"sync"
 	"time"
 
 	cockroachdberrors "github.com/cockroachdb/errors"
+
+	kitgoroutine "github.com/fsyyft-go/kit/runtime/goroutine"
 )
 
 var (
@@ -116,12 +119,12 @@ func (c *conn) Closed() bool {
 // 参数：
 //   - ctx: 上下文，用于控制 goroutine 生命周期。
 func (c *conn) Start(ctx context.Context) {
-	go c.send(ctx)    // 启动发送消息的 goroutine。
-	go c.receive(ctx) // 启动接收消息的 goroutine。
+	_ = kitgoroutine.Submit(func() { c.send(ctx) })    // 启动发送消息的 goroutine。
+	_ = kitgoroutine.Submit(func() { c.receive(ctx) }) // 启动接收消息的 goroutine。
 
 	if c.heartbeatInterval > 0 {
 		ticker := time.NewTicker(c.heartbeatInterval)
-		go c.sendHeartbeat(ctx, ticker) // 启动定时发送心跳包的 goroutine。
+		_ = kitgoroutine.Submit(func() { c.sendHeartbeat(ctx, ticker) }) // 启动定时发送心跳包的 goroutine。
 	}
 }
 
@@ -183,16 +186,18 @@ func (c *conn) Write(b []byte) (n int, err error) {
 func (c *conn) Close() error {
 	var err error
 
-	// 可能出现不同的 goroutine 同时调用方法，需要加锁操作。
-	c.closedLocker.Lock()
-	defer c.closedLocker.Unlock()
-
 	if !c.closed {
-		err = c.conn.Close()
+		// 可能出现不同的 goroutine 同时调用方法，需要加锁操作。
+		c.closedLocker.Lock()
+		defer c.closedLocker.Unlock()
 
-		c.closed = true
+		if !c.closed {
+			err = c.conn.Close()
 
-		close(c.messageRead) // 关闭消息读取通道。
+			c.closed = true
+
+			close(c.messageRead) // 关闭消息读取通道。
+		}
 	}
 
 	return err
@@ -256,23 +261,45 @@ func (c *conn) SetWriteDeadline(t time.Time) error {
 //   - []byte: 完整数据包字节数组。
 //   - error: 错误信息。
 func (c *conn) pack(message Message) ([]byte, error) {
+	// 定义最终返回的数据包字节数组和错误变量。
 	var data []byte
 	var err error
 
+	// 创建一个字节缓冲区，用于顺序写入消息各字段。
 	buf := &bytes.Buffer{}
+
+	// 步骤 1：调用消息的 Pack 方法获取 payload 数据。
+	// 若 payload 封包失败，则直接返回错误。
 	if payload, errPayload := message.Pack(); nil != errPayload {
+		// 封包 payload 失败，进行错误包装并返回。
 		err = cockroachdberrors.Wrap(errPayload, "消息负载封包出现错误。")
+		// 步骤 2：独立校验 payload 长度是否超过 uint16 最大值（65535）。
+		// 若超出限制，直接返回错误，不再进行后续写入操作。
+	} else if payLoadLength := uint64(len(payload)); payLoadLength > math.MaxUint16 {
+		// payload 长度超限，返回详细错误信息。
+		err = cockroachdberrors.Newf("消息负载长度 %[1]d 超过 uint16 最大值 %[2]d。", payLoadLength, math.MaxUint16)
+		// 步骤 3：写入消息类型字段（2 字节，uint16，BigEndian）。
+		// 若写入失败，则返回错误。
 	} else if errWriteType := binary.Write(buf, binary.BigEndian, message.MessageType()); nil != errWriteType {
+		// 写入消息类型失败，进行错误包装并返回。
 		err = cockroachdberrors.Wrap(errWriteType, "消息类型封包出现错误。")
-	} else if errWriteLen := binary.Write(buf, binary.BigEndian, uint16(len(payload))); nil != errWriteLen { //nolint:gosec
-		// 注意：payload 的数据包长度不能超过 65535。
+		// 步骤 4：写入 payload 长度字段（2 字节，uint16，BigEndian）。
+		// 此时 payload 长度已保证不超限。
+		// 若写入失败，则返回错误。
+	} else if errWriteLen := binary.Write(buf, binary.BigEndian, uint16(payLoadLength)); nil != errWriteLen { //nolint:gosec
+		// 写入 payload 长度失败，进行错误包装并返回。
 		err = cockroachdberrors.Wrap(errWriteLen, "消息负载长度封包出现错误。")
+		// 步骤 5：写入 payload 数据本体。
+		// 若写入失败，则返回错误。
 	} else if errWritePayload := binary.Write(buf, binary.BigEndian, payload); nil != errWritePayload {
+		// 写入 payload 数据失败，进行错误包装并返回。
 		err = cockroachdberrors.Wrap(errWritePayload, "消息负载封包出现错误。")
+		// 步骤 6：所有字段写入成功，将缓冲区内容作为最终数据包返回。
 	} else {
 		data = buf.Bytes()
 	}
 
+	// 返回完整的数据包字节数组和错误信息。
 	return data, err
 }
 
