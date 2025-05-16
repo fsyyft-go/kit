@@ -103,7 +103,7 @@ func TestGenerateSingleStringMessage(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var payload []byte
-			if !(c.wantErr && c.msgType == SingleStringMessageType && c.input == "") {
+			if !c.wantErr || c.msgType != SingleStringMessageType || c.input != "" {
 				payload = []byte(c.input)
 			}
 			msg, err := GenerateSingleStringMessage(c.msgType, payload)
