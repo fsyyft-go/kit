@@ -5,6 +5,8 @@
 package message
 
 import (
+	"math"
+
 	cockroachdbErrors "github.com/cockroachdb/errors"
 )
 
@@ -55,6 +57,12 @@ func (m *singleStringMessage) Pack() ([]byte, error) {
 	}()
 
 	msg = []byte(m.message)
+
+	// 如果 msg 长度超过 uint16 最大值，则返回错误。
+	if len(msg) > math.MaxUint16 {
+		msg = nil
+		err = cockroachdbErrors.Newf("字符串消息长度 %[1]d 超过 uint16 最大值 %[2]d。", len(msg), math.MaxUint16)
+	}
 
 	return msg, err
 }

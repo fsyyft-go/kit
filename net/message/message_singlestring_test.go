@@ -117,3 +117,17 @@ func TestGenerateSingleStringMessage(t *testing.T) {
 		})
 	}
 }
+
+// TestSingleStringMessage_Pack_超长字符串测试
+func TestSingleStringMessage_Pack_TooLong(t *testing.T) {
+	// 构造长度超过 uint16 最大值的字符串。
+	longStr := make([]byte, 1+0xFFFF) // math.MaxUint16 == 65535
+	for i := range longStr {
+		longStr[i] = 'a'
+	}
+	msg := NewSingleStringMessage(string(longStr))
+	payload, err := msg.Pack()
+	// 断言应返回错误，payload 为空。
+	assert.Error(t, err, "超长字符串应返回错误")
+	assert.Empty(t, payload, "payload 应为空")
+}
