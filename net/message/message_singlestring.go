@@ -1,3 +1,7 @@
+// Copyright 2025 fsyyft-go
+//
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 package message
 
 import (
@@ -5,32 +9,41 @@ import (
 )
 
 var (
+	// 断言 singleStringMessage 实现 Message 和 SingleStringMessage 接口。
 	_ Message             = (*singleStringMessage)(nil)
 	_ SingleStringMessage = (*singleStringMessage)(nil)
 )
 
 type (
-	// SingleStringMessage 简单的字符串消息包。
+	// SingleStringMessage 简单的字符串消息包接口。
 	SingleStringMessage interface {
-		// Message 字符串消息。
+		// Message 返回字符串消息内容。
+		//
+		// 返回值：
+		//   - string: 字符串消息内容。
 		Message() string
 	}
 
 	// singleStringMessage 简单的字符串消息包，实现接口 Message 和 SingleStringMessage。
 	singleStringMessage struct {
-		messageType uint16 // 消息类型；
-		message     string // 字符串消息。
+		messageType uint16 // 消息类型。
+		message     string // 字符串消息内容。
 	}
 )
 
-// MessageType 消息类型；
+// MessageType 返回消息类型。
+//
+// 返回值：
+//   - uint16: 消息类型。
 func (m *singleStringMessage) MessageType() uint16 {
 	return m.messageType
 }
 
-// Pack 封包；
+// Pack 将字符串消息内容转换为 payload 字节数组。
 //
-// 返回消息对应的 payload 的字节数组表示形式（不包含消息类型和长度）。
+// 返回值：
+//   - []byte: 字符串消息的字节数组。
+//   - error: 错误信息。
 func (m *singleStringMessage) Pack() ([]byte, error) {
 	var msg []byte
 	var err error
@@ -46,9 +59,13 @@ func (m *singleStringMessage) Pack() ([]byte, error) {
 	return msg, err
 }
 
-// Unpack 拆包；
+// Unpack 从 payload 字节数组还原字符串消息内容。
 //
-// payload 消息对应的字节数组的表示形式（不包含消息类型和长度）。
+// 参数：
+//   - payload: 字符串消息的字节数组。
+//
+// 返回值：
+//   - error: 错误信息。
 func (m *singleStringMessage) Unpack(payload []byte) error {
 	var err error
 
@@ -63,14 +80,21 @@ func (m *singleStringMessage) Unpack(payload []byte) error {
 	return err
 }
 
-// Message 字符串消息。
+// Message 返回字符串消息内容。
+//
+// 返回值：
+//   - string: 字符串消息内容。
 func (m *singleStringMessage) Message() string {
 	return m.message
 }
 
-// NewSingleStringMessage 新创建一个简单的字符串消息包；
+// NewSingleStringMessage 创建一个简单的字符串消息包。
 //
-// message 字符串消息。
+// 参数：
+//   - message: 字符串消息内容。
+//
+// 返回值：
+//   - *singleStringMessage: 新建的字符串消息包。
 func NewSingleStringMessage(message string) *singleStringMessage {
 	m := &singleStringMessage{
 		messageType: SingleStringMessageType,
@@ -80,12 +104,15 @@ func NewSingleStringMessage(message string) *singleStringMessage {
 	return m
 }
 
-// GenerateSingleStringMessage 生成简单的字符串消息包结构体的方法 ；
+// GenerateSingleStringMessage 生成简单的字符串消息包结构体。
 //
-// messageType 消息类型；
-// message 字符串消息。
+// 参数：
+//   - messageType: 消息类型。
+//   - payload: 字符串消息的字节数组。
 //
-// 返回简单的字符串消息包。
+// 返回值：
+//   - Message: 生成的字符串消息包。
+//   - error: 错误信息。
 func GenerateSingleStringMessage(messageType uint16, payload []byte) (Message, error) {
 	var m *singleStringMessage
 	var err error
