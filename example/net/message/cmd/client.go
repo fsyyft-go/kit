@@ -7,6 +7,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"os/signal"
@@ -56,10 +57,10 @@ type (
 
 func (c *client) Start(ctx context.Context) error {
 	if conn, err := net.Dial("tcp", addr); nil != err {
-		fmt.Printf("client dial %s failed: %v\n", addr, err)
+		fmt.Printf("客户端连接失败：%[1]s\n", err.Error())
 		return err
 	} else {
-		fmt.Printf("client dial %s success: %v\n", addr, conn.LocalAddr())
+		fmt.Printf("客户端连接成功：%[1]s -> %[2]s\n", conn.LocalAddr(), addr)
 		c.conn = conn
 	}
 
@@ -76,9 +77,12 @@ func (c *client) Start(ctx context.Context) error {
 				return nil
 			}
 			if hm, ok := message.(kitmessage.HeartbeatMessage); ok {
-				fmt.Printf("client receive heartbeat: %d\n", hm.SerialNumber())
+				serialNumber := hm.SerialNumber()
+				fmt.Printf("客户端收到心跳数据包: %d %d\n", serialNumber, math.MaxUint64-serialNumber)
+			} else if sm, ok := message.(kitmessage.SingleStringMessage); ok {
+				fmt.Printf("客户端收到字符串数据包: %s\n", sm.Message())
 			} else {
-				fmt.Printf("client receive: %v\n", message)
+				fmt.Printf("客户端收到数据包: %v\n", message)
 			}
 		}
 	}

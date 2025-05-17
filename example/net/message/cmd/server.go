@@ -30,13 +30,13 @@ var (
 			defer cancel()
 			_ = kitgoroutine.Submit(func() {
 				if err := s.Start(ctx); nil != err {
-					fmt.Printf("server start failed: %v\n", err)
+					fmt.Printf("服务启动失败：%v\n", err)
 				}
 			})
 
 			time.Sleep(300 * time.Millisecond)
 			if nil != s.listen {
-				fmt.Printf("server start success: %v\n", s.listen.Addr())
+				fmt.Printf("服务启动成功：%v\n", s.listen.Addr())
 			} else {
 				return nil
 			}
@@ -82,11 +82,17 @@ func (s *server) Start(ctx context.Context) error {
 		_ = kitgoroutine.Submit(func() {
 			defer func() {
 				_ = conn.Close()
+				fmt.Printf("服务断开连接：%s\n", conn.RemoteAddr())
 			}()
 
 			conn := kitmessage.WrapConn(conn, 3*time.Second)
 
 			conn.Start(ctx)
+			if err := conn.SendMessage(kitmessage.NewSingleStringMessage(fmt.Sprintf("Hello, %s", conn.RemoteAddr()))); nil != err {
+				fmt.Printf("发送握手消息失败：%s\n", err)
+				return
+			}
+			fmt.Printf("服务接收连接：%s\n", conn.RemoteAddr())
 
 			for {
 				select {
