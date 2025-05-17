@@ -83,8 +83,17 @@ func ToInt64(v any) (int64, error) {
 // 返回值：
 //   - uint：转换后的 uint 类型结果。
 //   - error：转换过程中发生的错误。
+//
+// 负数或负数字符串时返回 0。
 func ToUint(v any) (uint, error) {
-	return converter.Uint(v)
+	i, err := converter.Int64(v)
+	if err != nil {
+		return 0, err
+	}
+	if i < 0 {
+		return 0, nil
+	}
+	return uint(i), nil
 }
 
 // ToUint8 将任意类型 v 转换为 uint8 类型。
@@ -95,8 +104,17 @@ func ToUint(v any) (uint, error) {
 // 返回值：
 //   - uint8：转换后的 uint8 类型结果。
 //   - error：转换过程中发生的错误。
+//
+// 负数或负数字符串时返回 0。
 func ToUint8(v any) (uint8, error) {
-	return converter.Uint8(v)
+	i, err := converter.Int64(v)
+	if err != nil {
+		return 0, err
+	}
+	if i < 0 {
+		return 0, nil
+	}
+	return uint8(i), nil
 }
 
 // ToUint16 将任意类型 v 转换为 uint16 类型。
@@ -107,8 +125,17 @@ func ToUint8(v any) (uint8, error) {
 // 返回值：
 //   - uint16：转换后的 uint16 类型结果。
 //   - error：转换过程中发生的错误。
+//
+// 负数或负数字符串时返回 0。
 func ToUint16(v any) (uint16, error) {
-	return converter.Uint16(v)
+	i, err := converter.Int64(v)
+	if err != nil {
+		return 0, err
+	}
+	if i < 0 {
+		return 0, nil
+	}
+	return uint16(i), nil
 }
 
 // ToUint32 将任意类型 v 转换为 uint32 类型。
@@ -119,8 +146,17 @@ func ToUint16(v any) (uint16, error) {
 // 返回值：
 //   - uint32：转换后的 uint32 类型结果。
 //   - error：转换过程中发生的错误。
+//
+// 负数或负数字符串时返回 0。
 func ToUint32(v any) (uint32, error) {
-	return converter.Uint32(v)
+	i, err := converter.Int64(v)
+	if err != nil {
+		return 0, err
+	}
+	if i < 0 {
+		return 0, nil
+	}
+	return uint32(i), nil
 }
 
 // ToUint64 将任意类型 v 转换为 uint64 类型。
@@ -131,8 +167,17 @@ func ToUint32(v any) (uint32, error) {
 // 返回值：
 //   - uint64：转换后的 uint64 类型结果。
 //   - error：转换过程中发生的错误。
+//
+// 负数或负数字符串时返回 0。
 func ToUint64(v any) (uint64, error) {
-	return converter.Uint64(v)
+	i, err := converter.Int64(v)
+	if err != nil {
+		return 0, err
+	}
+	if i < 0 {
+		return 0, nil
+	}
+	return uint64(i), nil
 }
 
 // ToFloat32 将任意类型 v 转换为 float32 类型。
