@@ -107,7 +107,6 @@ func NewRedis(opts ...Option) Redis {
 		Password: o.password,
 	})
 
-	o.client.Close()
 	return o
 }
 
