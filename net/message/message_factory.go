@@ -85,7 +85,7 @@ func (f *messageFactory) Register(messageType MessageType, messageFunc GenerateM
 // 返回值：
 //   - Message: 生成的消息实例。
 //   - error: 错误信息。
-func (f messageFactory) Generate(messageType MessageType, payload []byte) (Message, error) {
+func (f *messageFactory) Generate(messageType MessageType, payload []byte) (Message, error) {
 	var message Message
 	var err error
 
