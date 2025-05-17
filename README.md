@@ -108,6 +108,10 @@ HTTP 适配器：提供 Kratos HTTP 服务器到 Gin 引擎的转换功能，支
 
 功能丰富的 HTTP 客户端：支持 GET/POST/HEAD/表单/JSON、超时、代理、钩子、慢请求日志、trace、全局方法等。[详细说明 →](net/http/README.md)
 
+#### [net/message](net/message/)
+
+高性能自定义消息协议与连接封装：支持消息类型注册、心跳包、字符串消息、自动分包、并发安全等，适用于分布式服务、长连接、定制协议等场景。[详细说明 →](net/message/README.md)
+
 ### [runtime](runtime/)
 
 运行时管理：提供应用程序运行时组件的生命周期管理。[详细说明 →](runtime/README.md)
