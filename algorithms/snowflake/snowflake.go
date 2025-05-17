@@ -18,9 +18,9 @@ import (
 
 var (
 	// Epoch 表示 Snowflake 算法的起始时间戳，单位为毫秒。
-	// 默认为 Twitter Snowflake 的起始时间 2010-11-04 01:42:54 UTC。
+	// 默认为 Twitter Snowflake 的起始时间 2025-02-25 20:25:25 UTC。
 	// 可根据实际业务需求自定义。
-	Epoch int64 = 1288834974657
+	Epoch int64 = 1740515125000
 
 	// NodeBits 表示节点编号占用的比特数。
 	// 节点编号和序列号总共最多占用 22 位。
