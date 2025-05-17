@@ -22,6 +22,12 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 
 ## 模块列表
 
+### [algorithms](algorithms/)
+
+#### [algorithms/snowflake](algorithms/snowflake/)
+
+分布式唯一 ID 生成器：实现经典 Snowflake 算法，支持多节点高并发、趋势递增 64 位 ID、多种编码格式，适用于数据库主键、分布式事务、消息队列等场景。[详细说明 →](algorithms/snowflake/README.md)
+
 ### [bytes](bytes/)
 
 字节操作工具：提供安全的随机字节生成功能，基于加密安全的随机数生成器，适用于生成nonce、salt、会话令牌等安全场景。[详细说明 →](bytes/README.md)
@@ -29,6 +35,10 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 ### [cache](cache/)
 
 高性能进程内缓存：基于 ristretto 的缓存实现，支持过期时间设置、泛型接口和自动内存管理。[详细说明 →](cache/README.md)
+
+### [convert](convert/)
+
+通用类型转换工具：支持任意类型与基础类型、切片、Map、结构体之间的安全转换，兼容 gconv，提供带错误和无错误两套 API，适用于数据解析、配置加载、接口适配等场景。[详细说明 →](convert/README.md)
 
 ### [container](container/)
 
