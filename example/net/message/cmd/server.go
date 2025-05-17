@@ -24,30 +24,18 @@ var (
 	serverCmd = &cobra.Command{
 		Use: "server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := &server{}
-
 			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			_ = kitgoroutine.Submit(func() {
-				if err := s.Start(ctx); nil != err {
-					fmt.Printf("服务启动失败：%v\n", err)
-				}
-			})
-
-			time.Sleep(300 * time.Millisecond)
-			if nil != s.listen {
-				fmt.Printf("服务启动成功：%v\n", s.listen.Addr())
-			} else {
-				return nil
-			}
 
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, syscall.SIGILL, syscall.SIGTERM)
 
-			<-sigChan
-			_ = s.Stop(ctx)
+			_ = kitgoroutine.Submit(func() {
+				<-sigChan
+				cancel()
+			})
 
-			return nil
+			s := &server{}
+			return s.Run(ctx)
 		},
 	}
 )
@@ -65,6 +53,26 @@ type (
 		listen net.Listener
 	}
 )
+
+func (s *server) Run(ctx context.Context) error {
+	_ = kitgoroutine.Submit(func() {
+		if err := s.Start(ctx); nil != err {
+			fmt.Printf("服务启动失败：%v\n", err)
+		}
+	})
+
+	time.Sleep(50 * time.Millisecond)
+	if nil != s.listen {
+		fmt.Printf("服务启动成功：%v\n", s.listen.Addr())
+	} else {
+		return nil
+	}
+
+	<-ctx.Done()
+	_ = s.Stop(ctx)
+
+	return ctx.Err()
+}
 
 func (s *server) Start(ctx context.Context) error {
 	if listen, err := net.Listen("tcp", addr); nil != err {

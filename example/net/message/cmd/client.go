@@ -24,19 +24,18 @@ var (
 	clientCmd = &cobra.Command{
 		Use: "client",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c := &client{}
-
 			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			_ = kitgoroutine.Submit(func() { _ = c.Start(ctx) })
 
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, syscall.SIGILL, syscall.SIGTERM)
 
-			<-sigChan
-			_ = c.Stop(ctx)
+			_ = kitgoroutine.Submit(func() {
+				<-sigChan
+				cancel()
+			})
 
-			return nil
+			c := &client{}
+			return c.Run(ctx)
 		},
 	}
 )
@@ -54,6 +53,17 @@ type (
 		conn net.Conn
 	}
 )
+
+func (c *client) Run(ctx context.Context) error {
+	if err := kitgoroutine.Submit(func() { _ = c.Start(ctx) }); nil != err {
+		return err
+	}
+
+	<-ctx.Done()
+	_ = c.Stop(ctx)
+
+	return ctx.Err()
+}
 
 func (c *client) Start(ctx context.Context) error {
 	if conn, err := net.Dial("tcp", addr); nil != err {
