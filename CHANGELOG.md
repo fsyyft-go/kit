@@ -4,6 +4,23 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [v0.0.12] (2025-05-17)
+
+### 新增
+
+- **自定义消息协议与连接封装**
+  - 新增 `net/message` 包，实现自定义消息协议的网络连接、消息工厂、心跳机制、消息拆包封包、类型定义等，支持 TCP 消息收发、心跳消息、单字符串消息等，具备详细文档与完整单元测试。
+  - 新增 `example/net/message` 示例，包含服务端、客户端及构建脚本，演示自定义消息协议的实际应用。
+
+### 变更
+
+- 优化 `example/kratos/config` 示例导入路径。
+- 优化 Makefile，增加 net message 示例的构建和运行步骤。
+
+### 修复
+
+- 修复 `database/redis` NewRedis 函数中的冗余 Close 调用，避免资源重复释放。
+
 ## [v0.0.11] (2025-05-01)
 
 ### 新增
