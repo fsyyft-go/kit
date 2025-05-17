@@ -227,6 +227,8 @@ func (n *node) Generate() ID
 
 - [Twitter Snowflake 算法原理](https://github.com/twitter-archive/snowflake)
 - [Go strconv 包文档](https://pkg.go.dev/strconv)
+- [golang每日一库之snowflake](https://mp.weixin.qq.com/s/dewzsCAmE_xIEwDSHjc7FQ)
+- [A simple to use Go (golang) package to generate or parse Twitter snowflake IDs ](https://github.com/bwmarrin/snowflake)
 
 ## 贡献指南
 
