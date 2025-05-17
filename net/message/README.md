@@ -35,46 +35,7 @@ go get -u github.com/fsyyft-go/kit/net/message
 
 ### 基础用法
 
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "net"
-    kitmsg "github.com/fsyyft-go/kit/net/message"
-)
-
-func main() {
-    // 启动 TCP 服务端
-    ln, _ := net.Listen("tcp", ":9000")
-    go func() {
-        conn, _ := ln.Accept()
-        msgConn := kitmsg.WrapConn(conn, 0)
-        msgConn.Start(context.Background())
-        for msg := range msgConn.Message() {
-            fmt.Println("收到消息:", msg.MessageType())
-        }
-    }()
-
-    // 客户端连接
-    conn, _ := net.Dial("tcp", ":9000")
-    msgConn := kitmsg.WrapConn(conn, 0)
-    msgConn.Start(context.Background())
-    // 发送字符串消息
-    msgConn.SendMessage(kitmsg.NewSingleStringMessage("hello"))
-}
-```
-
-### 注册自定义消息类型
-
-```go
-// 定义自定义消息类型常量
-type MyMessage struct { ... }
-const MyType uint16 = 0x10
-// 实现 Message 接口并注册到工厂
-kitmsg.FactoryRegister(MyType, func(typ uint16, payload []byte) (kitmsg.Message, error) { ... })
-```
+请查阅[示例代码](../../example/net/message/cmd/)。
 
 ## 详细指南
 
@@ -108,7 +69,7 @@ kitmsg.FactoryRegister(MyType, func(typ uint16, payload []byte) (kitmsg.Message,
 
 ```go
 // 步骤1：定义唯一的消息类型常量
-const MyCustomMessageType uint16 = 0x20 // 需保证唯一，避免与已有类型冲突
+const MyCustomMessageType MessageType = 0x20 // 需保证唯一，避免与已有类型冲突
 
 // 步骤4：在 init() 中注册工厂函数
 func init() {
@@ -130,7 +91,7 @@ type MyCustomMessage interface {
 
 // 步骤2：实现消息结构体
 type myCustomMessage struct {
-    messageType uint16
+    messageType MessageType
     customField string
     // 其它字段...
 }
@@ -146,7 +107,7 @@ func (m *myCustomMessage) CustomField() string {
 
 ```go
 // 步骤3：实现 Message 接口
-func (m *myCustomMessage) MessageType() uint16 {
+func (m *myCustomMessage) MessageType() MessageType {
     return m.messageType
 }
 
@@ -166,7 +127,7 @@ func (m *myCustomMessage) Unpack(payload []byte) error {
 
 ```go
 // 步骤4：实现工厂函数
-func GenerateMyCustomMessage(messageType uint16, payload []byte) (Message, error) {
+func GenerateMyCustomMessage(messageType MessageType, payload []byte) (Message, error) {
     if messageType != MyCustomMessageType {
         // 类型校验，防止误用
         return nil, errors.New("消息类型不匹配")
@@ -194,7 +155,7 @@ func GenerateMyCustomMessage(messageType uint16, payload []byte) (Message, error
 ```go
 // Message 消息接口
 type Message interface {
-    MessageType() uint16
+    MessageType() MessageType
     Pack() ([]byte, error)
     Unpack(payload []byte) error
 }
@@ -214,13 +175,13 @@ type Conn interface {
 }
 
 // 消息工厂注册与生成
-func FactoryRegister(messageType uint16, fn GenerateMessageFunc) error
-func FactoryGenerate(messageType uint16, payload []byte) (Message, error)
+func FactoryRegister(messageType MessageType, fn GenerateMessageFunc) error
+func FactoryGenerate(messageType MessageType, payload []byte) (Message, error)
 
 // 内置消息类型
 const (
-    HeartbeatMessageType    uint16 = 0x80
-    SingleStringMessageType uint16 = 0x09
+    HeartbeatMessageType    MessageType = 0x80
+    SingleStringMessageType MessageType = 0x09
 )
 
 // 内置消息构造
