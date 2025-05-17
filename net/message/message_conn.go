@@ -373,7 +373,10 @@ func (c *conn) generateMessage(scanner *bufio.Scanner) (Message, error) {
 		// 如果 scanner 内部有错误，进行错误包装并返回。
 		err = cockroachdberrors.Wrap(errScanner, "扫描出错。")
 		// 调用 scanner.Scan()，尝试扫描下一个 token（即一条完整消息包）。
-	} else if scanner.Scan() {
+	} else if !scanner.Scan() {
+		// 如果 scanner.Scan() 返回 false，说明数据流已结束或无更多消息，直接返回 nil。
+		err = cockroachdberrors.Newf("数据流已结束或无更多消息。")
+	} else {
 		// 获取扫描到的字节数据。
 		data := scanner.Bytes()
 		// 定义消息类型变量，初始为 0。
