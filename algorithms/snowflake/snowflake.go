@@ -120,9 +120,9 @@ type (
 //   - nodeid ：int64，当前节点编号，需保证在 0 到 nodeMax 之间。
 //
 // 返回值：
-//   - *node ：node 实例指针。
+//   - Node ：node 实例指针。
 //   - error ：错误信息。
-func NewNode(nodeid int64) (*node, error) {
+func NewNode(nodeid int64) (Node, error) {
 
 	if NodeBits+StepBits > 22 {
 		return nil, errors.New("remember, you have a total 22 bits to share between Node/Step")
