@@ -36,6 +36,10 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 
 高性能进程内缓存：基于 ristretto 的缓存实现，支持过期时间设置、泛型接口和自动内存管理。[详细说明 →](cache/README.md)
 
+### [convert](convert/)
+
+通用类型转换工具：支持任意类型与基础类型、切片、Map、结构体之间的安全转换，兼容 gconv，提供带错误和无错误两套 API，适用于数据解析、配置加载、接口适配等场景。[详细说明 →](convert/README.md)
+
 ### [container](container/)
 
 #### [container/bloom](container/bloom/)
