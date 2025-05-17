@@ -5,10 +5,16 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
+
+	kitgoroutine "github.com/fsyyft-go/kit/runtime/goroutine"
 )
 
 var (
@@ -24,6 +30,26 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// 当没有提供子命令时，运行示例函数。
 			if len(args) == 0 {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+				sigChan := make(chan os.Signal, 1)
+				signal.Notify(sigChan, syscall.SIGILL, syscall.SIGTERM)
+
+				_ = kitgoroutine.Submit(func() {
+					<-sigChan
+					cancel()
+				})
+
+				s := &server{}
+				_ = kitgoroutine.Submit(func() { _ = s.Run(ctx) })
+
+				time.Sleep(50 * time.Millisecond)
+
+				c := &client{}
+				_ = kitgoroutine.Submit(func() { _ = c.Run(ctx) })
+
+				<-ctx.Done()
+
 				return nil
 			}
 			return nil

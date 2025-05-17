@@ -93,7 +93,7 @@ func (s *server) Start(ctx context.Context) error {
 				fmt.Printf("服务断开连接：%s\n", conn.RemoteAddr())
 			}()
 
-			conn := kitmessage.WrapConn(conn, 3*time.Second)
+			conn := kitmessage.WrapConn(conn, 2*time.Second)
 
 			conn.Start(ctx)
 			if err := conn.SendMessage(kitmessage.NewSingleStringMessage(fmt.Sprintf("Hello, %s", conn.RemoteAddr()))); nil != err {
