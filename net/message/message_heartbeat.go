@@ -29,8 +29,8 @@ type (
 
 	// heartbeatMessage 心跳消息包，实现接口 Message 和 HeartbeatMessage。
 	heartbeatMessage struct {
-		messageType  uint16 // 消息类型。
-		serialNumber uint64 // 心跳包序列号。
+		messageType  MessageType // 消息类型。
+		serialNumber uint64      // 心跳包序列号。
 	}
 )
 
@@ -38,7 +38,7 @@ type (
 //
 // 返回值：
 //   - uint16: 消息类型。
-func (m *heartbeatMessage) MessageType() uint16 {
+func (m *heartbeatMessage) MessageType() MessageType {
 	return m.messageType
 }
 
@@ -125,7 +125,7 @@ func NewHeartbeatMessage(serialNumber uint64) *heartbeatMessage {
 // 返回值：
 //   - Message: 生成的心跳消息包。
 //   - error: 错误信息。
-func GenerateHeartbeatMessage(messageType uint16, payload []byte) (Message, error) {
+func GenerateHeartbeatMessage(messageType MessageType, payload []byte) (Message, error) {
 	var m *heartbeatMessage
 	var err error
 

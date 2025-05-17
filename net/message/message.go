@@ -10,8 +10,8 @@ type (
 		// MessageType 返回消息类型。
 		//
 		// 返回值：
-		//   - uint16: 消息类型。
-		MessageType() uint16
+		//   - MessageType: 消息类型。
+		MessageType() MessageType
 
 		// Pack 将消息内容转换为 payload 字节数组（不包含消息类型和长度）。
 		//
@@ -48,7 +48,7 @@ type (
 		// 返回值：
 		//   - Message: 生成的消息包。
 		//   - error: 错误信息。
-		GenerateMessage(messageType uint16, payload []byte) (Message, error)
+		GenerateMessage(messageType MessageType, payload []byte) (Message, error)
 	}
 
 	// GenerateMessageFunc 生成消息包结构体的方法类型，实现 Generator 接口。
@@ -60,7 +60,7 @@ type (
 	// 返回值：
 	//   - Message: 生成的消息包。
 	//   - error: 错误信息。
-	GenerateMessageFunc func(uint16, []byte) (Message, error)
+	GenerateMessageFunc func(MessageType, []byte) (Message, error)
 )
 
 // GenerateMessage 调用函数生成消息包结构体。
@@ -72,6 +72,6 @@ type (
 // 返回值：
 //   - Message: 生成的消息包。
 //   - error: 错误信息。
-func (f GenerateMessageFunc) GenerateMessage(messageType uint16, payload []byte) (Message, error) {
+func (f GenerateMessageFunc) GenerateMessage(messageType MessageType, payload []byte) (Message, error) {
 	return f(messageType, payload)
 }

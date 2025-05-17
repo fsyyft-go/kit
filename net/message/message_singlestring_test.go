@@ -92,7 +92,7 @@ func TestNewSingleStringMessage(t *testing.T) {
 func TestGenerateSingleStringMessage(t *testing.T) {
 	cases := []struct {
 		name    string
-		msgType uint16
+		msgType MessageType
 		input   string
 		wantErr bool
 	}{

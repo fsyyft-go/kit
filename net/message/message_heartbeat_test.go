@@ -96,7 +96,7 @@ func TestNewHeartbeatMessage(t *testing.T) {
 func TestGenerateHeartbeatMessage(t *testing.T) {
 	cases := []struct {
 		name    string
-		msgType uint16
+		msgType MessageType
 		sn      uint64
 		wantErr bool
 	}{

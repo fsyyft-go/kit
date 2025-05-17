@@ -31,7 +31,7 @@ type (
 		//
 		// 返回值：
 		//   - error: 错误信息。
-		Register(messageType uint16, messageFunc GenerateMessageFunc) error
+		Register(messageType MessageType, messageFunc GenerateMessageFunc) error
 		// Generate 根据消息类型和消息负载数据创建消息。
 		//
 		// 参数：
@@ -41,13 +41,13 @@ type (
 		// 返回值：
 		//   - Message: 生成的消息实例。
 		//   - error: 错误信息。
-		Generate(messageType uint16, payload []byte) (Message, error)
+		Generate(messageType MessageType, payload []byte) (Message, error)
 	}
 
 	// messageFactory 消息工厂实现。
 	messageFactory struct {
-		funcs          map[uint16]GenerateMessageFunc // 消息类型与生成方法映射表。
-		registerLocker sync.Locker                    // 注册操作互斥锁。
+		funcs          map[MessageType]GenerateMessageFunc // 消息类型与生成方法映射表。
+		registerLocker sync.Locker                         // 注册操作互斥锁。
 	}
 )
 
@@ -59,7 +59,7 @@ type (
 //
 // 返回值：
 //   - error: 错误信息。
-func (f *messageFactory) Register(messageType uint16, messageFunc GenerateMessageFunc) error {
+func (f *messageFactory) Register(messageType MessageType, messageFunc GenerateMessageFunc) error {
 	var err error
 
 	f.registerLocker.Lock()
@@ -85,7 +85,7 @@ func (f *messageFactory) Register(messageType uint16, messageFunc GenerateMessag
 // 返回值：
 //   - Message: 生成的消息实例。
 //   - error: 错误信息。
-func (f messageFactory) Generate(messageType uint16, payload []byte) (Message, error) {
+func (f messageFactory) Generate(messageType MessageType, payload []byte) (Message, error) {
 	var message Message
 	var err error
 
@@ -108,7 +108,7 @@ func (f messageFactory) Generate(messageType uint16, payload []byte) (Message, e
 //   - *messageFactory: 新建的消息工厂实例。
 func NewMessageFactory() *messageFactory {
 	mf := &messageFactory{
-		funcs:          make(map[uint16]GenerateMessageFunc),
+		funcs:          make(map[MessageType]GenerateMessageFunc),
 		registerLocker: &sync.Mutex{},
 	}
 
@@ -123,7 +123,7 @@ func NewMessageFactory() *messageFactory {
 //
 // 返回值：
 //   - error: 错误信息。
-func FactoryRegister(messageType uint16, messageFunc GenerateMessageFunc) error {
+func FactoryRegister(messageType MessageType, messageFunc GenerateMessageFunc) error {
 	return defaultFactory.Register(messageType, messageFunc)
 }
 
@@ -136,6 +136,6 @@ func FactoryRegister(messageType uint16, messageFunc GenerateMessageFunc) error 
 // 返回值：
 //   - Message: 生成的消息实例。
 //   - error: 错误信息。
-func FactoryGenerate(messageType uint16, payload []byte) (Message, error) {
+func FactoryGenerate(messageType MessageType, payload []byte) (Message, error) {
 	return defaultFactory.Generate(messageType, payload)
 }

@@ -28,8 +28,8 @@ type (
 
 	// singleStringMessage 简单的字符串消息包，实现接口 Message 和 SingleStringMessage。
 	singleStringMessage struct {
-		messageType uint16 // 消息类型。
-		message     string // 字符串消息内容。
+		messageType MessageType // 消息类型。
+		message     string      // 字符串消息内容。
 	}
 )
 
@@ -37,7 +37,7 @@ type (
 //
 // 返回值：
 //   - uint16: 消息类型。
-func (m *singleStringMessage) MessageType() uint16 {
+func (m *singleStringMessage) MessageType() MessageType {
 	return m.messageType
 }
 
@@ -121,7 +121,7 @@ func NewSingleStringMessage(message string) *singleStringMessage {
 // 返回值：
 //   - Message: 生成的字符串消息包。
 //   - error: 错误信息。
-func GenerateSingleStringMessage(messageType uint16, payload []byte) (Message, error) {
+func GenerateSingleStringMessage(messageType MessageType, payload []byte) (Message, error) {
 	var m *singleStringMessage
 	var err error
 

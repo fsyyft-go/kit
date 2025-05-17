@@ -4,10 +4,15 @@
 
 package message
 
+type (
+	// MessageType 消息类型。
+	MessageType uint16
+)
+
 // HeartbeatMessageType 心跳消息类型常量。
 const (
-	HeartbeatMessageType    uint16 = 0x80 // 心跳消息。
-	SingleStringMessageType uint16 = 0x09 // 简单的字符串消息。
+	HeartbeatMessageType    MessageType = 0x80 // 心跳消息。
+	SingleStringMessageType MessageType = 0x09 // 简单的字符串消息。
 )
 
 // init 注册心跳消息和简单字符串消息的生成方法到工厂。

@@ -196,7 +196,8 @@ func (c *conn) Close() error {
 
 			c.closed = true
 
-			close(c.messageRead) // 关闭消息读取通道。
+			close(c.messageRead)  // 关闭消息读取通道。
+			close(c.messageWrite) // 关闭消息发送通道。
 		}
 	}
 
@@ -380,7 +381,7 @@ func (c *conn) generateMessage(scanner *bufio.Scanner) (Message, error) {
 		// 获取扫描到的字节数据。
 		data := scanner.Bytes()
 		// 定义消息类型变量，初始为 0。
-		messageType := uint16(0)
+		messageType := MessageType(uint16(0))
 		// 从数据包前两个字节读取消息类型，采用大端序。
 		if errReadType := binary.Read(bytes.NewReader(data[:2]), binary.BigEndian, &messageType); nil != errReadType {
 			// 如果读取类型失败，进行错误包装并返回。
