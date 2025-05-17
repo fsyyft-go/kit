@@ -6,12 +6,12 @@
 package main
 
 import (
-	"github.com/fsyyft-go/kit/example/kratos/config/cmd"
+	kitkratosconfigcmd "github.com/fsyyft-go/kit/example/kratos/config/cmd"
 )
 
 // Config 结构体定义了应用程序的配置结构。
 
 // main 函数是程序入口点。
 func main() {
-	cmd.Execute()
+	kitkratosconfigcmd.Execute()
 }
