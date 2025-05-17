@@ -150,7 +150,7 @@ fmt.Println(id == id2) // true
 创建新节点。
 
 ```go
-func NewNode(nodeid int64) (*node, error)
+func NewNode(nodeid int64) (Node, error)
 ```
 - nodeid：节点编号，需唯一且在合法范围内
 - 返回 node 实例和错误
