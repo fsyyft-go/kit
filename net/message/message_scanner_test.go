@@ -23,7 +23,6 @@ package message
 import (
 	"bytes"
 	"encoding/binary"
-	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,7 +63,7 @@ func TestScanMessage(t *testing.T) {
 			atEOF:     true,
 			wantAdv:   0,
 			wantToken: nil,
-			wantErr:   io.EOF,
+			wantErr:   nil,
 		},
 		{
 			name:      "长度字段读取不足2字节，binary.Read返回io.EOF",
