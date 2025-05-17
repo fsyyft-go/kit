@@ -32,6 +32,7 @@ test:
 		example/database/sql/mysql/build.sh \
 		example/kratos/config/build.sh \
 		example/log/build.sh \
+		example/net/message/build.sh \
 		example/runtime/goroutine/build.sh
 	
 	@echo "\n===================================================="
@@ -62,6 +63,11 @@ test:
 	@echo "===================================================="
 	@echo "构建并运行日志示例..."
 	@example/log/build.sh
+	@echo "====================================================\n"
+	
+	@echo "===================================================="
+	@echo "构建并运行 net message 示例..."
+	@example/net/message/build.sh
 	@echo "====================================================\n"
 	
 	@echo "===================================================="
