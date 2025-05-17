@@ -446,7 +446,21 @@ LoopReceive:
 //   - ctx: 上下文，用于控制 goroutine 生命周期。
 //   - ticker: 定时器。
 func (c *conn) sendHeartbeat(ctx context.Context, ticker *time.Ticker) {
-	serialNumber := uint64(0)
+	generateSerialNumber := func(serialNumberSingle uint16) (uint16, uint64) {
+		const serialNumberSingleMax = 10000
+		// 每次加 1。
+		serialNumberSingle = serialNumberSingle + 1
+		// 取模 1000。
+		serialNumberSingle = serialNumberSingle % serialNumberSingleMax
+		// 取格林威治时间戳。
+		s1 := time.Now().UTC().Unix() * serialNumberSingleMax
+		// 生成序列号。
+		s := uint64(s1 + int64(serialNumberSingle))
+		return serialNumberSingle, s
+	}
+
+	// 序列号单次增量的计数器。
+	serialNumberSingle := uint16(0)
 LoopHeartbeat:
 	for {
 		select {
@@ -454,7 +468,8 @@ LoopHeartbeat:
 			_ = c.Close()
 			break LoopHeartbeat
 		case <-ticker.C:
-			serialNumber = serialNumber + 1
+			var serialNumber uint64
+			serialNumberSingle, serialNumber = generateSerialNumber(serialNumberSingle)
 			hm := NewHeartbeatMessage(serialNumber)
 			_ = c.SendMessage(hm)
 		}
