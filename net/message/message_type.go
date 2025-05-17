@@ -17,6 +17,10 @@ const (
 
 // init 注册心跳消息和简单字符串消息的生成方法到工厂。
 func init() {
-	_ = FactoryRegister(HeartbeatMessageType, GenerateHeartbeatMessage)
-	_ = FactoryRegister(SingleStringMessageType, GenerateSingleStringMessage)
+	if err := FactoryRegister(HeartbeatMessageType, GenerateHeartbeatMessage); nil != err {
+		panic(err)
+	}
+	if err := FactoryRegister(SingleStringMessageType, GenerateSingleStringMessage); nil != err {
+		panic(err)
+	}
 }
