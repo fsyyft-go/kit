@@ -16,10 +16,10 @@ import (
 
 func TestSingleDdatabase(t *testing.T) {
 	var version string
-	os.MkdirAll("../../../out", os.ModePerm)
+	_ = os.MkdirAll("../../../out", os.ModePerm)
 	db, err := sql.Open("sqlite3", "file:../../../out/demo.db")
 	assert.NoError(t, err, "failed to open db")
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	err = db.QueryRow(`SELECT sqlite_version()`).Scan(&version)
 	assert.NoError(t, err, "failed to get sqlite version")
 	t.Logf("sqlite version: %s", version)
@@ -43,7 +43,7 @@ func TestSingleDdatabase(t *testing.T) {
 	// 读取并测试
 	rows, err := db.Query(`SELECT id, name, age FROM users ORDER BY id`)
 	assert.NoError(t, err, "failed to query users")
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var count int
 	var users []struct {
 		id   int
