@@ -19,7 +19,7 @@ jobs:
     strategy:
       matrix:
         # 定义测试矩阵，在多个 Go 版本上运行测试。
-        go-version: [ '1.22', '1.23', '1.24' ]
+        go-version: [ '1.23', '1.24', '1.25' ]
       # 某个版本失败时不中断其他版本的测试。
       fail-fast: false
 
@@ -44,12 +44,16 @@ jobs:
       - name: Verify dependencies
         run: make verify
 
-      # 使用 golangci-lint 官方 action 运行代码质量检查。
+      # 运行 golangci-lint 进行代码质量检查。
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3
-        with:
-          # 使用最新版本的 golangci-lint。
-          version: latest
+        run: |
+          # 安装 golangci-lint。
+          # 注意 v1 v2 版本存在较大差异，对配置文件也不兼容。
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          # 显示版本信息。
+          golangci-lint version
+          # 运行 golangci-lint。
+          make lint
 
       # 使用 Makefile 中的 test 命令运行测试。
       - name: Run tests
