@@ -2,12 +2,12 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-//go:build gc && go1.23 && !go1.25 && arm64
+//go:build gc && go1.25 && arm64
 
 package goroutine
 
 // stack 表示协程栈的结构。
-// 该结构体与 Go 1.23 版本的运行时实现相匹配。
+// 该结构体与 Go 1.25 版本的运行时实现相匹配。
 type stack struct { // nolint:unused
 	// lo 栈的低地址边界。
 	lo uintptr
@@ -16,7 +16,7 @@ type stack struct { // nolint:unused
 }
 
 // gobuf 表示协程的执行上下文。
-// 该结构体与 Go 1.23 版本的运行时实现相匹配。
+// 该结构体与 Go 1.25 版本的运行时实现相匹配。
 type gobuf struct { // nolint:unused
 	// sp 栈指针。
 	sp uintptr
@@ -26,8 +26,6 @@ type gobuf struct { // nolint:unused
 	g uintptr
 	// ctxt 上下文信息。
 	ctxt uintptr
-	// ret 返回值。
-	ret uintptr
 	// lr 链接寄存器。
 	lr uintptr
 	// bp 基址指针。

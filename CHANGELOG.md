@@ -4,6 +4,20 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [v0.0.14] (2025-09-07)
+
+### 新增
+
+- **CI 配置**
+  - 新增 `.gitattributes` 文件，配置 Git LFS 管理大文件（如 PDF、图片、压缩包、二进制库等），并补充相关说明。
+
+### 变更
+
+- **环境与兼容性**
+  - 升级 Go 语言版本至 1.25，提升性能与新特性支持。
+  - `runtime/goroutine` 新增 `runtime_go1.25.go`，适配 Go 1.25 版本的 goid 偏移量和相关结构体。
+  - 优化 `goid_offset.go`，完善各版本偏移量注释和兼容性处理。
+
 ## [v0.0.13] (2025-05-17)
 
 ### 新增

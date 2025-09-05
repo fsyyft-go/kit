@@ -7,14 +7,15 @@
 *.dll
 *.so
 *.dylib
-bin/
-out/
 
 # Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Code coverage profiles and other test artifacts
 *.out
+coverage.*
+*.coverprofile
+profile.cov
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
@@ -26,6 +27,76 @@ go.work.sum
 # env file
 .env
 
-*.log
+# Editor/IDE
+.idea/
 .vscode/
+
+# 以上来自 https://github.com/github/gitignore/blob/main/Go.gitignore 。
+
+# 以下为自定义。
+
+# 操作系统相关，可通过 https://www.toptal.com/developers/gitignore 生成。
+
+### macOS ###
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
+
+### macOS Patch ###
+# iCloud generated files
+*.icloud
+
+### Windows ###
+# Windows thumbnail cache files
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+
+# Dump file
+*.stackdump
+
+# Folder config file
+[Dd]esktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows Installer files
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# Windows shortcuts
+*.lnk
+
+# 以下为人工调整。
 .ai/
+out/
+.DS_Store
+*.log
+*.test
+*.o
+*.dll
+*.exe
+*.mmdb
+*.key
+*.tar.gz
+*.test
+*.wasm
+**/wasm_exec.js
+*.pprof
+*.memprof
+**/bin
+**/data
+**/debug
+**/docs
+**/logs
+**/assets/embed/**
+**/swagger
+**/*.pb.go
+**/*.pb.gw.go
+**/*_mock_test.go
