@@ -25,7 +25,7 @@ jobs:
       # 设置当某个版本测试失败时，其他版本继续执行。
       fail-fast: true
       # 如果限制并发执行数为 1，测试按顺序执行。
-      max-parallel: 3
+      max-parallel: 1
     steps:
       # 使用官方的 checkout action 检出代码。
       - uses: actions/checkout@v4
