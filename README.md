@@ -3,6 +3,8 @@
 [![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/blob/main/go.mod)
 [![Go Doc](https://pkg.go.dev/badge/github.com/fsyyft-go/kit)](https://pkg.go.dev/github.com/fsyyft-go/kit)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fsyyft-go/kit)](https://goreportcard.com/report/github.com/fsyyft-go/kit)
+[![codecov](https://codecov.io/gh/fsyyft-go/kit/graph/badge.svg?token=6B6LIM5URY)](https://codecov.io/gh/fsyyft-go/kit)
+
 [![GitHub stars](https://img.shields.io/github/stars/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/network)
 [![GitHub issues](https://img.shields.io/github/issues/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/issues)
@@ -12,10 +14,9 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/releases)
 [![GitHub last commit](https://img.shields.io/github/last-commit/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/commits/main)
 [![GitHub repo size](https://img.shields.io/github/repo-size/fsyyft-go/kit)](https://github.com/fsyyft-go/kit)
-[![GitHub workflow status](https://img.shields.io/github/actions/workflow/status/fsyyft-go/kit/go.yml)](https://github.com/fsyyft-go/kit/actions)
+[![GitHub workflow status](https://img.shields.io/github/actions/workflow/status/fsyyft-go/kit/ci.yml)](https://github.com/fsyyft-go/kit/actions)
 [![Go Mod Updates](https://img.shields.io/github/go-mod/updates-available/fsyyft-go/kit)](https://github.com/fsyyft-go/kit)
 [![Sourcegraph](https://sourcegraph.com/github.com/fsyyft-go/kit/-/badge.svg)](https://sourcegraph.com/github.com/fsyyft-go/kit)
-[![codecov](https://codecov.io/gh/fsyyft-go/kit/graph/badge.svg?token=6B6LIM5URY)](https://codecov.io/gh/fsyyft-go/kit)
 
 # Kit - Go 工具包集合
 
