@@ -6,6 +6,11 @@ on:
   push:
   # 当有 Pull Request 时触发。
   pull_request:
+env:
+  # 设置 golangci-lint 的版本。
+  GOLANGCI_LINT_VERSION: v1.64.8
+  # Go 版本。
+  GO_VERSION: '1.25'
 jobs:
   # 定义测试作业。
   test:
@@ -43,16 +48,6 @@ jobs:
       # 使用 Makefile 中的 verify 命令验证依赖完整性。
       - name: Verify dependencies
         run: make verify
-      # 运行 golangci-lint 进行代码质量检查。
-      - name: Run golangci-lint
-        run: |
-          # 安装 golangci-lint。
-          # 注意 v1 v2 版本存在较大差异，对配置文件也不兼容。
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          # 显示版本信息。
-          golangci-lint version
-          # 运行 golangci-lint。
-          make lint
       # 使用 Makefile 中的 test 命令运行测试。
       - name: Run tests
         run: make test
@@ -69,3 +64,35 @@ jobs:
           file: ./out/coverage.txt
           # 上传失败时不中断 CI 流程。
           fail_ci_if_error: false
+  lint:
+    # 设置任务显示名称为 Lint。
+    name: Lint
+    # 指定运行环境为最新版本的 Ubuntu。
+    runs-on: ubuntu-latest
+    steps:
+      # 使用 actions/checkout@v4 动作检出代码仓库。
+      - uses: actions/checkout@v4
+      # 配置 Go 语言环境。
+      - name: Set up Go
+        # 使用 actions/setup-go@v4 动作设置 Go 环境。
+        uses: actions/setup-go@v4
+        with:
+          # 指定使用 Go 版本。
+          go-version: ${{ env.GO_VERSION }}
+          # 启用 Go 模块缓存以加速构建。
+          cache: true
+      # 运行 golangci-lint 进行代码质量检查。
+      - name: Run golangci-lint
+        # 低版本会出现错误：
+        # Error: can't load config: the Go language version (go1.23) used to build golangci-lint is lower than the targeted Go version (1.25)
+        # Failed executing command with error: can't load config: the Go language version (go1.23) used to build golangci-lint is lower than the targeted Go version (1.25)
+        # Error: can't load config: the Go language version (go1.24) used to build golangci-lint is lower than the targeted Go version (1.25)
+        # Failed executing command with error: can't load config: the Go language version (go1.24) used to build golangci-lint is lower than the targeted Go version (1.25)
+        run: |-
+          # 安装 golangci-lint。
+          # 注意 v1 v2 版本存在较大差异，对配置文件也不兼容。
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@${{ env.GOLANGCI_LINT_VERSION }}
+          # 显示版本信息。
+          golangci-lint version
+          # 运行 golangci-lint。
+          make lint
