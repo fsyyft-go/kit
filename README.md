@@ -15,6 +15,7 @@
 [![GitHub workflow status](https://img.shields.io/github/actions/workflow/status/fsyyft-go/kit/go.yml)](https://github.com/fsyyft-go/kit/actions)
 [![Go Mod Updates](https://img.shields.io/github/go-mod/updates-available/fsyyft-go/kit)](https://github.com/fsyyft-go/kit)
 [![Sourcegraph](https://sourcegraph.com/github.com/fsyyft-go/kit/-/badge.svg)](https://sourcegraph.com/github.com/fsyyft-go/kit)
+[![codecov](https://codecov.io/gh/fsyyft-go/kit/graph/badge.svg?token=6B6LIM5URY)](https://codecov.io/gh/fsyyft-go/kit)
 
 # Kit - Go 工具包集合
 
