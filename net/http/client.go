@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	kiglog "github.com/fsyyft-go/kit/log"
+	kitlog "github.com/fsyyft-go/kit/log"
 )
 
 type (
@@ -102,7 +102,7 @@ type (
 		logSlow  time.Duration // 慢请求阈值。
 		logError bool          // 是否记录错误。
 
-		logger kiglog.Logger // 日志记录器。
+		logger kitlog.Logger // 日志记录器。
 
 		client *http.Client // 标准库 HTTP 客户端。
 	}
@@ -126,7 +126,7 @@ func NewClient(opts ...Option) Client {
 		maxIdleConns:        maxIdleConnsDefault,
 		logSlow:             logSlowDefault,
 		logError:            logErrorDefault,
-		logger:              kiglog.GetLogger(),
+		logger:              kitlog.GetLogger(),
 	}
 
 	for _, opt := range opts {
