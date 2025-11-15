@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"time"
 
-	kiglog "github.com/fsyyft-go/kit/log"
+	kitlog "github.com/fsyyft-go/kit/log"
 )
 
 type (
@@ -208,11 +208,11 @@ func WithHook(hook Hook) Option {
 // WithLogger 设置 HTTP 客户端的日志记录器。
 //
 // 参数：
-//   - logger kiglog.Logger：自定义的日志记录器实现。
+//   - logger kitlog.Logger：自定义的日志记录器实现。
 //
 // 返回值：
 //   - Option：用于设置日志记录器的配置项。
-func WithLogger(logger kiglog.Logger) Option {
+func WithLogger(logger kitlog.Logger) Option {
 	return func(c *client) {
 		c.logger = logger
 	}

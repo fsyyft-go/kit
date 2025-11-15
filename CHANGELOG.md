@@ -4,6 +4,48 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [v0.0.15] (2025-11-15)
+
+### 新增
+
+- **Context 扩展工具**
+  - 新增 `context` 包，提供 `WithoutCancel` 函数，用于创建忽略父 context 取消信号的新 context。
+  - 支持继承父 context 的值传递功能，但阻断取消和超时信号。
+  - 兼容 Go 1.21 之前版本，提供与标准库 `context.WithoutCancel` 相同的功能。
+  - 提供详细的原理说明文档和完整单元测试。
+
+- **导入语句规范检查工具**
+  - 新增 `go/imp` 包，实现 Go 文件导入语句的规范性检查。
+  - 支持导入分组检查（内置包、第三方包、fsyyft-go 包、项目内包）。
+  - 支持导入排序检查，确保每组内按字母顺序排列。
+  - 支持别名规范检查，确保 fsyyft-go 包使用 kit 前缀，项目内包使用 app 前缀，别名只包含小写字母和数字。
+  - 提供 `Check` 函数用于批量检查指定目录下的所有 Go 文件。
+
+### 变更
+
+- **CI 配置优化**
+  - 分离测试和代码检查任务，提高 CI 执行效率。
+  - 新增环境变量配置，统一管理 golangci-lint 版本（v1.64.8）和 Go 版本（1.25）。
+  - 优化测试矩阵，支持多版本 Go（1.25、1.24、1.23）并发测试。
+  - 优化 golangci-lint 安装方式，使用固定版本以避免版本兼容问题。
+  - 更新 CI 工作流文件名引用（go.yml → ci.yml）。
+
+- **文档系统**
+  - README 新增 codecov 徽章，展示代码覆盖率。
+  - README 更新 CI 工作流状态徽章链接。
+  - 新增 context 包详细文档，包含原理说明、使用示例和最佳实践。
+
+- **代码规范**
+  - 统一导入别名风格，修正 `kratos/config` 包中的别名格式（kratosConfig → kratosconfig，kratosEncoding → kratosencoding）。
+  - 修正 `net/http` 包中的导入别名（kiglog → kitlog）。
+  - 修正 `net/message` 包中的导入别名（cockroachdbErrors → cockroachdberrors）。
+
+### 修复
+
+- **注释规范**
+  - 完善 `go/imp` 包中所有函数、类型和方法的中文注释，符合项目注释规范。
+  - 优化函数体内注释，详细说明业务逻辑和关键步骤。
+
 ## [v0.0.14] (2025-09-07)
 
 ### 新增

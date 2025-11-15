@@ -3,6 +3,8 @@
 [![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/blob/main/go.mod)
 [![Go Doc](https://pkg.go.dev/badge/github.com/fsyyft-go/kit)](https://pkg.go.dev/github.com/fsyyft-go/kit)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fsyyft-go/kit)](https://goreportcard.com/report/github.com/fsyyft-go/kit)
+[![codecov](https://codecov.io/gh/fsyyft-go/kit/graph/badge.svg?token=6B6LIM5URY)](https://codecov.io/gh/fsyyft-go/kit)
+
 [![GitHub stars](https://img.shields.io/github/stars/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/network)
 [![GitHub issues](https://img.shields.io/github/issues/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/issues)
@@ -12,7 +14,7 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/releases)
 [![GitHub last commit](https://img.shields.io/github/last-commit/fsyyft-go/kit)](https://github.com/fsyyft-go/kit/commits/main)
 [![GitHub repo size](https://img.shields.io/github/repo-size/fsyyft-go/kit)](https://github.com/fsyyft-go/kit)
-[![GitHub workflow status](https://img.shields.io/github/actions/workflow/status/fsyyft-go/kit/go.yml)](https://github.com/fsyyft-go/kit/actions)
+[![GitHub workflow status](https://img.shields.io/github/actions/workflow/status/fsyyft-go/kit/ci.yml)](https://github.com/fsyyft-go/kit/actions)
 [![Go Mod Updates](https://img.shields.io/github/go-mod/updates-available/fsyyft-go/kit)](https://github.com/fsyyft-go/kit)
 [![Sourcegraph](https://sourcegraph.com/github.com/fsyyft-go/kit/-/badge.svg)](https://sourcegraph.com/github.com/fsyyft-go/kit)
 
@@ -45,6 +47,10 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 #### [container/bloom](container/bloom/)
 
 高效布隆过滤器：支持分组、可插拔存储、误判率灵活配置，适合缓存预判、唯一性校验等大规模集合判定场景。[详细说明 →](container/bloom/README.md)
+
+### [context](context/)
+
+Context 扩展工具：提供 WithoutCancel 函数，用于忽略父 context 的取消信号和超时，适用于需要阻断取消的场景。[详细说明 →](context/README.md)
 
 ### [crypto](crypto/)
 
