@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	kratosConfig "github.com/go-kratos/kratos/v2/config"
-	kratosEncoding "github.com/go-kratos/kratos/v2/encoding"
+	kratosconfig "github.com/go-kratos/kratos/v2/config"
+	kratosencoding "github.com/go-kratos/kratos/v2/encoding"
 )
 
 type (
@@ -83,7 +83,7 @@ func NewDecoder(opts ...DecoderOption) *Decoder {
 //
 // 返回值：
 //   - error: 解码过程中可能发生的错误，成功时返回 nil。
-func (d *Decoder) Decode(src *kratosConfig.KeyValue, target map[string]any) error {
+func (d *Decoder) Decode(src *kratosconfig.KeyValue, target map[string]any) error {
 	if src.Format == "" {
 		// 当格式为空时，将键 "aaa.bbb" 展开为 map[aaa]map[bbb]interface{}。
 		keys := strings.Split(src.Key, ".")
@@ -100,7 +100,7 @@ func (d *Decoder) Decode(src *kratosConfig.KeyValue, target map[string]any) erro
 		}
 		return nil
 	}
-	if codec := kratosEncoding.GetCodec(src.Format); nil != codec {
+	if codec := kratosencoding.GetCodec(src.Format); nil != codec {
 		// 使用对应格式的编解码器解码配置值。
 		if err := codec.Unmarshal(src.Value, &target); nil != err {
 			return err
