@@ -33,7 +33,7 @@ func TestWithoutCancel(t *testing.T) {
 		go f(ctx, t.Name())
 	})
 	t.Run("阻断停止", func(t *testing.T) {
-		go f(context.WithoutCancel(ctxTo), t.Name())
+		go f(WithoutCancel(ctxTo), t.Name())
 	})
 	time.Sleep(50 * time.Millisecond)
 	cancel(context.Canceled)

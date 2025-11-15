@@ -48,6 +48,10 @@ Kit 是一个功能丰富的 Go 语言工具包集合，旨在提供常用的工
 
 高效布隆过滤器：支持分组、可插拔存储、误判率灵活配置，适合缓存预判、唯一性校验等大规模集合判定场景。[详细说明 →](container/bloom/README.md)
 
+### [context](context/)
+
+Context 扩展工具：提供 WithoutCancel 函数，用于忽略父 context 的取消信号和超时，适用于需要阻断取消的场景。[详细说明 →](context/README.md)
+
 ### [crypto](crypto/)
 
 #### [crypto/aes](crypto/aes/)
