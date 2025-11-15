@@ -7,7 +7,7 @@ package message
 import (
 	"math"
 
-	cockroachdbErrors "github.com/cockroachdb/errors"
+	cockroachdberrors "github.com/cockroachdb/errors"
 )
 
 var (
@@ -52,7 +52,7 @@ func (m *singleStringMessage) Pack() ([]byte, error) {
 
 	defer func() {
 		if r := recover(); nil != r {
-			err = cockroachdbErrors.Newf("封包过程发生异常：%[1]v。", r)
+			err = cockroachdberrors.Newf("封包过程发生异常：%[1]v。", r)
 		}
 	}()
 
@@ -61,7 +61,7 @@ func (m *singleStringMessage) Pack() ([]byte, error) {
 	// 如果 msg 长度超过 uint16 最大值，则返回错误。
 	if len(msg) > math.MaxUint16 {
 		msg = nil
-		err = cockroachdbErrors.Newf("字符串消息长度 %[1]d 超过 uint16 最大值 %[2]d。", len(msg), math.MaxUint16)
+		err = cockroachdberrors.Newf("字符串消息长度 %[1]d 超过 uint16 最大值 %[2]d。", len(msg), math.MaxUint16)
 	}
 
 	return msg, err
@@ -79,7 +79,7 @@ func (m *singleStringMessage) Unpack(payload []byte) error {
 
 	defer func() {
 		if r := recover(); nil != r {
-			err = cockroachdbErrors.Newf("解包过程发生异常：%[1]v。", r)
+			err = cockroachdberrors.Newf("解包过程发生异常：%[1]v。", r)
 		}
 	}()
 
@@ -126,9 +126,9 @@ func GenerateSingleStringMessage(messageType MessageType, payload []byte) (Messa
 	var err error
 
 	if messageType != SingleStringMessageType {
-		err = cockroachdbErrors.Newf("消息类型 %[1]d 与目标消息类型 %[2]d 不匹配。", messageType, SingleStringMessageType)
+		err = cockroachdberrors.Newf("消息类型 %[1]d 与目标消息类型 %[2]d 不匹配。", messageType, SingleStringMessageType)
 	} else if nil == payload {
-		err = cockroachdbErrors.Newf("有效负载不能为空。")
+		err = cockroachdberrors.Newf("有效负载不能为空。")
 	} else {
 		m = &singleStringMessage{
 			messageType: SingleStringMessageType,
