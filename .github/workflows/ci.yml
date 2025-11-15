@@ -22,8 +22,8 @@ jobs:
       matrix:
         # 定义测试矩阵，在多个 Go 版本上运行测试。
         # TODO: 低版本会出现错误，待处理。
-        # go-version: ['1.25', '1.24', '1.23']
-        go-version: ['1.25']
+        go-version: ['1.25', '1.24', '1.23']
+        # go-version: ['1.25']
       # 设置当某个版本测试失败时，其他版本继续执行。
       fail-fast: true
       # 如果限制并发执行数为 1，测试按顺序执行。
@@ -48,19 +48,6 @@ jobs:
       # 使用 Makefile 中的 test 命令运行测试。
       - name: Run tests
         run: make test
-      # 使用 Makefile 中的 coverage 命令运行测试并生成覆盖率报告。
-      - name: Run tests with coverage
-        run: make coverage
-      # 使用 Codecov 官方 action 上传覆盖率报告。
-      # 上传后可以在 https://codecov.io 查看报告，需要先用 GitHub 账号登录并激活仓库。
-      # 也可以通过 GitHub PR 中的 Codecov bot 评论查看覆盖率变化。
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          # 指定覆盖率报告文件路径。
-          file: ./out/coverage.txt
-          # 上传失败时不中断 CI 流程。
-          fail_ci_if_error: false
   lint:
     # 设置任务显示名称为 Lint。
     name: Lint
@@ -93,3 +80,16 @@ jobs:
           golangci-lint version
           # 运行 golangci-lint。
           make lint
+      # 使用 Makefile 中的 coverage 命令运行测试并生成覆盖率报告。
+      - name: Run tests with coverage
+        run: make coverage
+      # 使用 Codecov 官方 action 上传覆盖率报告。
+      # 上传后可以在 https://codecov.io 查看报告，需要先用 GitHub 账号登录并激活仓库。
+      # 也可以通过 GitHub PR 中的 Codecov bot 评论查看覆盖率变化。
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          # 指定覆盖率报告文件路径。
+          file: ./out/coverage.txt
+          # 上传失败时不中断 CI 流程。
+          fail_ci_if_error: false
