@@ -23,7 +23,8 @@ func TestWithoutCancel(t *testing.T) {
 		ch <- struct{}{}
 	}
 	ctx, cancel := context.WithCancelCause(context.Background())
-	ctxTo, _ := context.WithTimeout(ctx, 10*time.Millisecond)
+	ctxTo, cancelTo := context.WithTimeout(ctx, 10*time.Millisecond)
+	defer cancelTo()
 	t.Run("超时停止", func(t *testing.T) {
 
 		go f(ctxTo, t.Name())
