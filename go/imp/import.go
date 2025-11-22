@@ -220,8 +220,8 @@ func checkAlias(imp ImportInfo) string {
 			return fmt.Sprintf("项目内包 %s 应使用 app 前缀别名", imp.Path)
 		}
 	}
-	// 检查别名只能包含小写字母和数字
-	if imp.Alias != "" {
+	// 检查别名只能包含小写字母和数字；或是被通过别名忽略包导入。
+	if imp.Alias != "" && imp.Alias != "_" {
 		for _, r := range imp.Alias {
 			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
 				return fmt.Sprintf("别名 %s 只能包含小写字母和数字", imp.Alias)
