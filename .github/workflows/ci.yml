@@ -8,9 +8,9 @@ on:
   pull_request:
 env:
   # 设置 golangci-lint 的版本。
-  GOLANGCI_LINT_VERSION: v1.64.8
+  GOLANGCI_LINT_VERSION: v2.12.2
   # Go 版本。
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26'
 jobs:
   # 定义测试作业。
   test:
@@ -20,10 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # 定义测试矩阵，在多个 Go 版本上运行测试。
-        # TODO: 低版本会出现错误，待处理。
-        go-version: ['1.25', '1.24', '1.23']
-        # go-version: ['1.25']
+        # 定义测试矩阵，使用 Go 1.26 运行测试。
+        go-version: ['1.26.x']
       # 设置当某个版本测试失败时，其他版本继续执行。
       fail-fast: true
       # 如果限制并发执行数为 1，测试按顺序执行。
@@ -75,7 +73,7 @@ jobs:
         run: |-
           # 安装 golangci-lint。
           # 注意 v1 v2 版本存在较大差异，对配置文件也不兼容。
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@${{ env.GOLANGCI_LINT_VERSION }}
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ env.GOLANGCI_LINT_VERSION }}
           # 显示版本信息。
           golangci-lint version
           # 运行 golangci-lint。

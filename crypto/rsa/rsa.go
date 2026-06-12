@@ -70,6 +70,7 @@ func EncryptPublicKey(pubKey *rsa.PublicKey, dataClear []byte) ([]byte, error) {
 	}()
 
 	// 使用标准库函数 rsa.EncryptPKCS1v15 进行加密操作
+	//nolint:staticcheck // 保持现有 PKCS#1 v1.5 API 行为，避免改变公开 API。
 	dataCipher, err = rsa.EncryptPKCS1v15(rand.Reader, pubKey, dataClear)
 
 	// 返回加密后的密文和可能的错误。
@@ -258,6 +259,7 @@ func DecryptPrivateKey(privateKey *rsa.PrivateKey, dataCipher []byte) ([]byte, e
 	}()
 
 	// 使用标准库函数 rsa.DecryptPKCS1v15 进行解密操作。
+	//nolint:staticcheck // 保持现有 PKCS#1 v1.5 API 行为，避免改变公开 API。
 	dataClear, err = rsa.DecryptPKCS1v15(rand.Reader, privateKey, dataCipher)
 
 	// 返回解密后的明文和可能的错误。

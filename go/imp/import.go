@@ -223,7 +223,7 @@ func checkAlias(imp ImportInfo) string {
 	// 检查别名只能包含小写字母和数字
 	if imp.Alias != "" {
 		for _, r := range imp.Alias {
-			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
 				return fmt.Sprintf("别名 %s 只能包含小写字母和数字", imp.Alias)
 			}
 		}
