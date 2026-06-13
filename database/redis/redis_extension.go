@@ -95,6 +95,71 @@ func NewRedisExtension(redis Redis) RedisExtension {
 	return &redisExtension{redis: redis}
 }
 
+// redisSetExpirationArgs 根据过期时间构造 SET 命令的过期参数。
+//
+// 该辅助函数确保 Redis 收到整数秒或整数毫秒 TTL；非正过期时间表示不设置过期参数。
+//
+// 参数：
+//   - expiration：业务侧传入的过期时间。
+//
+// 返回值：
+//   - []interface{}：可追加到 SET 命令后的过期参数。
+func redisSetExpirationArgs(expiration time.Duration) []interface{} {
+	if expiration <= 0 {
+		return nil
+	}
+
+	unit, ttl := redisExpirationUnitAndTTL(expiration)
+	return []interface{}{unit, ttl}
+}
+
+// redisExpireArgs 根据过期时间构造过期相关命令参数。
+//
+// 该辅助函数对整秒过期使用 EXPIRE，对非整秒过期使用 PEXPIRE；非正过期时间使用 EXPIRE 0 保持 Redis 立即过期语义。
+//
+// 参数：
+//   - key：要设置过期语义的键名。
+//   - expiration：业务侧传入的过期时间。
+//
+// 返回值：
+//   - []interface{}：可直接传给 Redis Do 方法的命令参数。
+func redisExpireArgs(key string, expiration time.Duration) []interface{} {
+	if expiration <= 0 {
+		return []interface{}{"EXPIRE", key, int64(0)}
+	}
+
+	unit, ttl := redisExpirationUnitAndTTL(expiration)
+	if unit == "EX" {
+		return []interface{}{"EXPIRE", key, ttl}
+	}
+	return []interface{}{"PEXPIRE", key, ttl}
+}
+
+// redisExpirationUnitAndTTL 将过期时间转换为 Redis 可接受的整数 TTL。
+//
+// 该辅助函数优先使用整秒语义；非整秒过期时间向上取整到至少 1 毫秒，避免正过期时间被截断为 0。
+//
+// 参数：
+//   - expiration：正数过期时间。
+//
+// 返回值：
+//   - string：Redis 过期单位，取值为 EX 或 PX。
+//   - int64：Redis 可接受的整数 TTL。
+func redisExpirationUnitAndTTL(expiration time.Duration) (string, int64) {
+	if expiration%time.Second == 0 {
+		return "EX", int64(expiration / time.Second)
+	}
+
+	ttl := expiration / time.Millisecond
+	if expiration%time.Millisecond != 0 {
+		ttl++
+	}
+	if ttl < 1 {
+		ttl = 1
+	}
+	return "PX", int64(ttl)
+}
+
 // Do 执行任意 Redis 命令。
 //
 // 参数：
@@ -260,7 +325,9 @@ func (r *redisExtension) Get(ctx context.Context, key string) *Cmd {
 // 返回值：
 //   - *Cmd：命令执行结果
 func (r *redisExtension) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *Cmd {
-	return r.redis.Do(ctx, "SET", key, value, "EX", expiration.Seconds())
+	args := []interface{}{"SET", key, value}
+	args = append(args, redisSetExpirationArgs(expiration)...)
+	return r.redis.Do(ctx, args...)
 }
 
 // Del 删除指定的键。
@@ -285,7 +352,7 @@ func (r *redisExtension) Del(ctx context.Context, key string) *Cmd {
 // 返回值：
 //   - *Cmd：命令执行结果
 func (r *redisExtension) Expire(ctx context.Context, key string, expiration time.Duration) *Cmd {
-	return r.redis.Do(ctx, "EXPIRE", key, expiration.Seconds())
+	return r.redis.Do(ctx, redisExpireArgs(key, expiration)...)
 }
 
 // ScriptFlush 清空脚本缓存。
@@ -296,9 +363,10 @@ func (r *redisExtension) Expire(ctx context.Context, key string, expiration time
 // 返回值：
 //   - *StatusCmd：命令执行状态
 func (r *redisExtension) ScriptFlush(ctx context.Context) *StatusCmd {
-	// 通过类型断言调用底层实现，确保兼容接口
-	if c, ok := r.redis.(*redisClient); ok {
-		return c.ScriptFlush(ctx)
+	if scriptFlusher, ok := r.redis.(interface {
+		ScriptFlush(context.Context) *StatusCmd
+	}); ok {
+		return scriptFlusher.ScriptFlush(ctx)
 	}
 	return nil
 }
@@ -311,8 +379,10 @@ func (r *redisExtension) ScriptFlush(ctx context.Context) *StatusCmd {
 // 返回值：
 //   - *StatusCmd：命令执行状态
 func (r *redisExtension) ScriptKill(ctx context.Context) *StatusCmd {
-	if c, ok := r.redis.(*redisClient); ok {
-		return c.ScriptKill(ctx)
+	if scriptKiller, ok := r.redis.(interface {
+		ScriptKill(context.Context) *StatusCmd
+	}); ok {
+		return scriptKiller.ScriptKill(ctx)
 	}
 	return nil
 }

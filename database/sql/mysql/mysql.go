@@ -7,6 +7,7 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -21,6 +22,9 @@ import (
 // 用于保护驱动注册过程的互斥锁。
 var (
 	driverLocker sync.Mutex
+	sqlOpen      = sql.Open
+	closeDB      = func(db *sql.DB) error { return db.Close() }
+	newLogger    = func() (kitlog.Logger, error) { return kitlog.NewLogger() }
 )
 
 // MySQL 连接的默认配置值。
@@ -102,28 +106,25 @@ func WithDSN(dsn string) MySQLOption {
 //   - MySQLOption：返回配置函数。
 func WithDSNParams(baseDSN string, params map[string]string) MySQLOption {
 	return func(o *MySQLOptions) {
+		if baseDSN == "" {
+			baseDSN = defaultDSN
+		}
 		if len(params) == 0 {
 			o.dns = baseDSN
 			return
 		}
 
-		if baseDSN == "" {
-			baseDSN = defaultDSN
-		}
-
-		paramStr := ""
-		if !strings.Contains(baseDSN, "?") {
-			paramStr = "?"
-		} else {
-			paramStr = "&"
-		}
-
+		values := url.Values{}
 		for key, value := range params {
-			paramStr += fmt.Sprintf("%s=%s&", key, value)
+			values.Set(key, value)
 		}
-		paramStr = strings.TrimRight(paramStr, "&")
 
-		o.dns = baseDSN + paramStr
+		separator := "?"
+		if strings.Contains(baseDSN, "?") {
+			separator = "&"
+		}
+
+		o.dns = baseDSN + separator + values.Encode()
 	}
 }
 
@@ -218,6 +219,12 @@ func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 	}
 
 	var err error
+	if _, err = gosqldriver.ParseDSN(options.dns); nil != err {
+		if nil != options.logger {
+			options.logger.Error("mysql", "error", err)
+		}
+		return nil, nil, err
+	}
 
 	// 生成唯一的驱动名称。
 	driverName := fmt.Sprintf("mysql-kit-%s", options.namespace)
@@ -242,7 +249,7 @@ func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 
 	// 打开数据库连接。
 	var db *sql.DB
-	if db, err = sql.Open(driverName, options.dns); nil != err {
+	if db, err = sqlOpen(driverName, options.dns); nil != err {
 		if nil != options.logger {
 			options.logger.Error("mysql", "error", err)
 		}
@@ -257,7 +264,7 @@ func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 
 	// 定义清理函数。
 	cleanup := func() {
-		if err := db.Close(); nil != err && nil != options.logger {
+		if err := closeDB(db); nil != err && nil != options.logger {
 			options.logger.Error("mysql", "error", err)
 		}
 	}
@@ -275,14 +282,17 @@ func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 //   - error: 如果配置过程中发生错误，返回相应的错误信息。
 func configureHooks(hook *kitdriver.HookManager, opts *MySQLOptions) error {
 	var err error
-	// 配置错误日志钩子。
-	if opts.logError {
+	if opts.logError || opts.slowThreshold > 0 {
 		if nil == opts.logger {
-			opts.logger, err = kitlog.NewLogger()
+			opts.logger, err = newLogger()
 			if nil != err {
 				return err
 			}
 		}
+	}
+
+	// 配置错误日志钩子。
+	if opts.logError {
 		h := kitdriver.NewHookLogError(opts.namespace, opts.logger)
 		hook.AddHook(h)
 	}
