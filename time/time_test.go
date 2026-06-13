@@ -41,7 +41,7 @@ func TestInit_DefaultCarbonConfiguration(t *testing.T) {
 		{
 			name:        "global-state/week-starts-at",
 			description: "验证包初始化会把 Carbon 默认每周起始日设置为项目默认值。",
-			give:        func() string { return carbon.DefaultWeekStartsAt },
+			give:        func() string { return carbon.DefaultWeekStartsAt.String() },
 			want:        defaultWeekStartAt,
 		},
 		{
@@ -61,6 +61,97 @@ func TestInit_DefaultCarbonConfiguration(t *testing.T) {
 	}
 }
 
+// TestParseWeekStartAt 验证字符串形式的周起始日配置能转换为 Carbon 星期类型。
+//
+// 该测试覆盖完整星期枚举、大小写兼容以及无法识别值的默认回退策略，确保 -X 注入
+// defaultWeekStartAt 字符串配置时仍保持稳定行为。
+//
+// 参数：
+//   - t: 测试上下文，用于运行表驱动子测试和报告断言失败。
+func TestParseWeekStartAt(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		give        string
+		want        carbon.Weekday
+	}{
+		{
+			name:        "success/sunday",
+			description: "验证 Sunday 会转换为 carbon.Sunday。",
+			give:        "Sunday",
+			want:        carbon.Sunday,
+		},
+		{
+			name:        "success/monday",
+			description: "验证 Monday 会转换为 carbon.Monday。",
+			give:        "Monday",
+			want:        carbon.Monday,
+		},
+		{
+			name:        "success/tuesday",
+			description: "验证 Tuesday 会转换为 carbon.Tuesday。",
+			give:        "Tuesday",
+			want:        carbon.Tuesday,
+		},
+		{
+			name:        "success/wednesday",
+			description: "验证 Wednesday 会转换为 carbon.Wednesday。",
+			give:        "Wednesday",
+			want:        carbon.Wednesday,
+		},
+		{
+			name:        "success/thursday",
+			description: "验证 Thursday 会转换为 carbon.Thursday。",
+			give:        "Thursday",
+			want:        carbon.Thursday,
+		},
+		{
+			name:        "success/friday",
+			description: "验证 Friday 会转换为 carbon.Friday。",
+			give:        "Friday",
+			want:        carbon.Friday,
+		},
+		{
+			name:        "success/saturday",
+			description: "验证 Saturday 会转换为 carbon.Saturday。",
+			give:        "Saturday",
+			want:        carbon.Saturday,
+		},
+		{
+			name:        "success/lowercase",
+			description: "验证小写配置值也能正确转换。",
+			give:        "monday",
+			want:        carbon.Monday,
+		},
+		{
+			name:        "success/uppercase",
+			description: "验证大写配置值也能正确转换。",
+			give:        "MONDAY",
+			want:        carbon.Monday,
+		},
+		{
+			name:        "fallback/empty",
+			description: "验证空配置值会回退到项目默认的周一。",
+			give:        "",
+			want:        carbon.Monday,
+		},
+		{
+			name:        "fallback/unknown",
+			description: "验证无法识别的配置值会回退到项目默认的周一。",
+			give:        "unknown",
+			want:        carbon.Monday,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+			assert.Equal(t, tt.want, parseWeekStartAt(tt.give))
+		})
+	}
+}
+
 // TestNow_RealClockWithinCallWindow 验证 Now 返回真实当前时间。
 //
 // 该测试在清理测试时钟后，断言 Now 的结果位于调用前后的真实时间窗口内。
@@ -69,8 +160,8 @@ func TestInit_DefaultCarbonConfiguration(t *testing.T) {
 //   - t: 测试上下文，用于注册清理逻辑和报告断言失败。
 func TestNow_RealClockWithinCallWindow(t *testing.T) {
 	// 该用例验证未冻结测试时间时，Now 返回值位于调用前后的真实时间窗口内。
-	carbon.CleanTestNow()
-	t.Cleanup(carbon.CleanTestNow)
+	carbon.ClearTestNow()
+	t.Cleanup(carbon.ClearTestNow)
 
 	loc, err := stdtime.LoadLocation(defaultTimezone)
 	require.NoError(t, err)
@@ -107,7 +198,7 @@ func TestNow_DefaultFormattingTimezoneAndLocale(t *testing.T) {
 	assert.Equal(t, defaultTimezone, got.Timezone())
 	assert.Equal(t, 8*60*60, got.ZoneOffset())
 	assert.Equal(t, defaultLocale, got.Locale())
-	assert.Equal(t, defaultWeekStartAt, got.WeekStartsAt())
+	assert.Equal(t, defaultWeekStartAt, got.WeekStartsAt().String())
 	assert.Equal(t, stdtime.Monday, got.StdTime().Weekday())
 	assert.Equal(t, int((123 * stdtime.Millisecond).Nanoseconds()), got.StdTime().Nanosecond())
 }
@@ -254,12 +345,12 @@ func TestRelativeAPIs_ReturnExpectedOffsets(t *testing.T) {
 // 参数：
 //   - t: 测试上下文，用于运行表驱动子测试、恢复 Carbon 全局状态和报告断言失败。
 func TestRelativeAPIs_ReturnInvalidCarbonWithoutPanic(t *testing.T) {
-	carbon.CleanTestNow()
+	carbon.ClearTestNow()
 	oldTimezone := carbon.DefaultTimezone
 	carbon.DefaultTimezone = "Invalid/Timezone"
 	t.Cleanup(func() {
 		carbon.DefaultTimezone = oldTimezone
-		carbon.CleanTestNow()
+		carbon.ClearTestNow()
 	})
 
 	tests := []struct {
@@ -657,7 +748,7 @@ func freezeNow(t *testing.T, now *carbon.Carbon) {
 
 	requireValidCarbon(t, now)
 	carbon.SetTestNow(now)
-	t.Cleanup(carbon.CleanTestNow)
+	t.Cleanup(carbon.ClearTestNow)
 }
 
 // requireValidCarbon 校验 Carbon 实例非空且没有错误。

@@ -5,6 +5,8 @@
 package time
 
 import (
+	"strings"
+
 	"github.com/dromara/carbon/v2"
 )
 
@@ -12,13 +14,13 @@ var (
 	// defaultDateTimeLayout 指定默认的日期时间格式。
 	// 格式遵循 Go 标准时间格式：2006-01-02T15:04:05.000Z
 	// 可在编译时通过 -X 参数修改，例如：
-	// go build -ldflags "-X 'github.com/fsyyft/fsyyft-go/time.defaultDateTimeLayout=2006-01-02 15:04:05'"
+	// go build -ldflags "-X 'github.com/fsyyft-go/kit/time.defaultDateTimeLayout=2006-01-02 15:04:05'"
 	defaultDateTimeLayout = "2006-01-02T15:04:05.000Z"
 
 	// defaultTimezone 指定默认时区。
 	// 使用中国标准时间 (PRC)。
 	// 可在编译时通过 -X 参数修改，例如：
-	// go build -ldflags "-X 'github.com/fsyyft/fsyyft-go/time.defaultTimezone=UTC'"
+	// go build -ldflags "-X 'github.com/fsyyft-go/kit/time.defaultTimezone=UTC'"
 	// 常用时区值：
 	// - PRC: 中国标准时间
 	// - UTC: 协调世界时
@@ -29,16 +31,21 @@ var (
 	// defaultWeekStartAt 指定每周的起始日。
 	// 设置为周一 (Monday)。
 	// 可在编译时通过 -X 参数修改，例如：
-	// go build -ldflags "-X 'github.com/fsyyft/fsyyft-go/time.defaultWeekStartAt=Sunday'"
-	// 可选值：
-	// - Monday: 周一
+	// go build -ldflags "-X 'github.com/fsyyft-go/kit/time.defaultWeekStartAt=Sunday'"
+	// 可选值（大小写不敏感）：
 	// - Sunday: 周日
+	// - Monday: 周一
+	// - Tuesday: 周二
+	// - Wednesday: 周三
+	// - Thursday: 周四
+	// - Friday: 周五
+	// - Saturday: 周六
 	defaultWeekStartAt = "Monday"
 
 	// defaultLocale 指定默认的语言环境。
 	// 使用简体中文 (zh-CN)。
 	// 可在编译时通过 -X 参数修改，例如：
-	// go build -ldflags "-X 'github.com/fsyyft/fsyyft-go/time.defaultLocale=en'"
+	// go build -ldflags "-X 'github.com/fsyyft-go/kit/time.defaultLocale=en'"
 	// 支持的语言：
 	// - zh-CN: 简体中文
 	// - en: 英语
@@ -57,9 +64,35 @@ func init() {
 	carbon.SetDefault(carbon.Default{
 		Layout:       defaultDateTimeLayout,
 		Timezone:     defaultTimezone,
-		WeekStartsAt: defaultWeekStartAt,
+		WeekStartsAt: parseWeekStartAt(defaultWeekStartAt),
 		Locale:       defaultLocale,
 	})
+}
+
+// parseWeekStartAt 将字符串形式的周起始日配置转换为 Carbon 使用的 Weekday 类型。
+//
+// 该函数保留 defaultWeekStartAt 可通过 -X 注入字符串的既有语义，同时兼容新版 carbon
+// 将 WeekStartsAt 从 string 改为 carbon.Weekday 的 API 变化。无法识别的值返回 carbon.Monday，
+// 与当前项目默认配置保持一致。
+func parseWeekStartAt(weekStartAt string) carbon.Weekday {
+	switch strings.ToLower(weekStartAt) {
+	case "sunday":
+		return carbon.Sunday
+	case "monday":
+		return carbon.Monday
+	case "tuesday":
+		return carbon.Tuesday
+	case "wednesday":
+		return carbon.Wednesday
+	case "thursday":
+		return carbon.Thursday
+	case "friday":
+		return carbon.Friday
+	case "saturday":
+		return carbon.Saturday
+	default:
+		return carbon.Monday
+	}
 }
 
 // Now 返回当前时间的 Carbon 实例。
