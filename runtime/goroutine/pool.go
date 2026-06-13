@@ -326,20 +326,12 @@ func (p *goroutinePool) IsClosed() bool {
 // 返回值：
 //   - error：如果提交失败则返回错误。
 func Submit(task func()) error {
-	if nil == poolDefault {
-		poolDefaultLocker.Lock()
-		defer poolDefaultLocker.Unlock()
-		if nil == poolDefault {
-			if p, cleanup, err := NewGoroutinePool(WithName("default")); nil == err {
-				poolDefault = p.(*goroutinePool)
-			} else {
-				cleanup()
-				return err
-			}
-		}
+	p, err := defaultPool()
+	if err != nil {
+		return err
 	}
 
-	return poolDefault.Submit(func() {
+	return p.Submit(func() {
 		defer func() {
 			if r := recover(); nil != r {
 				kitlog.Error("goroutine panic", r)
@@ -347,4 +339,31 @@ func Submit(task func()) error {
 		}()
 		task()
 	})
+}
+
+// defaultPool 获取默认协程池实例，并在首次调用时完成懒加载初始化。
+//
+// 该函数使用 poolDefaultLocker 保护 poolDefault 的全部读写，避免并发 Submit 时出现数据竞争。
+//
+// 返回值：
+//   - *goroutinePool：默认协程池实例。
+//   - error：如果默认协程池初始化失败则返回错误。
+func defaultPool() (*goroutinePool, error) {
+	poolDefaultLocker.Lock()
+	defer poolDefaultLocker.Unlock()
+
+	if poolDefault != nil {
+		return poolDefault, nil
+	}
+
+	p, cleanup, err := NewGoroutinePool(WithName("default"))
+	if err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, err
+	}
+
+	poolDefault = p.(*goroutinePool)
+	return poolDefault, nil
 }

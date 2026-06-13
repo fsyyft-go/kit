@@ -48,17 +48,27 @@ func stat(p *goroutinePool) {
 	for {
 		select {
 		case <-ticker.C:
-			// 更新协程池的容量指标。
-			MetricWorkerCurrent.WithLabelValues(p.name, "cap").Set(float64(p.pool.Cap()))
-			// 更新正在运行的协程数量指标。
-			MetricWorkerCurrent.WithLabelValues(p.name, "running").Set(float64(p.pool.Running()))
-			// 更新空闲协程数量指标。
-			MetricWorkerCurrent.WithLabelValues(p.name, "free").Set(float64(p.pool.Free()))
-			// 更新等待任务的协程数量指标。
-			MetricWorkerCurrent.WithLabelValues(p.name, "waiting").Set(float64(p.pool.Waiting()))
+			collectWorkerMetrics(p)
 		case <-p.closed:
 			// 当协程池关闭时退出循环。
 			return
 		}
 	}
+}
+
+// collectWorkerMetrics 采集并写入协程池的当前状态指标。
+//
+// 该函数集中更新容量、运行中、空闲和等待中的 worker 指标，供定时采集协程和单元测试复用。
+//
+// 参数：
+//   - p：需要采集指标的协程池实例。
+func collectWorkerMetrics(p *goroutinePool) {
+	// 更新协程池的容量指标。
+	MetricWorkerCurrent.WithLabelValues(p.name, "cap").Set(float64(p.pool.Cap()))
+	// 更新正在运行的协程数量指标。
+	MetricWorkerCurrent.WithLabelValues(p.name, "running").Set(float64(p.pool.Running()))
+	// 更新空闲协程数量指标。
+	MetricWorkerCurrent.WithLabelValues(p.name, "free").Set(float64(p.pool.Free()))
+	// 更新等待任务的协程数量指标。
+	MetricWorkerCurrent.WithLabelValues(p.name, "waiting").Set(float64(p.pool.Waiting()))
 }
