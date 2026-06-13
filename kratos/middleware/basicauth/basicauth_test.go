@@ -143,6 +143,7 @@ func makeBasicAuthHeader(username, password string) string {
 func TestParseBasicAuth(t *testing.T) {
 	tests := []struct {
 		name          string
+		description   string
 		auth          string
 		wantUsername  string
 		wantPassword  string
@@ -151,6 +152,7 @@ func TestParseBasicAuth(t *testing.T) {
 	}{
 		{
 			name:          "无Basic前缀",
+			description:   "验证缺少 Basic 前缀的认证头会被识别为无效基本认证。",
 			auth:          "NotBasic dXNlcjpwYXNz",
 			wantUsername:  "",
 			wantPassword:  "",
@@ -159,6 +161,7 @@ func TestParseBasicAuth(t *testing.T) {
 		},
 		{
 			name:          "非法Base64编码",
+			description:   "验证 Basic 载荷不是合法 Base64 时返回解码错误。",
 			auth:          "Basic not-base64",
 			wantUsername:  "",
 			wantPassword:  "",
@@ -167,6 +170,7 @@ func TestParseBasicAuth(t *testing.T) {
 		},
 		{
 			name:          "无冒号分隔",
+			description:   "验证解码后缺少用户名与密码分隔符时返回无效基本认证错误。",
 			auth:          "Basic " + base64.StdEncoding.EncodeToString([]byte("useronly")),
 			wantUsername:  "",
 			wantPassword:  "",
@@ -175,6 +179,7 @@ func TestParseBasicAuth(t *testing.T) {
 		},
 		{
 			name:          "有效认证",
+			description:   "验证标准用户名和密码能从 Basic 认证头中正确解析。",
 			auth:          makeBasicAuthHeader("user", "pass"),
 			wantUsername:  "user",
 			wantPassword:  "pass",
@@ -183,6 +188,7 @@ func TestParseBasicAuth(t *testing.T) {
 		},
 		{
 			name:          "有效认证-空密码",
+			description:   "验证空密码仍属于合法 Basic 认证格式并能保留用户名。",
 			auth:          makeBasicAuthHeader("user", ""),
 			wantUsername:  "user",
 			wantPassword:  "",
@@ -191,6 +197,7 @@ func TestParseBasicAuth(t *testing.T) {
 		},
 		{
 			name:          "有效认证-特殊字符",
+			description:   "验证用户名和密码中的特殊字符经过 Base64 编码后可无损解析。",
 			auth:          makeBasicAuthHeader("user@example.com", "p@$$w0rd!"),
 			wantUsername:  "user@example.com",
 			wantPassword:  "p@$$w0rd!",
@@ -199,6 +206,7 @@ func TestParseBasicAuth(t *testing.T) {
 		},
 		{
 			name:          "有效认证-Unicode字符",
+			description:   "验证 Unicode 用户名和密码在 Basic 认证解析中保持原始内容。",
 			auth:          makeBasicAuthHeader("用户", "密码"),
 			wantUsername:  "用户",
 			wantPassword:  "密码",
@@ -209,6 +217,8 @@ func TestParseBasicAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			username, password, err := parseBasicAuth(tt.auth)
 
 			if tt.wantErr {
@@ -230,6 +240,9 @@ func TestParseBasicAuth(t *testing.T) {
 func TestWithOptions(t *testing.T) {
 	// 测试WithValidator
 	t.Run("WithValidator", func(t *testing.T) {
+		description := "验证 WithValidator 会把自定义认证器写入选项并按用户名密码返回验证结果。"
+		t.Log(description)
+
 		validator := func(ctx context.Context, username, password string) bool {
 			return username == "test" && password == "password"
 		}
@@ -245,6 +258,9 @@ func TestWithOptions(t *testing.T) {
 
 	// 测试WithRealm
 	t.Run("WithRealm", func(t *testing.T) {
+		description := "验证 WithRealm 会把指定认证域写入中间件选项。"
+		t.Log(description)
+
 		realm := "TestRealm"
 		opt := WithRealm(realm)
 		o := &options{}
@@ -256,6 +272,9 @@ func TestWithOptions(t *testing.T) {
 
 	// 测试多个选项组合
 	t.Run("MultipleOptions", func(t *testing.T) {
+		description := "验证多个选项连续应用时认证域与认证器行为都会保留。"
+		t.Log(description)
+
 		validator := func(ctx context.Context, username, password string) bool {
 			return username == "admin" && password == "secret"
 		}
@@ -276,6 +295,7 @@ func TestWithOptions(t *testing.T) {
 func TestServer(t *testing.T) {
 	tests := []struct {
 		name           string
+		description    string
 		setupTransport func() *mockTransport
 		validator      CredentialValidator
 		realm          string
@@ -283,7 +303,8 @@ func TestServer(t *testing.T) {
 		expectedError  error
 	}{
 		{
-			name: "无认证头",
+			name:        "无认证头",
+			description: "验证缺少 Authorization 头时中间件返回认证错误并设置 WWW-Authenticate 响应头。",
 			setupTransport: func() *mockTransport {
 				return newMockTransport() // 不设置Authorization头
 			},
@@ -295,7 +316,8 @@ func TestServer(t *testing.T) {
 			expectedError: ErrInvalidBasicAuth,
 		},
 		{
-			name: "无效认证头格式",
+			name:        "无效认证头格式",
+			description: "验证非 Basic 格式认证头会被拒绝并阻止后续处理器执行。",
 			setupTransport: func() *mockTransport {
 				m := newMockTransport()
 				m.header["Authorization"] = "NotBasic xyz"
@@ -309,7 +331,8 @@ func TestServer(t *testing.T) {
 			expectedError: ErrInvalidBasicAuth,
 		},
 		{
-			name: "非法Base64编码",
+			name:        "非法Base64编码",
+			description: "验证 Basic 载荷无法 Base64 解码时中间件返回认证错误。",
 			setupTransport: func() *mockTransport {
 				m := newMockTransport()
 				m.header["Authorization"] = "Basic not-valid-base64"
@@ -323,7 +346,8 @@ func TestServer(t *testing.T) {
 			expectedError: ErrInvalidBasicAuth,
 		},
 		{
-			name: "认证失败",
+			name:        "认证失败",
+			description: "验证认证头格式正确但自定义认证器拒绝凭据时返回认证错误。",
 			setupTransport: func() *mockTransport {
 				m := newMockTransport()
 				m.header["Authorization"] = makeBasicAuthHeader("user", "pass")
@@ -337,7 +361,8 @@ func TestServer(t *testing.T) {
 			expectedError: ErrInvalidBasicAuth,
 		},
 		{
-			name: "认证成功",
+			name:        "认证成功",
+			description: "验证认证头解析成功且认证器接受凭据时会继续调用后续处理器。",
 			setupTransport: func() *mockTransport {
 				m := newMockTransport()
 				m.header["Authorization"] = makeBasicAuthHeader("user", "pass")
@@ -350,7 +375,8 @@ func TestServer(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "空密码认证成功",
+			name:        "空密码认证成功",
+			description: "验证空密码凭据在认证器接受时仍可通过认证并调用处理器。",
 			setupTransport: func() *mockTransport {
 				m := newMockTransport()
 				m.header["Authorization"] = makeBasicAuthHeader("user", "")
@@ -363,7 +389,8 @@ func TestServer(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "非HTTP传输层",
+			name:        "非HTTP传输层",
+			description: "验证未注入服务端传输层的上下文会跳过认证并调用后续处理器。",
 			setupTransport: func() *mockTransport {
 				// 返回一个自定义的Transport，使Kind()方法返回非HTTP类型
 				m := newMockTransport()
@@ -379,6 +406,8 @@ func TestServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 创建一个模拟的context
 			mockTr := tt.setupTransport()
 			var ctx context.Context
@@ -428,30 +457,35 @@ func TestServer(t *testing.T) {
 func TestDefaultValidator(t *testing.T) {
 	tests := []struct {
 		name           string
+		description    string
 		username       string
 		password       string
 		expectedResult bool
 	}{
 		{
 			name:           "有效用户名和密码",
+			description:    "验证默认认证器即使收到非空用户名和密码也会拒绝认证。",
 			username:       "user",
 			password:       "pass",
 			expectedResult: false, // 默认验证器总是返回false
 		},
 		{
 			name:           "空用户名",
+			description:    "验证默认认证器会拒绝空用户名的凭据组合。",
 			username:       "",
 			password:       "pass",
 			expectedResult: false,
 		},
 		{
 			name:           "空密码",
+			description:    "验证默认认证器会拒绝空密码的凭据组合。",
 			username:       "user",
 			password:       "",
 			expectedResult: false,
 		},
 		{
 			name:           "空用户名和密码",
+			description:    "验证默认认证器会拒绝用户名和密码均为空的凭据组合。",
 			username:       "",
 			password:       "",
 			expectedResult: false,
@@ -472,6 +506,8 @@ func TestDefaultValidator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 创建验证请求
 			mockTr := newMockTransport()
 			mockTr.header["Authorization"] = makeBasicAuthHeader(tt.username, tt.password)

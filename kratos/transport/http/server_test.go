@@ -46,12 +46,14 @@ func TestGetPathsScenarios(t *testing.T) {
 	// 定义测试用例。
 	tests := []struct {
 		name          string                    // 测试用例名称。
+		description   string                    // 用例语义说明。
 		setupServer   func() *kratoshttp.Server // 准备服务器的函数。
 		expectEmpty   bool                      // 是否期望返回空列表。
 		validatePaths func([]RouteInfo)         // 验证路径列表的函数。
 	}{
 		{
-			name: "正常路由",
+			name:        "正常路由",
+			description: "验证包含普通路由和前缀路由的 Kratos 服务器能够返回非空路由信息。",
 			setupServer: func() *kratoshttp.Server {
 				srv := kratoshttp.NewServer()
 				srv.Handle("/test", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
@@ -64,7 +66,8 @@ func TestGetPathsScenarios(t *testing.T) {
 			},
 		},
 		{
-			name: "空服务器",
+			name:        "空服务器",
+			description: "验证 nil Kratos 服务器会返回空路由列表且不会 panic。",
 			setupServer: func() *kratoshttp.Server {
 				return nil
 			},
@@ -74,7 +77,8 @@ func TestGetPathsScenarios(t *testing.T) {
 			},
 		},
 		{
-			name: "复杂路径",
+			name:        "复杂路径",
+			description: "验证包含正则参数模板的复杂路由能够被遍历并返回路由信息。",
 			setupServer: func() *kratoshttp.Server {
 				srv := kratoshttp.NewServer()
 				complexPath := "/test/{param:.*}"
@@ -87,7 +91,8 @@ func TestGetPathsScenarios(t *testing.T) {
 			},
 		},
 		{
-			name: "无路由",
+			name:        "无路由",
+			description: "验证无注册路由的服务器返回非 nil 的空路由切片。",
 			setupServer: func() *kratoshttp.Server {
 				return kratoshttp.NewServer()
 			},
@@ -97,11 +102,28 @@ func TestGetPathsScenarios(t *testing.T) {
 				assert.NotNil(t, routes)
 			},
 		},
+		{
+			name:        "跳过无路径模板路由",
+			description: "验证 GetPaths 遇到无法获取路径模板的路由时会跳过该路由并继续返回可用结果。",
+			setupServer: func() *kratoshttp.Server {
+				srv := kratoshttp.NewServer()
+				router := getRouter(srv)
+				router.NewRoute().Methods("GET")
+				srv.Handle("/visible", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+				return srv
+			},
+			expectEmpty: false,
+			validatePaths: func(routes []RouteInfo) {
+				assert.Contains(t, routes, RouteInfo{method: "GET", path: "/visible"})
+			},
+		},
 	}
 
 	// 执行测试用例。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 准备服务器。
 			srv := tt.setupServer()
 
@@ -131,11 +153,13 @@ func TestParseBasicScenarios(t *testing.T) {
 	// 定义测试用例。
 	tests := []struct {
 		name        string                    // 测试用例名称。
+		description string                    // 用例语义说明。
 		setupServer func() *kratoshttp.Server // 准备服务器的函数。
 		setupEngine func() *gin.Engine        // 准备 Gin 引擎的函数。
 	}{
 		{
-			name: "基本解析",
+			name:        "基本解析",
+			description: "验证 Parse 在空 Gin 引擎和可用 Kratos 服务器上可以安全执行。",
 			setupServer: func() *kratoshttp.Server {
 				return kratoshttp.NewServer()
 			},
@@ -144,7 +168,8 @@ func TestParseBasicScenarios(t *testing.T) {
 			},
 		},
 		{
-			name: "无路由服务器",
+			name:        "无路由服务器",
+			description: "验证 Parse 处理无注册路由服务器时不会 panic，且路由列表保持非 nil。",
 			setupServer: func() *kratoshttp.Server {
 				return kratoshttp.NewServer()
 			},
@@ -157,6 +182,8 @@ func TestParseBasicScenarios(t *testing.T) {
 	// 执行测试用例。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 准备服务器和引擎。
 			srv := tt.setupServer()
 			engine := tt.setupEngine()
@@ -183,11 +210,13 @@ func TestParseWithPathProcessing(t *testing.T) {
 	// 定义测试用例。
 	tests := []struct {
 		name        string                              // 测试用例名称。
+		description string                              // 用例语义说明。
 		setupRoute  func(*mux.Router, http.HandlerFunc) // 设置路由的函数。
 		testRequest func(*gin.Engine)                   // 测试请求的函数。
 	}{
 		{
-			name: "处理查询参数",
+			name:        "处理查询参数",
+			description: "验证包含查询字符串的 mux 路由注册到 Gin 时不会导致 Parse 崩溃。",
 			setupRoute: func(router *mux.Router, handler http.HandlerFunc) {
 				router.Handle("/path/with/query?param=value", handler).Methods("GET")
 			},
@@ -199,7 +228,8 @@ func TestParseWithPathProcessing(t *testing.T) {
 			},
 		},
 		{
-			name: "处理空路径",
+			name:        "处理空路径",
+			description: "验证空 mux 路径经过 Parse 转换后能够被 Gin 引擎安全处理。",
 			setupRoute: func(router *mux.Router, handler http.HandlerFunc) {
 				router.Handle("", handler).Methods("GET")
 			},
@@ -215,6 +245,8 @@ func TestParseWithPathProcessing(t *testing.T) {
 	// 执行测试用例。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 创建服务器。
 			srv := kratoshttp.NewServer()
 
@@ -244,30 +276,36 @@ func TestParseWithPathProcessing(t *testing.T) {
 func TestParseWithNilParams(t *testing.T) {
 	// 定义测试用例。
 	tests := []struct {
-		name   string             // 测试用例名称。
-		server *kratoshttp.Server // 服务器。
-		engine *gin.Engine        // Gin 引擎。
+		name        string             // 测试用例名称。
+		description string             // 用例语义说明。
+		server      *kratoshttp.Server // 服务器。
+		engine      *gin.Engine        // Gin 引擎。
 	}{
 		{
-			name:   "nil 服务器",
-			server: nil,
-			engine: gin.New(),
+			name:        "nil 服务器",
+			description: "验证 Parse 收到 nil Kratos 服务器时直接返回且不会 panic。",
+			server:      nil,
+			engine:      gin.New(),
 		},
 		{
-			name:   "nil 引擎",
-			server: kratoshttp.NewServer(),
-			engine: nil,
+			name:        "nil 引擎",
+			description: "验证 Parse 收到 nil Gin 引擎时直接返回且不会 panic。",
+			server:      kratoshttp.NewServer(),
+			engine:      nil,
 		},
 		{
-			name:   "全部 nil",
-			server: nil,
-			engine: nil,
+			name:        "全部 nil",
+			description: "验证 Parse 同时收到 nil 服务器和 nil 引擎时直接返回且不会 panic。",
+			server:      nil,
+			engine:      nil,
 		},
 	}
 
 	// 执行测试用例。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 验证 Parse 不会导致 panic。
 			assert.NotPanics(t, func() {
 				Parse(tt.server, tt.engine)
@@ -280,82 +318,94 @@ func TestParseWithNilParams(t *testing.T) {
 func TestParsePath(t *testing.T) {
 	// 定义测试用例。
 	tests := []struct {
-		name     string // 测试用例名称
-		input    string // 输入的 Mux 路由
-		expected string // 期望的 Gin 路由
+		name        string // 测试用例名称
+		description string // 用例语义说明
+		input       string // 输入的 Mux 路由
+		expected    string // 期望的 Gin 路由
 	}{
 		// 基本路径测试
 		{
-			name:     "空路径",
-			input:    "",
-			expected: "/",
+			name:        "空路径",
+			description: "验证空 mux 路径会转换为 Gin 根路径。",
+			input:       "",
+			expected:    "/",
 		},
 		{
-			name:     "根路径",
-			input:    "/",
-			expected: "/",
+			name:        "根路径",
+			description: "验证根路径转换后仍保持为根路径。",
+			input:       "/",
+			expected:    "/",
 		},
 		{
-			name:     "简单路径",
-			input:    "/users",
-			expected: "/users",
+			name:        "简单路径",
+			description: "验证不含参数的普通路径在转换后保持不变。",
+			input:       "/users",
+			expected:    "/users",
 		},
 		{
-			name:     "不带前导斜杠的路径",
-			input:    "users",
-			expected: "/users",
+			name:        "不带前导斜杠的路径",
+			description: "验证缺少前导斜杠的路径会补齐为 Gin 绝对路径。",
+			input:       "users",
+			expected:    "/users",
 		},
 
 		// 参数路径测试
 		{
-			name:     "单个参数路径",
-			input:    "/users/{id}",
-			expected: "/users/:id",
+			name:        "单个参数路径",
+			description: "验证单个 mux 路径参数会转换为 Gin 冒号参数。",
+			input:       "/users/{id}",
+			expected:    "/users/:id",
 		},
 		{
-			name:     "多个参数路径",
-			input:    "/users/{id}/posts/{postId}",
-			expected: "/users/:id/posts/:postId",
+			name:        "多个参数路径",
+			description: "验证多个 mux 路径参数会分别转换为 Gin 冒号参数。",
+			input:       "/users/{id}/posts/{postId}",
+			expected:    "/users/:id/posts/:postId",
 		},
 		{
-			name:     "简单正则参数",
-			input:    "/users/{name:[a-z]+}",
-			expected: "/users/:name",
+			name:        "简单正则参数",
+			description: "验证带正则约束的 mux 参数会去除约束并转换为 Gin 参数。",
+			input:       "/users/{name:[a-z]+}",
+			expected:    "/users/:name",
 		},
 		{
-			name:     "多层嵌套路径",
-			input:    "/api/v1/users/{userId}/posts/{postId}",
-			expected: "/api/v1/users/:userId/posts/:postId",
+			name:        "多层嵌套路径",
+			description: "验证多层路径中的多个参数在转换后保留层级结构。",
+			input:       "/api/v1/users/{userId}/posts/{postId}",
+			expected:    "/api/v1/users/:userId/posts/:postId",
 		},
 
 		// 特殊情况测试
 		{
-			name:     "多个连续斜杠",
-			input:    "///users///{id}///",
-			expected: "/users/:id/",
+			name:        "多个连续斜杠",
+			description: "验证多个连续斜杠会被压缩，同时按原始尾斜杠语义保留末尾斜杠。",
+			input:       "///users///{id}///",
+			expected:    "/users/:id/",
 		},
 		{
-			name:     "点号路径",
-			input:    "/api/{version}/files/{filename}.{ext}",
-			expected: "/api/:version/files/:filename.:ext",
+			name:        "点号路径",
+			description: "验证文件名扩展名形式的相邻 mux 参数能转换为 Gin 参数。",
+			input:       "/api/{version}/files/{filename}.{ext}",
+			expected:    "/api/:version/files/:filename.:ext",
 		},
 		{
-			name:     "带下划线和连字符的参数",
-			input:    "/users/{user_id}/{user-name}",
-			expected: "/users/:user_id/:user-name",
+			name:        "带下划线和连字符的参数",
+			description: "验证参数名包含下划线或连字符时转换后保留参数名内容。",
+			input:       "/users/{user_id}/{user-name}",
+			expected:    "/users/:user_id/:user-name",
 		},
 	}
 
 	// 执行测试用例。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 获取实际结果。
 			got := parsePath(tt.input)
 
 			// 比较实际结果和期望结果。
-			if got != tt.expected {
-				t.Errorf("parsePath() = %v, want %v", got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
