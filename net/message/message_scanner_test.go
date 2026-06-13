@@ -2,139 +2,222 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-//
-// 文件设计思路：
-// 本测试文件针对 message_scanner.go 的 scanMessage 和 NewScanner 两个方法进行单元测试。
-// 采用表格驱动法，覆盖如下场景：
-//   - 正常完整包解析
-//   - 边界条件（不足 4 字节、长度字段异常、包体不完整等）
-//   - atEOF 行为
-//   - panic 捕获
-//   - 多包连续解析
-// 使用 stretchr/testify 断言，保证测试准确性。
-//
-// 使用方法：
-//   go test -v ./net/message -run ^TestScanMessage
-//   go test -coverprofile=cover.out ./net/message && go tool cover -func=cover.out
-//
-
 package message
 
 import (
 	"bytes"
-	"encoding/binary"
+	"io"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// TestScanMessage_表格驱动，覆盖协议边界、异常、正常等多种情况。
+// TestScanMessage 验证协议分割函数在完整帧、不完整帧和 EOF 场景下的行为。
+//
+// 该测试通过表驱动用例覆盖头部不足、完整空 payload、普通 payload、最大 payload 和 EOF，确保 Scanner 分割契约稳定。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestScanMessage(t *testing.T) {
-	type testCase struct {
-		name      string
-		data      []byte
-		atEOF     bool
-		wantAdv   int
-		wantToken []byte
-		wantErr   error
+	maxPayload := bytes.Repeat([]byte{'x'}, math.MaxUint16)
+	tests := []struct {
+		name        string
+		description string
+		giveData    []byte
+		giveAtEOF   bool
+		wantAdvance int
+		wantToken   []byte
+	}{
+		{
+			name:        "boundary/short-header",
+			description: "验证不足 4 字节头部时分割函数等待更多数据且不消费缓冲区。",
+			giveData:    []byte{0x01, 0x02, 0x03},
+			wantAdvance: 0,
+			wantToken:   nil,
+		},
+		{
+			name:        "boundary/header-only-empty-payload",
+			description: "验证 payload 长度为 0 的头部本身就是完整合法消息包。",
+			giveData:    buildTestPacket(t, SingleStringMessageType, []byte{}),
+			wantAdvance: messageHeaderLength,
+			wantToken:   buildTestPacket(t, SingleStringMessageType, []byte{}),
+		},
+		{
+			name:        "boundary/incomplete-payload",
+			description: "验证头部声明的 payload 尚未完整到达时分割函数等待更多数据。",
+			giveData:    buildTestPacket(t, SingleStringMessageType, []byte("abcde"))[:5],
+			wantAdvance: 0,
+			wantToken:   nil,
+		},
+		{
+			name:        "success/complete-packet",
+			description: "验证完整消息包会被一次性作为 token 返回并消费对应字节数。",
+			giveData:    buildTestPacket(t, SingleStringMessageType, []byte("hello")),
+			wantAdvance: messageHeaderLength + len("hello"),
+			wantToken:   buildTestPacket(t, SingleStringMessageType, []byte("hello")),
+		},
+		{
+			name:        "success/complete-packet-with-trailing-data",
+			description: "验证缓冲区包含后续数据时只返回第一条完整消息包。",
+			giveData:    append(buildTestPacket(t, SingleStringMessageType, []byte("hello")), []byte{0x01, 0x02}...),
+			wantAdvance: messageHeaderLength + len("hello"),
+			wantToken:   buildTestPacket(t, SingleStringMessageType, []byte("hello")),
+		},
+		{
+			name:        "boundary/max-payload-length",
+			description: "验证 uint16 最大 payload 长度的完整包可以被分割函数识别。",
+			giveData:    buildTestPacket(t, SingleStringMessageType, maxPayload),
+			wantAdvance: messageHeaderLength + len(maxPayload),
+			wantToken:   buildTestPacket(t, SingleStringMessageType, maxPayload),
+		},
+		{
+			name:        "boundary/at-eof-with-complete-packet",
+			description: "验证 EOF 状态下如果缓冲区已有完整消息包，分割函数仍优先返回该 token。",
+			giveData:    buildTestPacket(t, SingleStringMessageType, []byte("abc")),
+			giveAtEOF:   true,
+			wantAdvance: messageHeaderLength + len("abc"),
+			wantToken:   buildTestPacket(t, SingleStringMessageType, []byte("abc")),
+		},
+		{
+			name:        "boundary/at-eof-without-complete-packet",
+			description: "验证 EOF 状态下如果没有完整消息包，分割函数不返回 token 并结束扫描。",
+			giveData:    []byte{0x01, 0x02, 0x03},
+			giveAtEOF:   true,
+			wantAdvance: 0,
+			wantToken:   nil,
+		},
 	}
 
-	// 构造一个合法包：2字节类型+2字节长度+payload
-	makePacket := func(typ uint16, payload []byte) []byte {
-		buf := new(bytes.Buffer)
-		_ = binary.Write(buf, binary.BigEndian, typ)
-		_ = binary.Write(buf, binary.BigEndian, uint16(len(payload)))
-		buf.Write(payload)
-		return buf.Bytes()
-	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
 
-	tests := []testCase{
-		{
-			name:      "数据不足4字节，无法判断长度，返回0，无错误",
-			data:      []byte{0x01, 0x02, 0x03},
-			atEOF:     false,
-			wantAdv:   0,
-			wantToken: nil,
-			wantErr:   nil,
-		},
-		{
-			name:      "atEOF为true，返回io.EOF",
-			data:      makePacket(1, []byte("abc")),
-			atEOF:     true,
-			wantAdv:   0,
-			wantToken: nil,
-			wantErr:   nil,
-		},
-		{
-			name:      "长度字段读取不足2字节，binary.Read返回io.EOF",
-			data:      []byte{0x01, 0x02, 0x03, 0x04},
-			atEOF:     false,
-			wantAdv:   0,
-			wantToken: nil,
-			wantErr:   nil,
-		},
-		{
-			name:      "长度字段读取不足，binary.Read返回io.EOF",
-			data:      []byte{0x01, 0x02, 0x03},
-			atEOF:     false,
-			wantAdv:   0,
-			wantToken: nil,
-			wantErr:   nil,
-		},
-		{
-			name:      "包体不完整，长度足够4字节但不够完整包，返回0，无错误",
-			data:      func() []byte { p := makePacket(2, []byte("abcde")); return p[:5] }(),
-			atEOF:     false,
-			wantAdv:   0,
-			wantToken: nil,
-			wantErr:   nil,
-		},
-		{
-			name:      "完整包，正常返回advance和token，无错误",
-			data:      makePacket(3, []byte("hello")),
-			atEOF:     false,
-			wantAdv:   4 + len([]byte("hello")),
-			wantToken: makePacket(3, []byte("hello")),
-			wantErr:   nil,
-		},
-	}
+			advance, token, err := scanMessage(tt.giveData, tt.giveAtEOF)
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			adv, token, err := scanMessage(tc.data, tc.atEOF)
-			assert.Equal(t, tc.wantAdv, adv, "advance 不符")
-			assert.Equal(t, tc.wantToken, token, "token 不符")
-			if tc.wantErr == nil {
-				assert.NoError(t, err)
-			} else {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tc.wantErr.Error())
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAdvance, advance)
+			assert.Equal(t, tt.wantToken, token)
 		})
 	}
 }
 
-// TestNewScanner_多包连续解析，验证 bufio.Scanner 能正确分包。
+// TestNewScanner 验证消息 Scanner 可以从连续字节流中解析完整协议包。
+//
+// 该测试通过表驱动用例覆盖连续多包、空 payload 包和最大 payload 包，确保 Scanner 配置与协议长度边界一致。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestNewScanner(t *testing.T) {
-	// 构造两个连续包
-	makePacket := func(typ uint16, payload []byte) []byte {
-		buf := new(bytes.Buffer)
-		_ = binary.Write(buf, binary.BigEndian, typ)
-		_ = binary.Write(buf, binary.BigEndian, uint16(len(payload)))
-		buf.Write(payload)
-		return buf.Bytes()
+	maxPayload := bytes.Repeat([]byte{'m'}, math.MaxUint16)
+	tests := []struct {
+		name        string
+		description string
+		givePackets [][]byte
+		wantTokens  [][]byte
+	}{
+		{
+			name:        "success/multiple-packets",
+			description: "验证 Scanner 可以从连续字节流中依次解析多个完整消息包。",
+			givePackets: [][]byte{
+				buildTestPacket(t, HeartbeatMessageType, buildHeartbeatPayload(1)),
+				buildTestPacket(t, SingleStringMessageType, []byte("barbaz")),
+			},
+		},
+		{
+			name:        "boundary/empty-payload-packet",
+			description: "验证 Scanner 可以解析 payload 长度为 0 的合法消息包。",
+			givePackets: [][]byte{
+				buildTestPacket(t, SingleStringMessageType, []byte{}),
+			},
+		},
+		{
+			name:        "boundary/max-payload-packet",
+			description: "验证 Scanner 的缓冲区上限允许协议定义的最大 payload 消息包。",
+			givePackets: [][]byte{
+				buildTestPacket(t, SingleStringMessageType, maxPayload),
+			},
+		},
 	}
-	p1 := makePacket(10, []byte("foo"))
-	p2 := makePacket(20, []byte("barbaz"))
-	data := append(p1, p2...)
 
-	scanner := NewScanner(bytes.NewReader(data))
-	var tokens [][]byte
-	for scanner.Scan() {
-		tokens = append(tokens, scanner.Bytes())
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			data := bytes.Join(tt.givePackets, nil)
+			scanner := NewScanner(bytes.NewReader(data))
+			var tokens [][]byte
+
+			for scanner.Scan() {
+				tokens = append(tokens, append([]byte(nil), scanner.Bytes()...))
+			}
+
+			wantTokens := tt.wantTokens
+			if nil == wantTokens {
+				wantTokens = tt.givePackets
+			}
+			require.NoError(t, scanner.Err())
+			assert.Equal(t, wantTokens, tokens)
+		})
 	}
-	assert.Len(t, tokens, 2, "应解析出两个包")
-	assert.Equal(t, p1, tokens[0], "第一个包内容不符")
-	assert.Equal(t, p2, tokens[1], "第二个包内容不符")
+}
+
+// TestNewScanner_IncompletePacket 验证 Scanner 对不完整协议包的结束行为。
+//
+// 该测试覆盖输入流结束时仍未收到完整 payload 的场景，确保不会返回半包 token 或错误。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestNewScanner_IncompletePacket(t *testing.T) {
+	// 验证半包不会被 Scanner 作为有效 token 返回，避免上层生成错误消息。
+	packet := buildTestPacket(t, SingleStringMessageType, []byte("abcdef"))
+	scanner := NewScanner(bytes.NewReader(packet[:len(packet)-2]))
+
+	assert.False(t, scanner.Scan())
 	assert.NoError(t, scanner.Err())
+}
+
+// TestNewScanner_ReadCompletePacketWithEOF 验证 Reader 同时返回完整包和 io.EOF 时 Scanner 仍产出 token。
+//
+// 该测试覆盖 bufio.Scanner 在读取到最后一批数据并收到 EOF 后调用 split 的路径，确保最后一个完整消息包不会被丢弃。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestNewScanner_ReadCompletePacketWithEOF(t *testing.T) {
+	// 验证底层 Reader 在同一次 Read 中返回 n>0 和 io.EOF 时，Scanner 仍能产出完整 token。
+	packet := buildTestPacket(t, SingleStringMessageType, []byte{})
+	scanner := NewScanner(&eofWithDataReader{data: packet})
+
+	require.True(t, scanner.Scan())
+	assert.Equal(t, packet, scanner.Bytes())
+	assert.False(t, scanner.Scan())
+	assert.NoError(t, scanner.Err())
+}
+
+type eofWithDataReader struct {
+	data []byte
+	done bool
+}
+
+// Read 在首次读取时同时返回全部数据和 io.EOF。
+//
+// 该辅助方法模拟标准库允许的 Reader 行为，用于验证 Scanner split 函数不会在 atEOF=true 时丢弃完整 token。
+//
+// 参数：
+//   - p: 调用方提供的读取缓冲区。
+//
+// 返回：
+//   - int: 首次读取复制的数据长度。
+//   - error: 首次读取返回 io.EOF，后续读取也返回 io.EOF。
+func (r *eofWithDataReader) Read(p []byte) (int, error) {
+	if r.done {
+		return 0, io.EOF
+	}
+
+	copy(p, r.data)
+	r.done = true
+	return len(r.data), io.EOF
 }

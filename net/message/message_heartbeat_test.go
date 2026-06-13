@@ -2,123 +2,281 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// 本测试文件针对 net/message/message_heartbeat.go 的所有核心功能进行单元测试。
-// 设计思路：
-//   - 采用表格驱动法，覆盖正常、异常、边界等多种情况。
-//   - 断言使用 stretchr/testify 包，保证断言表达力和可读性。
-//   - 注释详细，便于理解每个测试用例的目的和预期。
-//   - 主要测试点包括：Pack/Unpack、构造函数、工厂函数、接口实现。
-//
-// 使用方法：
-//   - 直接 go test 运行本文件。
-//   - 可结合覆盖率工具查看测试完整性。
 package message
 
 import (
 	"encoding/binary"
+	"io"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// TestHeartbeatMessage_PackUnpack 测试 Pack 和 Unpack 的互操作性。
+// TestHeartbeatMessage_PackUnpack 验证心跳消息的封包与解包契约。
+//
+// 该测试通过表驱动用例覆盖普通值、零值和最大值序列号，确保心跳 payload 始终使用 8 字节大端序编码。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestHeartbeatMessage_PackUnpack(t *testing.T) {
-	cases := []struct {
-		name         string
-		serialNumber uint64
-		wantErr      bool
+	tests := []struct {
+		name             string
+		description      string
+		giveSerialNumber uint64
 	}{
-		{"正常序列号", 123456789, false},
-		{"零序列号", 0, false},
-		{"最大序列号", ^uint64(0), false},
+		{
+			name:             "success/regular-serial-number",
+			description:      "验证普通心跳序列号可以按大端序封包并被等价解包。",
+			giveSerialNumber: 123456789,
+		},
+		{
+			name:             "boundary/zero-serial-number",
+			description:      "验证零值心跳序列号作为有效边界值被保留。",
+			giveSerialNumber: 0,
+		},
+		{
+			name:             "boundary/max-serial-number",
+			description:      "验证 uint64 最大心跳序列号作为有效边界值被保留。",
+			giveSerialNumber: math.MaxUint64,
+		},
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			msg := NewHeartbeatMessage(c.serialNumber)
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			msg := NewHeartbeatMessage(tt.giveSerialNumber)
 			payload, err := msg.Pack()
-			assert.Equal(t, c.wantErr, err != nil, "Pack 错误断言")
-			if err != nil {
+
+			require.NoError(t, err)
+			require.Len(t, payload, 8)
+			assert.Equal(t, tt.giveSerialNumber, binary.BigEndian.Uint64(payload))
+			assert.Equal(t, HeartbeatMessageType, msg.MessageType())
+
+			unpacked := NewHeartbeatMessage(0)
+			require.NoError(t, unpacked.Unpack(payload))
+			assert.Equal(t, HeartbeatMessageType, unpacked.MessageType())
+			assert.Equal(t, tt.giveSerialNumber, unpacked.SerialNumber())
+		})
+	}
+}
+
+// TestHeartbeatMessage_Unpack 验证心跳消息解包对 payload 长度的处理。
+//
+// 该测试覆盖无效长度、有效长度和携带额外字节的 payload，确保解包错误与保留前 8 字节序列号的行为稳定。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestHeartbeatMessage_Unpack(t *testing.T) {
+	tests := []struct {
+		name             string
+		description      string
+		givePayload      []byte
+		wantSerialNumber uint64
+		wantErr          bool
+	}{
+		{
+			name:        "error/nil-payload",
+			description: "验证 nil payload 无法解包为完整心跳序列号。",
+			givePayload: nil,
+			wantErr:     true,
+		},
+		{
+			name:        "error/short-payload",
+			description: "验证长度不足 8 字节的 payload 会返回解包错误。",
+			givePayload: []byte{0x01, 0x02, 0x03},
+			wantErr:     true,
+		},
+		{
+			name:             "success/exact-length-payload",
+			description:      "验证 8 字节 payload 可以解包为对应心跳序列号。",
+			givePayload:      buildHeartbeatPayload(42),
+			wantSerialNumber: 42,
+		},
+		{
+			name:             "compatibility/extra-trailing-bytes",
+			description:      "验证解包仅消费前 8 字节序列号并容忍后续扩展字节。",
+			givePayload:      append(buildHeartbeatPayload(99), 0xAA, 0xBB),
+			wantSerialNumber: 99,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			msg := NewHeartbeatMessage(0)
+			err := msg.Unpack(tt.givePayload)
+
+			if tt.wantErr {
+				require.Error(t, err)
 				return
 			}
 
-			msg2 := NewHeartbeatMessage(0)
-			err = msg2.Unpack(payload)
-			assert.Equal(t, c.wantErr, err != nil, "Unpack 错误断言")
-			if err == nil {
-				assert.Equal(t, c.serialNumber, msg2.SerialNumber(), "序列号应一致")
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantSerialNumber, msg.SerialNumber())
 		})
 	}
 }
 
-// TestHeartbeatMessage_Pack_异常测试
-func TestHeartbeatMessage_Pack_Error(t *testing.T) {
-	// 由于 Pack 只涉及内存操作，理论上不会出错，除非内存溢出等极端情况。
-	// 这里主要测试 recover 机制。
+// TestHeartbeatMessage_RecoverNilReceiver 验证心跳消息方法对 nil receiver panic 的错误化处理。
+//
+// 该测试覆盖 Pack 和 Unpack 内置的 recover 契约，确保异常场景不会向调用方传播 panic，而是返回可诊断错误。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestHeartbeatMessage_RecoverNilReceiver(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		act         func() error
+	}{
+		{
+			name:        "panic/pack-nil-receiver",
+			description: "验证 nil 心跳消息 receiver 调用 Pack 时会被 recover 并返回封包错误。",
+			act: func() error {
+				var msg *heartbeatMessage
+				payload, err := msg.Pack()
+				assert.Nil(t, payload)
+				return err
+			},
+		},
+		{
+			name:        "panic/unpack-nil-receiver",
+			description: "验证 nil 心跳消息 receiver 调用 Unpack 时会被 recover 并返回解包错误。",
+			act: func() error {
+				var msg *heartbeatMessage
+				return msg.Unpack(buildHeartbeatPayload(1))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			err := tt.act()
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "发生异常")
+		})
+	}
+}
+
+// TestHeartbeatMessage_PackBinaryWriteError 验证心跳消息封包会处理二进制写入错误。
+//
+// 该测试通过临时替换二进制写入函数覆盖常规 bytes.Buffer 下不可达的错误分支，确保错误会被包装为封包错误。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestHeartbeatMessage_PackBinaryWriteError(t *testing.T) {
+	// 验证序列号写入失败时，Pack 返回封包错误而不是静默成功。
+	replaceBinaryWrite(t, func(io.Writer, binary.ByteOrder, any) error {
+		return errTestBinaryWrite
+	})
 	msg := NewHeartbeatMessage(1)
-	// 通过反射或其他手段制造异常场景较难，略过。
-	// 只验证正常情况下 err 为 nil。
+
 	payload, err := msg.Pack()
-	assert.NoError(t, err, "正常情况下 Pack 不应报错")
-	assert.Len(t, payload, 8, "payload 长度应为 8 字节")
+
+	require.Error(t, err)
+	assert.Nil(t, payload)
+	assert.Contains(t, err.Error(), "封包过程发生异常")
+	require.ErrorIs(t, err, errTestBinaryWrite)
 }
 
-// TestHeartbeatMessage_Unpack_异常测试
-func TestHeartbeatMessage_Unpack_Error(t *testing.T) {
-	cases := []struct {
-		name    string
-		input   []byte
-		wantErr bool
-	}{
-		{"空 payload", nil, true},
-		{"长度不足", []byte{1, 2, 3}, true},
-		{"正常 8 字节", make([]byte, 8), false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			msg := NewHeartbeatMessage(0)
-			err := msg.Unpack(c.input)
-			assert.Equal(t, c.wantErr, err != nil, "Unpack 错误断言")
-		})
-	}
-}
-
-// TestNewHeartbeatMessage_属性测试
+// TestNewHeartbeatMessage 验证心跳消息构造函数会设置固定消息类型并保留序列号。
+//
+// 该测试覆盖构造函数的公开属性契约，确保后续封包和工厂逻辑能够依赖正确的消息类型。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
 func TestNewHeartbeatMessage(t *testing.T) {
-	serial := uint64(42)
-	msg := NewHeartbeatMessage(serial)
-	assert.Equal(t, HeartbeatMessageType, msg.MessageType(), "消息类型应为 HeartbeatMessageType")
-	assert.Equal(t, serial, msg.SerialNumber(), "序列号应一致")
+	// 验证构造函数会保留调用方传入的心跳序列号，并设置心跳消息类型。
+	const giveSerialNumber = uint64(42)
+
+	msg := NewHeartbeatMessage(giveSerialNumber)
+
+	require.NotNil(t, msg)
+	assert.Equal(t, HeartbeatMessageType, msg.MessageType())
+	assert.Equal(t, giveSerialNumber, msg.SerialNumber())
 }
 
-// TestGenerateHeartbeatMessage_工厂函数测试
+// TestGenerateHeartbeatMessage 验证心跳消息生成器的类型和 payload 校验行为。
+//
+// 该测试通过表驱动用例覆盖生成成功、消息类型不匹配、nil payload 和无效 payload 长度，确保工厂调用时错误可诊断。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestGenerateHeartbeatMessage(t *testing.T) {
-	cases := []struct {
-		name    string
-		msgType MessageType
-		sn      uint64
-		wantErr bool
+	tests := []struct {
+		name             string
+		description      string
+		giveMessageType  MessageType
+		givePayload      []byte
+		wantSerialNumber uint64
+		wantMessage      bool
+		wantErr          bool
 	}{
-		{"类型匹配", HeartbeatMessageType, 123, false},
-		{"类型不匹配", 0x99, 123, true},
-		{"空 payload", HeartbeatMessageType, 0, true},
+		{
+			name:             "success/valid-heartbeat-payload",
+			description:      "验证匹配的心跳类型和 8 字节 payload 可以生成心跳消息。",
+			giveMessageType:  HeartbeatMessageType,
+			givePayload:      buildHeartbeatPayload(123),
+			wantSerialNumber: 123,
+			wantMessage:      true,
+		},
+		{
+			name:            "error/type-mismatch",
+			description:     "验证非心跳消息类型会被生成器拒绝。",
+			giveMessageType: 0x99,
+			givePayload:     buildHeartbeatPayload(123),
+			wantErr:         true,
+		},
+		{
+			name:            "error/nil-payload",
+			description:     "验证 nil payload 会被生成器拒绝，避免生成不完整消息。",
+			giveMessageType: HeartbeatMessageType,
+			givePayload:     nil,
+			wantErr:         true,
+		},
+		{
+			name:            "error/short-payload",
+			description:     "验证长度不足的 payload 会返回解包错误并暴露部分构造消息。",
+			giveMessageType: HeartbeatMessageType,
+			givePayload:     []byte{0x01, 0x02},
+			wantMessage:     true,
+			wantErr:         true,
+		},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			var payload []byte
-			if !c.wantErr {
-				payload = make([]byte, 8)
-				binary.BigEndian.PutUint64(payload, c.sn)
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			msg, err := GenerateHeartbeatMessage(tt.giveMessageType, tt.givePayload)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantMessage {
+					assert.NotNil(t, msg)
+				} else {
+					assert.Nil(t, msg)
+				}
+				return
 			}
-			msg, err := GenerateHeartbeatMessage(c.msgType, payload)
-			assert.Equal(t, c.wantErr, err != nil, "工厂函数错误断言")
-			if !c.wantErr {
-				assert.NotNil(t, msg, "消息不应为 nil")
-				hb, ok := msg.(HeartbeatMessage)
-				assert.True(t, ok, "应实现 HeartbeatMessage 接口")
-				assert.Equal(t, c.sn, hb.SerialNumber(), "序列号应一致")
-			}
+
+			require.NoError(t, err)
+			require.NotNil(t, msg)
+			heartbeat, ok := msg.(HeartbeatMessage)
+			require.True(t, ok)
+			assert.Equal(t, HeartbeatMessageType, msg.MessageType())
+			assert.Equal(t, tt.wantSerialNumber, heartbeat.SerialNumber())
 		})
 	}
 }

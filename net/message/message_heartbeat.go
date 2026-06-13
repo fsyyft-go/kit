@@ -42,15 +42,12 @@ func (m *heartbeatMessage) MessageType() MessageType {
 	return m.messageType
 }
 
-// Pack 将心跳包序列号转换为 payload 字节数组。
+// Pack 将心跳包序列号转换为 8 字节大端序 payload。
 //
 // 返回值：
 //   - []byte: 心跳包序列号的字节数组。
 //   - error: 错误信息。
-func (m *heartbeatMessage) Pack() ([]byte, error) {
-	var msg []byte
-	var err error
-
+func (m *heartbeatMessage) Pack() (msg []byte, err error) {
 	defer func() {
 		if r := recover(); nil != r {
 			err = cockroachdberrors.Newf("封包过程发生异常：%[1]v。", r)
@@ -58,7 +55,7 @@ func (m *heartbeatMessage) Pack() ([]byte, error) {
 	}()
 
 	buf := &bytes.Buffer{}
-	if errWriteSerialNumber := binary.Write(buf, binary.BigEndian, m.serialNumber); nil != errWriteSerialNumber {
+	if errWriteSerialNumber := binaryWrite(buf, binary.BigEndian, m.serialNumber); nil != errWriteSerialNumber {
 		err = cockroachdberrors.Wrap(errWriteSerialNumber, "封包过程发生异常。")
 	} else {
 		msg = buf.Bytes()
@@ -67,16 +64,16 @@ func (m *heartbeatMessage) Pack() ([]byte, error) {
 	return msg, err
 }
 
-// Unpack 从 payload 字节数组还原心跳包序列号。
+// Unpack 从 payload 前 8 字节还原心跳包序列号。
+//
+// payload 少于 8 字节时返回错误，多于 8 字节时仅消费前 8 字节。
 //
 // 参数：
 //   - payload: 心跳包序列号的字节数组。
 //
 // 返回值：
 //   - error: 错误信息。
-func (m *heartbeatMessage) Unpack(payload []byte) error {
-	var err error
-
+func (m *heartbeatMessage) Unpack(payload []byte) (err error) {
 	defer func() {
 		if r := recover(); nil != r {
 			err = cockroachdberrors.Newf("解包过程发生异常：%[1]v。", r)
@@ -85,7 +82,7 @@ func (m *heartbeatMessage) Unpack(payload []byte) error {
 
 	buf := bytes.NewBuffer(payload)
 
-	if errRead := binary.Read(buf, binary.BigEndian, &m.serialNumber); nil != errRead {
+	if errRead := binaryRead(buf, binary.BigEndian, &m.serialNumber); nil != errRead {
 		err = cockroachdberrors.Wrap(errRead, "解包过程发生异常。")
 	}
 

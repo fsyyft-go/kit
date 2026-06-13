@@ -2,132 +2,268 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// 本测试文件针对 net/message/message_singlestring.go 的所有核心功能进行单元测试。
-// 设计思路：
-//   - 采用表格驱动法，覆盖正常、异常、边界等多种情况。
-//   - 断言使用 stretchr/testify 包，保证断言表达力和可读性。
-//   - 注释详细，便于理解每个测试用例的目的和预期。
-//   - 主要测试点包括：Pack/Unpack、构造函数、工厂函数、接口实现。
-//
-// 使用方法：
-//   - 直接 go test 运行本文件。
-//   - 可结合覆盖率工具查看测试完整性。
 package message
 
 import (
+	"math"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// TestSingleStringMessage_PackUnpack 测试 Pack 和 Unpack 的互操作性。
+// TestSingleStringMessage_PackUnpack 验证简单字符串消息的封包与解包契约。
+//
+// 该测试通过表驱动用例覆盖普通文本、空文本、Unicode 文本和最大允许长度，确保 payload 与字符串内容按字节等价转换。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestSingleStringMessage_PackUnpack(t *testing.T) {
-	cases := []struct {
-		name    string
-		input   string
-		wantErr bool
+	tests := []struct {
+		name        string
+		description string
+		giveMessage string
 	}{
-		{"普通字符串", "hello world", false},
-		{"空字符串", "", false},
-		{"特殊字符", "你好，世界！\n\t", false},
+		{
+			name:        "success/basic-ascii",
+			description: "验证普通 ASCII 字符串会被封包为等价字节并可恢复原文。",
+			giveMessage: "hello world",
+		},
+		{
+			name:        "boundary/empty-string",
+			description: "验证空字符串是合法 payload，封包结果为空字节切片并可恢复为空文本。",
+			giveMessage: "",
+		},
+		{
+			name:        "success/unicode-and-control-characters",
+			description: "验证 Unicode 与控制字符按 UTF-8 字节序列稳定封包和解包。",
+			giveMessage: "你好，世界！\n\t",
+		},
+		{
+			name:        "boundary/max-uint16-payload-length",
+			description: "验证长度等于 uint16 最大值的字符串仍可作为合法 payload 封包。",
+			giveMessage: strings.Repeat("a", math.MaxUint16),
+		},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			msg := NewSingleStringMessage(c.input)
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			msg := NewSingleStringMessage(tt.giveMessage)
 			payload, err := msg.Pack()
-			assert.Equal(t, c.wantErr, err != nil, "Pack 错误断言")
-			if err != nil {
+
+			require.NoError(t, err)
+			assert.Equal(t, []byte(tt.giveMessage), payload)
+			assert.Equal(t, SingleStringMessageType, msg.MessageType())
+
+			unpacked := NewSingleStringMessage("placeholder")
+			require.NoError(t, unpacked.Unpack(payload))
+			assert.Equal(t, SingleStringMessageType, unpacked.MessageType())
+			assert.Equal(t, tt.giveMessage, unpacked.Message())
+		})
+	}
+}
+
+// TestSingleStringMessage_PackErrors 验证简单字符串消息封包的长度限制。
+//
+// 该测试覆盖超过 uint16 最大 payload 长度的错误分支，确保协议长度字段无法表达的字符串不会被封包。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestSingleStringMessage_PackErrors(t *testing.T) {
+	// 验证超过 uint16 最大值的字符串会被拒绝，且错误信息保留真实超长长度。
+	const wantLength = math.MaxUint16 + 1
+	msg := NewSingleStringMessage(strings.Repeat("a", wantLength))
+
+	payload, err := msg.Pack()
+
+	require.Error(t, err)
+	assert.Nil(t, payload)
+	assert.Contains(t, err.Error(), "超过 uint16 最大值")
+	assert.Contains(t, err.Error(), "字符串消息长度 65536")
+}
+
+// TestSingleStringMessage_Unpack 验证简单字符串消息解包对 payload 的直接映射行为。
+//
+// 该测试通过表驱动用例覆盖 nil、空切片、普通字节和非 UTF-8 字节，确保解包遵循 Go 字符串转换语义。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestSingleStringMessage_Unpack(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		givePayload []byte
+		wantMessage string
+	}{
+		{
+			name:        "boundary/nil-payload",
+			description: "验证 nil payload 会解包为空字符串，与空字节序列语义一致。",
+			givePayload: nil,
+			wantMessage: "",
+		},
+		{
+			name:        "boundary/empty-payload",
+			description: "验证空 payload 会解包为空字符串。",
+			givePayload: []byte{},
+			wantMessage: "",
+		},
+		{
+			name:        "success/ascii-payload",
+			description: "验证普通字节 payload 会按字符串内容保存。",
+			givePayload: []byte("abc"),
+			wantMessage: "abc",
+		},
+		{
+			name:        "compatibility/non-utf8-payload",
+			description: "验证非 UTF-8 字节也按 Go 字符串转换语义原样保存。",
+			givePayload: []byte{0xff, 0xfe, 0xfd},
+			wantMessage: string([]byte{0xff, 0xfe, 0xfd}),
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			msg := NewSingleStringMessage("placeholder")
+
+			require.NoError(t, msg.Unpack(tt.givePayload))
+			assert.Equal(t, tt.wantMessage, msg.Message())
+		})
+	}
+}
+
+// TestSingleStringMessage_RecoverNilReceiver 验证简单字符串消息方法对 nil receiver panic 的错误化处理。
+//
+// 该测试覆盖 Pack 和 Unpack 内置的 recover 契约，确保异常场景不会向调用方传播 panic，而是返回可诊断错误。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestSingleStringMessage_RecoverNilReceiver(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		act         func() error
+	}{
+		{
+			name:        "panic/pack-nil-receiver",
+			description: "验证 nil 字符串消息 receiver 调用 Pack 时会被 recover 并返回封包错误。",
+			act: func() error {
+				var msg *singleStringMessage
+				payload, err := msg.Pack()
+				assert.Nil(t, payload)
+				return err
+			},
+		},
+		{
+			name:        "panic/unpack-nil-receiver",
+			description: "验证 nil 字符串消息 receiver 调用 Unpack 时会被 recover 并返回解包错误。",
+			act: func() error {
+				var msg *singleStringMessage
+				return msg.Unpack([]byte("payload"))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			err := tt.act()
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "发生异常")
+		})
+	}
+}
+
+// TestNewSingleStringMessage 验证简单字符串消息构造函数会设置固定消息类型并保留内容。
+//
+// 该测试覆盖构造函数的公开属性契约，确保后续封包和工厂逻辑能够依赖正确的消息类型。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestNewSingleStringMessage(t *testing.T) {
+	// 验证构造函数会保留调用方传入的字符串，并设置简单字符串消息类型。
+	const giveMessage = "abc"
+
+	msg := NewSingleStringMessage(giveMessage)
+
+	require.NotNil(t, msg)
+	assert.Equal(t, SingleStringMessageType, msg.MessageType())
+	assert.Equal(t, giveMessage, msg.Message())
+}
+
+// TestGenerateSingleStringMessage 验证简单字符串消息生成器的类型和 payload 校验行为。
+//
+// 该测试通过表驱动用例覆盖生成成功、消息类型不匹配、nil payload 和空 payload，确保工厂调用时字符串消息语义稳定。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestGenerateSingleStringMessage(t *testing.T) {
+	tests := []struct {
+		name            string
+		description     string
+		giveMessageType MessageType
+		givePayload     []byte
+		wantMessage     string
+		wantErr         bool
+	}{
+		{
+			name:            "success/ascii-payload",
+			description:     "验证匹配的字符串消息类型和普通 payload 可以生成字符串消息。",
+			giveMessageType: SingleStringMessageType,
+			givePayload:     []byte("hello"),
+			wantMessage:     "hello",
+		},
+		{
+			name:            "success/empty-payload",
+			description:     "验证非 nil 的空 payload 是合法字符串消息并生成空字符串。",
+			giveMessageType: SingleStringMessageType,
+			givePayload:     []byte{},
+			wantMessage:     "",
+		},
+		{
+			name:            "error/type-mismatch",
+			description:     "验证非字符串消息类型会被生成器拒绝。",
+			giveMessageType: 0x99,
+			givePayload:     []byte("hello"),
+			wantErr:         true,
+		},
+		{
+			name:            "error/nil-payload",
+			description:     "验证 nil payload 会被生成器拒绝，避免与合法空 payload 混淆。",
+			giveMessageType: SingleStringMessageType,
+			givePayload:     nil,
+			wantErr:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			msg, err := GenerateSingleStringMessage(tt.giveMessageType, tt.givePayload)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Nil(t, msg)
 				return
 			}
-			msg2 := NewSingleStringMessage("")
-			err = msg2.Unpack(payload)
-			assert.Equal(t, c.wantErr, err != nil, "Unpack 错误断言")
-			if err == nil {
-				assert.Equal(t, c.input, msg2.Message(), "字符串内容应一致")
-			}
+
+			require.NoError(t, err)
+			require.NotNil(t, msg)
+			singleString, ok := msg.(SingleStringMessage)
+			require.True(t, ok)
+			assert.Equal(t, SingleStringMessageType, msg.MessageType())
+			assert.Equal(t, tt.wantMessage, singleString.Message())
 		})
 	}
-}
-
-// TestSingleStringMessage_Pack_异常测试
-func TestSingleStringMessage_Pack_Error(t *testing.T) {
-	msg := NewSingleStringMessage("test")
-	payload, err := msg.Pack()
-	assert.NoError(t, err, "正常情况下 Pack 不应报错")
-	assert.Equal(t, []byte("test"), payload, "payload 内容应一致")
-}
-
-// TestSingleStringMessage_Unpack_异常测试
-func TestSingleStringMessage_Unpack_Error(t *testing.T) {
-	cases := []struct {
-		name    string
-		input   []byte
-		want    string
-		wantErr bool
-	}{
-		{"空 payload", nil, "", false},
-		{"正常字符串", []byte("abc"), "abc", false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			msg := NewSingleStringMessage("")
-			err := msg.Unpack(c.input)
-			assert.Equal(t, c.wantErr, err != nil, "Unpack 错误断言")
-			if err == nil {
-				assert.Equal(t, c.want, msg.Message(), "解包后内容应一致")
-			}
-		})
-	}
-}
-
-// TestNewSingleStringMessage_属性测试
-func TestNewSingleStringMessage(t *testing.T) {
-	str := "abc"
-	msg := NewSingleStringMessage(str)
-	assert.Equal(t, SingleStringMessageType, msg.MessageType(), "消息类型应为 SingleStringMessageType")
-	assert.Equal(t, str, msg.Message(), "内容应一致")
-}
-
-// TestGenerateSingleStringMessage_工厂函数测试
-func TestGenerateSingleStringMessage(t *testing.T) {
-	cases := []struct {
-		name    string
-		msgType MessageType
-		input   string
-		wantErr bool
-	}{
-		{"类型匹配", SingleStringMessageType, "hello", false},
-		{"类型不匹配", 0x99, "hello", true},
-		{"空 payload", SingleStringMessageType, "", false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			var payload []byte
-			if !c.wantErr || c.msgType != SingleStringMessageType || c.input != "" {
-				payload = []byte(c.input)
-			}
-			msg, err := GenerateSingleStringMessage(c.msgType, payload)
-			assert.Equal(t, c.wantErr, err != nil, "工厂函数错误断言")
-			if !c.wantErr {
-				assert.NotNil(t, msg, "消息不应为 nil")
-				ss, ok := msg.(SingleStringMessage)
-				assert.True(t, ok, "应实现 SingleStringMessage 接口")
-				assert.Equal(t, c.input, ss.Message(), "内容应一致")
-			}
-		})
-	}
-}
-
-// TestSingleStringMessage_Pack_超长字符串测试
-func TestSingleStringMessage_Pack_TooLong(t *testing.T) {
-	// 构造长度超过 uint16 最大值的字符串。
-	longStr := make([]byte, 1+0xFFFF) // math.MaxUint16 == 65535
-	for i := range longStr {
-		longStr[i] = 'a'
-	}
-	msg := NewSingleStringMessage(string(longStr))
-	payload, err := msg.Pack()
-	// 断言应返回错误，payload 为空。
-	assert.Error(t, err, "超长字符串应返回错误")
-	assert.Empty(t, payload, "payload 应为空")
 }

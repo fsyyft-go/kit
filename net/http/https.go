@@ -66,6 +66,9 @@ func GetCertificatesExpirestime(ctx context.Context, requestURL, method, address
 
 // GetCertificates 获取证书。
 //
+// 如果 TLS 校验因未知 CA 失败，会尝试从错误链中的 x509.UnknownAuthorityError 提取证书并清除错误；
+// 如果响应没有 TLS 状态，则返回空证书链和 nil 错误。
+//
 // 参数：
 // - ctx context.Context 上下文对象，用于控制超时与取消。
 // - requestURL string 需要进行证书请求的 URL 地址。
@@ -98,19 +101,25 @@ func GetCertificates(ctx context.Context, requestURL, method, address string, ti
 		// 创建空的请求体。
 		reader := strings.NewReader(string([]byte{}))
 		// 创建带上下文的 HTTP 请求。
-		request, _ := http.NewRequestWithContext(ctx, method, requestURL, reader)
-		// 发送 HTTP 请求，获取响应。
-		if resp, err = client.Do(request); nil == err {
+		request, requestErr := http.NewRequestWithContext(ctx, method, requestURL, reader)
+		if nil != requestErr {
+			err = requestErr
+			// 发送 HTTP 请求，获取响应。
+		} else if resp, err = client.Do(request); nil == err {
 			// 确保响应体关闭，防止资源泄漏。
 			defer func() { _ = resp.Body.Close() }()
 			// 获取 TLS 握手中的对端证书链。
-			certs = resp.TLS.PeerCertificates
+			if nil != resp.TLS {
+				certs = resp.TLS.PeerCertificates
+			}
 			// 如果请求失败，尝试从错误中提取证书。
 		} else if cert, errCheckError := checkError(err); nil == errCheckError {
 			// 只包含根证书，不包含证书链时，可能会出现 x509.UnknownAuthorityError。
 			certs = []*x509.Certificate{cert}
 			// 错误已处理，置为 nil。
 			err = nil
+		} else {
+			err = errCheckError
 		}
 		// URL 解析失败，返回错误。
 	} else {
@@ -164,7 +173,7 @@ func generateTLSConfig(url *url.URL) (*tls.Config, string) {
 	// serverName 用于存储主机名。
 	serverName := url.Host
 
-	// 如果地址中包含有端口，需要把端口移除。
+	// 如果地址中包含有端口，按既有实现取第一个冒号前的主机名部分。
 	if strings.Contains(serverName, ":") {
 		serverName = serverName[:strings.Index(serverName, ":")]
 	}
@@ -214,7 +223,7 @@ func checkError(clientError error) (*x509.Certificate, error) {
 	// certificate 用于存储提取到的证书。
 	var certificate *x509.Certificate
 	// err 用于存储错误信息。
-	var err error
+	err := clientError
 
 	// urlError 用于存储 URL 相关的错误。
 	var urlError *url.Error
@@ -222,10 +231,12 @@ func checkError(clientError error) (*x509.Certificate, error) {
 	if errors.As(clientError, &urlError) && nil != urlError.Err {
 		// unknownAuthorityError 用于存储未知证书颁发机构的错误。
 		var unknownAuthorityError x509.UnknownAuthorityError
-		// 判断内部错误类型是否为 UnknownAuthorityError，且证书不为 nil。
+		// 判断内部错误类型是否为 UnknownAuthorityError，且错误中携带证书。
 		if errors.As(urlError.Err, &unknownAuthorityError) && nil != unknownAuthorityError.Cert {
 			// 提取证书。
 			certificate = unknownAuthorityError.Cert
+			// 错误已被解释为可用的证书信息。
+			err = nil
 		}
 	}
 

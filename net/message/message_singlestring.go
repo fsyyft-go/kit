@@ -43,13 +43,12 @@ func (m *singleStringMessage) MessageType() MessageType {
 
 // Pack 将字符串消息内容转换为 payload 字节数组。
 //
+// payload 长度不能超过 uint16 最大值。
+//
 // 返回值：
 //   - []byte: 字符串消息的字节数组。
 //   - error: 错误信息。
-func (m *singleStringMessage) Pack() ([]byte, error) {
-	var msg []byte
-	var err error
-
+func (m *singleStringMessage) Pack() (msg []byte, err error) {
 	defer func() {
 		if r := recover(); nil != r {
 			err = cockroachdberrors.Newf("封包过程发生异常：%[1]v。", r)
@@ -59,9 +58,9 @@ func (m *singleStringMessage) Pack() ([]byte, error) {
 	msg = []byte(m.message)
 
 	// 如果 msg 长度超过 uint16 最大值，则返回错误。
-	if len(msg) > math.MaxUint16 {
+	if messageLength := len(msg); messageLength > math.MaxUint16 {
 		msg = nil
-		err = cockroachdberrors.Newf("字符串消息长度 %[1]d 超过 uint16 最大值 %[2]d。", len(msg), math.MaxUint16)
+		err = cockroachdberrors.Newf("字符串消息长度 %[1]d 超过 uint16 最大值 %[2]d。", messageLength, math.MaxUint16)
 	}
 
 	return msg, err
@@ -74,9 +73,7 @@ func (m *singleStringMessage) Pack() ([]byte, error) {
 //
 // 返回值：
 //   - error: 错误信息。
-func (m *singleStringMessage) Unpack(payload []byte) error {
-	var err error
-
+func (m *singleStringMessage) Unpack(payload []byte) (err error) {
 	defer func() {
 		if r := recover(); nil != r {
 			err = cockroachdberrors.Newf("解包过程发生异常：%[1]v。", r)
@@ -113,6 +110,8 @@ func NewSingleStringMessage(message string) *singleStringMessage {
 }
 
 // GenerateSingleStringMessage 生成简单的字符串消息包结构体。
+//
+// nil payload 会被拒绝；非 nil 的空 payload 表示合法空字符串。
 //
 // 参数：
 //   - messageType: 消息类型。

@@ -4,6 +4,8 @@
 
 package message
 
+import "encoding/binary"
+
 // Message 消息包接口，定义消息类型、封包与拆包方法。
 type (
 	Message interface {
@@ -34,6 +36,17 @@ type (
 var (
 	// 断言 GenerateMessageFunc 实现 Generator 接口。
 	_ Generator = (GenerateMessageFunc)(nil)
+)
+
+var (
+	// binaryRead 指向二进制读取函数，生产路径默认使用 encoding/binary.Read。
+	//
+	// 该变量作为包内测试 seam，用于在单元测试中注入读取错误，覆盖标准库在正常输入下难以触发的错误分支。
+	binaryRead = binary.Read
+	// binaryWrite 指向二进制写入函数，生产路径默认使用 encoding/binary.Write。
+	//
+	// 该变量作为包内测试 seam，用于在单元测试中注入写入错误，覆盖 bytes.Buffer 在正常输入下难以触发的错误分支。
+	binaryWrite = binary.Write
 )
 
 type (

@@ -12,6 +12,7 @@ import (
 	"math"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	cockroachdberrors "github.com/cockroachdb/errors"
@@ -96,11 +97,13 @@ type (
 	conn struct {
 		conn net.Conn // 底层网络连接。
 
-		closed       bool        // 连接关闭标志。
-		closedLocker sync.Locker // 关闭操作互斥锁，保证并发安全。
+		closed       atomic.Bool   // 连接关闭标志。
+		closedLocker sync.Locker   // 关闭操作互斥锁，保证并发安全。
+		closedNotify chan struct{} // 连接关闭通知通道。
 
-		messageRead  chan Message // 读取到的消息队列通道。
-		messageWrite chan Message // 待发送的消息队列通道。
+		messageRead       chan Message // 读取到的消息队列通道。
+		messageReadLocker sync.RWMutex // 保护消息读取通道的发送与关闭。
+		messageWrite      chan Message // 待发送的消息队列通道。
 
 		heartbeatInterval time.Duration // 心跳包发送间隔。
 	}
@@ -111,10 +114,12 @@ type (
 // 返回值：
 //   - bool: 连接是否关闭。
 func (c *conn) Closed() bool {
-	return c.closed
+	return c.closed.Load()
 }
 
 // Start 启动消息读写 goroutine。
+//
+// 配置了正数心跳间隔时，会额外启动定时心跳发送 goroutine。
 //
 // 参数：
 //   - ctx: 上下文，用于控制 goroutine 生命周期。
@@ -138,10 +143,15 @@ func (c *conn) Start(ctx context.Context) {
 func (c *conn) SendMessage(message Message) error {
 	var err error
 
-	if c.closed {
+	if c.Closed() {
 		err = cockroachdberrors.Newf("连接已经关闭。")
 	} else {
-		c.messageWrite <- message // 将消息写入发送队列。
+		select {
+		case <-c.closedNotify:
+			err = cockroachdberrors.Newf("连接已经关闭。")
+		case c.messageWrite <- message:
+			// 将消息写入发送队列。
+		}
 	}
 
 	return err
@@ -186,18 +196,20 @@ func (c *conn) Write(b []byte) (n int, err error) {
 func (c *conn) Close() error {
 	var err error
 
-	if !c.closed {
+	if !c.Closed() {
 		// 可能出现不同的 goroutine 同时调用方法，需要加锁操作。
 		c.closedLocker.Lock()
 		defer c.closedLocker.Unlock()
 
-		if !c.closed {
+		if !c.Closed() {
+			c.closed.Store(true)
+			close(c.closedNotify) // 通知发送、接收和心跳 goroutine 退出，避免关闭 messageWrite 后并发发送 panic。
+
 			err = c.conn.Close()
 
-			c.closed = true
-
-			close(c.messageRead)  // 关闭消息读取通道。
-			close(c.messageWrite) // 关闭消息发送通道。
+			c.messageReadLocker.Lock()
+			close(c.messageRead) // 等待接收 goroutine 完成可能的投递后，再关闭消息读取通道。
+			c.messageReadLocker.Unlock()
 		}
 	}
 
@@ -281,18 +293,18 @@ func (c *conn) pack(message Message) ([]byte, error) {
 		err = cockroachdberrors.Newf("消息负载长度 %[1]d 超过 uint16 最大值 %[2]d。", payLoadLength, math.MaxUint16)
 		// 步骤 3：写入消息类型字段（2 字节，uint16，BigEndian）。
 		// 若写入失败，则返回错误。
-	} else if errWriteType := binary.Write(buf, binary.BigEndian, message.MessageType()); nil != errWriteType {
+	} else if errWriteType := binaryWrite(buf, binary.BigEndian, message.MessageType()); nil != errWriteType {
 		// 写入消息类型失败，进行错误包装并返回。
 		err = cockroachdberrors.Wrap(errWriteType, "消息类型封包出现错误。")
 		// 步骤 4：写入 payload 长度字段（2 字节，uint16，BigEndian）。
 		// 此时 payload 长度已保证不超限。
 		// 若写入失败，则返回错误。
-	} else if errWriteLen := binary.Write(buf, binary.BigEndian, uint16(payLoadLength)); nil != errWriteLen { //nolint:gosec
+	} else if errWriteLen := binaryWrite(buf, binary.BigEndian, uint16(payLoadLength)); nil != errWriteLen { //nolint:gosec
 		// 写入 payload 长度失败，进行错误包装并返回。
 		err = cockroachdberrors.Wrap(errWriteLen, "消息负载长度封包出现错误。")
 		// 步骤 5：写入 payload 数据本体。
 		// 若写入失败，则返回错误。
-	} else if errWritePayload := binary.Write(buf, binary.BigEndian, payload); nil != errWritePayload {
+	} else if errWritePayload := binaryWrite(buf, binary.BigEndian, payload); nil != errWritePayload {
 		// 写入 payload 数据失败，进行错误包装并返回。
 		err = cockroachdberrors.Wrap(errWritePayload, "消息负载封包出现错误。")
 		// 步骤 6：所有字段写入成功，将缓冲区内容作为最终数据包返回。
@@ -315,6 +327,8 @@ LoopSend:
 		case <-ctx.Done():
 			// 可能出现还有没消费完的信息。
 			_ = c.Close()
+			break LoopSend
+		case <-c.closedNotify:
 			break LoopSend
 		case tmp, ok := <-c.messageWrite:
 			if !ok {
@@ -340,26 +354,7 @@ LoopSend:
 //
 // 返回值：
 //   - Message: 还原得到的消息对象，若解析失败则为 nil。
-//   - error:   解析过程中遇到的错误信息，若无错误则为 nil。
-//
-// 详细说明：
-//  1. 首先检查 scanner 是否为 nil，防止空指针异常。
-//  2. 检查 scanner 是否已发生错误（scanner.Err），若有则直接返回包装后的错误。
-//  3. 调用 scanner.Scan()，尝试扫描下一个完整的消息包（token）。
-//     - 若返回 false，说明数据流已结束或无更多消息，直接返回 nil。
-//  4. 获取扫描到的字节数据（data），该数据应为完整的消息包：
-//     - 前 2 字节为消息类型（uint16, BigEndian）。
-//     - 第 3-4 字节为 payload 长度（uint16, BigEndian），已在 scanMessage 阶段校验。
-//     - 第 5 字节起为 payload 数据。
-//  5. 解析消息类型字段，若解包失败则返回错误。
-//  6. 跳过前 4 字节，提取 payload 部分。
-//  7. 调用 FactoryGenerate，根据消息类型和 payload 生成具体的消息对象。
-//     - 若工厂未注册该类型或 payload 不合法，则返回包装后的错误。
-//  8. 返回生成的消息对象和错误信息。
-//
-// 异常处理：
-//   - 若 scanner 为 nil 或已出错，或消息类型解包失败，或工厂生成失败，均返回详细错误信息。
-//   - 若数据流结束或无消息，返回 (nil, nil)。
+//   - error:   解析过程中遇到的错误信息；数据流结束或无更多消息时也会返回非 nil 错误。
 func (c *conn) generateMessage(scanner *bufio.Scanner) (Message, error) {
 	// 定义返回的消息对象和错误变量。
 	var message Message
@@ -375,7 +370,7 @@ func (c *conn) generateMessage(scanner *bufio.Scanner) (Message, error) {
 		err = cockroachdberrors.Wrap(errScanner, "扫描出错。")
 		// 调用 scanner.Scan()，尝试扫描下一个 token（即一条完整消息包）。
 	} else if !scanner.Scan() {
-		// 如果 scanner.Scan() 返回 false，说明数据流已结束或无更多消息，直接返回 nil。
+		// 如果 scanner.Scan() 返回 false，说明数据流已结束或无更多消息，返回明确错误。
 		err = cockroachdberrors.Newf("数据流已结束或无更多消息。")
 	} else {
 		// 获取扫描到的字节数据。
@@ -383,7 +378,7 @@ func (c *conn) generateMessage(scanner *bufio.Scanner) (Message, error) {
 		// 定义消息类型变量，初始为 0。
 		messageType := MessageType(uint16(0))
 		// 从数据包前两个字节读取消息类型，采用大端序。
-		if errReadType := binary.Read(bytes.NewReader(data[:2]), binary.BigEndian, &messageType); nil != errReadType {
+		if errReadType := binaryRead(bytes.NewReader(data[:2]), binary.BigEndian, &messageType); nil != errReadType {
 			// 如果读取类型失败，进行错误包装并返回。
 			err = cockroachdberrors.Wrap(errReadType, "解包数据类型发生异常。")
 		} else {
@@ -426,6 +421,8 @@ LoopReceive:
 		case <-ctx.Done():
 			_ = c.Close()
 			break LoopReceive
+		case <-c.closedNotify:
+			break LoopReceive
 		default:
 			if tmp, errGenerate := c.generateMessage(scanner); nil != errGenerate {
 				_ = c.Close()
@@ -434,8 +431,19 @@ LoopReceive:
 				_ = c.Close()
 				break LoopReceive
 			} else if nil != tmp {
-				c.messageRead <- tmp
-				lastReceived = time.Now()
+				c.messageReadLocker.RLock()
+				if c.Closed() {
+					c.messageReadLocker.RUnlock()
+					break LoopReceive
+				}
+				select {
+				case <-c.closedNotify:
+					c.messageReadLocker.RUnlock()
+					break LoopReceive
+				case c.messageRead <- tmp:
+					c.messageReadLocker.RUnlock()
+					lastReceived = time.Now()
+				}
 			}
 		}
 	}
@@ -451,7 +459,7 @@ func (c *conn) sendHeartbeat(ctx context.Context, ticker *time.Ticker) {
 		const serialNumberSingleMax = 10000
 		// 每次加 1。
 		serialNumberSingle = serialNumberSingle + 1
-		// 取模 1000。
+		// 取模 10000。
 		serialNumberSingle = serialNumberSingle % serialNumberSingleMax
 		// 取格林威治时间戳。
 		s1 := time.Now().UTC().Unix() * serialNumberSingleMax
@@ -467,6 +475,8 @@ LoopHeartbeat:
 		select {
 		case <-ctx.Done():
 			_ = c.Close()
+			break LoopHeartbeat
+		case <-c.closedNotify:
 			break LoopHeartbeat
 		case <-ticker.C:
 			var serialNumber uint64
@@ -489,6 +499,7 @@ func WrapConn(c net.Conn, heartbeatInterval time.Duration) *conn {
 	newConn := &conn{
 		conn:              c,
 		closedLocker:      &sync.Mutex{},
+		closedNotify:      make(chan struct{}),
 		messageRead:       make(chan Message, 5120), // 读取消息通道，缓冲区 5120。
 		messageWrite:      make(chan Message, 5120), // 发送消息通道，缓冲区 5120。
 		heartbeatInterval: heartbeatInterval,
