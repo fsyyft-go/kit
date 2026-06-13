@@ -54,6 +54,11 @@ func (c *ristrettoCache) GetWithTTL(key interface{}) (interface{}, bool, time.Du
 
 	// 获取剩余过期时间。
 	ttl, exists := c.cache.GetTTL(key)
+	return normalizeRistrettoTTL(value, exists, ttl)
+}
+
+// normalizeRistrettoTTL 将 ristretto 的 TTL 返回值转换为 Cache 接口约定。
+func normalizeRistrettoTTL(value interface{}, exists bool, ttl time.Duration) (interface{}, bool, time.Duration) {
 	if !exists {
 		// 如果获取 TTL 失败，说明键不存在或已过期。
 		return nil, false, 0
