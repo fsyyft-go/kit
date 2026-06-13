@@ -11,6 +11,9 @@ env:
   GOLANGCI_LINT_VERSION: v2.12.2
   # Go 版本。
   GO_VERSION: '1.26'
+# 设置工作流默认权限为只读仓库内容。
+permissions:
+  contents: read
 jobs:
   # 定义测试作业。
   test:
@@ -28,10 +31,10 @@ jobs:
       max-parallel: 3
     steps:
       # 使用官方的 checkout action 检出代码。
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # 使用官方的 setup-go action 配置 Go 环境。
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           # 使用矩阵中定义的 Go 版本。
           go-version: ${{ matrix.go-version }}
@@ -51,13 +54,17 @@ jobs:
     name: Lint
     # 指定运行环境为最新版本的 Ubuntu。
     runs-on: ubuntu-latest
+    # 允许 Codecov 使用 GitHub OIDC 上传覆盖率报告。
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      # 使用 actions/checkout@v4 动作检出代码仓库。
-      - uses: actions/checkout@v4
+      # 使用 actions/checkout@v5 动作检出代码仓库。
+      - uses: actions/checkout@v5
       # 配置 Go 语言环境。
       - name: Set up Go
-        # 使用 actions/setup-go@v4 动作设置 Go 环境。
-        uses: actions/setup-go@v4
+        # 使用 actions/setup-go@v6 动作设置 Go 环境。
+        uses: actions/setup-go@v6
         with:
           # 指定使用 Go 版本。
           go-version: ${{ env.GO_VERSION }}
@@ -85,9 +92,13 @@ jobs:
       # 上传后可以在 https://codecov.io 查看报告，需要先用 GitHub 账号登录并激活仓库。
       # 也可以通过 GitHub PR 中的 Codecov bot 评论查看覆盖率变化。
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v6
         with:
+          # 使用 GitHub OIDC 认证，避免维护 Codecov 上传 token。
+          use_oidc: true
           # 指定覆盖率报告文件路径。
-          file: ./out/coverage.txt
+          files: ./out/coverage.txt
+          # 关闭自动搜索，避免上传非预期的覆盖率文件。
+          disable_search: true
           # 上传失败时不中断 CI 流程。
           fail_ci_if_error: false
