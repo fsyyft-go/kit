@@ -682,7 +682,9 @@ func newMemoryRedisClient(t *testing.T) (*redisClient, *memoryRedisServer) {
 // 参数：
 //   - conn: net.Pipe 创建的服务端连接。
 func (s *memoryRedisServer) serve(conn net.Conn) {
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	reader := bufio.NewReader(conn)
 	var txActive bool
