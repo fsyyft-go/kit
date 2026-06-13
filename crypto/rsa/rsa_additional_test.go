@@ -185,8 +185,8 @@ func TestAdditionalKeyParsingPEMBranches(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, gotKey, "有效公钥 PEM 应返回公钥对象。")
-			assert.Equal(t, privateKey.PublicKey.N, gotKey.N, "解析后的公钥应保留 RSA 模数。")
-			assert.Equal(t, privateKey.PublicKey.E, gotKey.E, "解析后的公钥应保留 RSA 指数。")
+			assert.Equal(t, privateKey.N, gotKey.N, "解析后的公钥应保留 RSA 模数。")
+			assert.Equal(t, privateKey.E, gotKey.E, "解析后的公钥应保留 RSA 指数。")
 		})
 	}
 }
