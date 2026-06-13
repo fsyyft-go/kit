@@ -75,6 +75,20 @@ func Now() *carbon.Carbon {
 	return carbon.Now()
 }
 
+// copyNow 返回当前时间的副本。
+//
+// 该函数用于避免直接在 carbon.Now() 返回值上执行加减操作：
+// 在测试时间被冻结时，carbon.Now() 会返回全局 frozen now 指针，
+// 而 Add/Sub 系列方法会原地修改 Carbon 实例，直接调用会污染后续 Now() 结果。
+// 同时，invalid Carbon 不能安全调用 Copy()，因此需要先保留错误承载对象并直接返回。
+func copyNow() *carbon.Carbon {
+	now := carbon.Now()
+	if now.IsInvalid() {
+		return now
+	}
+	return now.Copy()
+}
+
 // Yesterday 返回昨天同一时间的 Carbon 实例。
 //
 // 返回值:
@@ -111,7 +125,7 @@ func Tomorrow() *carbon.Carbon {
 //	dayAfterTomorrow := time.DayAfterTomorrow()
 //	fmt.Println(dayAfterTomorrow.ToDateTimeString()) // 输出后天的日期和当前时间
 func DayAfterTomorrow() *carbon.Carbon {
-	return carbon.Now().AddDays(2)
+	return copyNow().AddDays(2)
 }
 
 // DayBeforeYesterday 返回前天同一时间的 Carbon 实例。
@@ -124,7 +138,7 @@ func DayAfterTomorrow() *carbon.Carbon {
 //	dayBeforeYesterday := time.DayBeforeYesterday()
 //	fmt.Println(dayBeforeYesterday.ToDateTimeString()) // 输出前天的日期和当前时间
 func DayBeforeYesterday() *carbon.Carbon {
-	return carbon.Now().SubDays(2)
+	return copyNow().SubDays(2)
 }
 
 // LastWeek 返回上周同一时间的 Carbon 实例。
@@ -137,7 +151,7 @@ func DayBeforeYesterday() *carbon.Carbon {
 //	lastWeek := time.LastWeek()
 //	fmt.Println(lastWeek.ToDateTimeString()) // 输出上周的日期和当前时间
 func LastWeek() *carbon.Carbon {
-	return carbon.Now().SubWeek()
+	return copyNow().SubWeek()
 }
 
 // LastMonth 返回上个月同一时间的 Carbon 实例。
@@ -150,7 +164,7 @@ func LastWeek() *carbon.Carbon {
 //	lastMonth := time.LastMonth()
 //	fmt.Println(lastMonth.ToDateTimeString()) // 输出上个月的日期和当前时间
 func LastMonth() *carbon.Carbon {
-	return carbon.Now().SubMonth()
+	return copyNow().SubMonthNoOverflow()
 }
 
 // NextWeek 返回下周同一时间的 Carbon 实例。
@@ -163,7 +177,7 @@ func LastMonth() *carbon.Carbon {
 //	nextWeek := time.NextWeek()
 //	fmt.Println(nextWeek.ToDateTimeString()) // 输出下周的日期和当前时间
 func NextWeek() *carbon.Carbon {
-	return carbon.Now().AddWeek()
+	return copyNow().AddWeek()
 }
 
 // NextMonth 返回下个月同一时间的 Carbon 实例。
@@ -176,7 +190,7 @@ func NextWeek() *carbon.Carbon {
 //	nextMonth := time.NextMonth()
 //	fmt.Println(nextMonth.ToDateTimeString()) // 输出下个月的日期和当前时间
 func NextMonth() *carbon.Carbon {
-	return carbon.Now().AddMonth()
+	return copyNow().AddMonthNoOverflow()
 }
 
 // LastYear 返回去年同一时间的 Carbon 实例。
@@ -189,7 +203,7 @@ func NextMonth() *carbon.Carbon {
 //	lastYear := time.LastYear()
 //	fmt.Println(lastYear.ToDateTimeString()) // 输出去年的日期和当前时间
 func LastYear() *carbon.Carbon {
-	return carbon.Now().SubYear()
+	return copyNow().SubYear()
 }
 
 // NextYear 返回明年同一时间的 Carbon 实例。
@@ -202,5 +216,5 @@ func LastYear() *carbon.Carbon {
 //	nextYear := time.NextYear()
 //	fmt.Println(nextYear.ToDateTimeString()) // 输出明年的日期和当前时间
 func NextYear() *carbon.Carbon {
-	return carbon.Now().AddYear()
+	return copyNow().AddYear()
 }
