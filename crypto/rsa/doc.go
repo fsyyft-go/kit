@@ -3,25 +3,26 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 /*
-Package rsa 提供了 RSA 加密算法的实现，支持公钥加密、私钥解密以及数字签名功能。
+Package rsa 提供 RSA 加密相关工具，支持 RSA-OAEP 公钥加密/私钥解密、
+PKCS#1 v1.5 兼容加解密、PEM 密钥转换，以及历史私钥加密/公钥解密场景。
 
 主要功能：
 
 1. 密钥操作：
-  - 支持公钥加密和解密
-  - 支持私钥加密和解密
+  - 支持 PEM 私钥解析和公钥导出
   - 支持密钥格式转换
-  - 自动密钥长度验证
+  - 依赖标准库解析与加解密错误返回
+  - 密钥完整性检查
 
 2. 加密功能：
-  - 公钥加密：用于数据加密
-  - 私钥加密：用于数字签名
+  - 公钥加密：新代码推荐 RSA-OAEP，优先使用 EncryptPubKeyOAEP 或 EncryptPublicKeyOAEP
+  - 私钥加密：用于兼容历史“私钥加密、公钥解密”的数字签名场景
   - 支持多种数据格式
   - 自动填充处理
 
 3. 解密功能：
-  - 私钥解密：解密加密数据
-  - 公钥解密：验证数字签名
+  - 私钥解密：新代码推荐 RSA-OAEP，优先使用 DecryptPrivKeyOAEP 或 DecryptPrivateKeyOAEP
+  - 公钥解密：用于兼容历史数字签名验证场景
   - 错误恢复机制
   - 自动移除填充
 
@@ -29,37 +30,37 @@ Package rsa 提供了 RSA 加密算法的实现，支持公钥加密、私钥解
 
 1. 公钥加密：
 
-	// 使用公钥加密数据
-	ciphertext, err := rsa.EncryptPubKey(publicKey, plaintext)
+	// 使用 RSA-OAEP 公钥加密数据，默认使用 SHA-256 和 nil label
+	ciphertext, err := rsa.EncryptPubKeyOAEP(publicKey, plaintext)
 	if err != nil {
 	    // 处理错误
 	}
 
-	// 使用私钥解密数据
-	plaintext, err := rsa.DecryptPrivKey(privateKey, ciphertext)
+	// 使用 RSA-OAEP 私钥解密数据
+	plaintext, err := rsa.DecryptPrivKeyOAEP(privateKey, ciphertext)
 
-2. 数字签名：
+2. 历史数字签名兼容：
 
-	// 使用私钥签名数据
+	// 使用私钥加密数据，仅用于兼容历史数字签名场景
 	signature, err := rsa.EncryptPrivKey(privateKey, data)
 	if err != nil {
 	    // 处理错误
 	}
 
-	// 使用公钥验证签名
+	// 使用公钥验证历史签名数据
 	data, err := rsa.DecryptPubKey(publicKey, signature)
 
 安全特性：
 
 1. 密钥管理：
   - 支持标准 PEM 格式
-  - 密钥长度验证
+  - 依赖标准库解析与加解密错误返回
   - 密钥完整性检查
 
 2. 填充机制：
-  - PKCS#1 v1.5 填充
-  - 防止填充 Oracle 攻击
-  - 安全的填充验证
+  - RSA-OAEP 是新代码推荐方案
+  - PKCS#1 v1.5 仅用于兼容历史密文格式或既有协议
+  - OAEP 使用标准库填充处理；PKCS#1 v1.5 仅作兼容用途
 
 3. 错误处理：
   - 安全的错误信息
@@ -91,8 +92,8 @@ Package rsa 提供了 RSA 加密算法的实现，支持公钥加密、私钥解
   - 处理填充错误
 
 3. 安全使用：
-  - 避免直接加密敏感数据
-  - 结合对称加密使用
+  - 新代码优先使用 EncryptPubKeyOAEP / DecryptPrivKeyOAEP
+  - 大型数据使用混合加密，例如用对称加密处理数据，再用 RSA-OAEP 加密对称密钥
   - 注意并发安全
 */
 package rsa

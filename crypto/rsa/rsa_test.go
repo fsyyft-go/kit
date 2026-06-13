@@ -21,10 +21,15 @@ package rsa
 
 import (
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"testing"
 
@@ -669,5 +674,294 @@ func TestStructureEdgeCases(t *testing.T) {
 	t.Run("BlockTypeConstants", func(t *testing.T) {
 		assert.Equal(t, "PUBLIC KEY", BlockTypePublicKey, "公钥块类型不匹配。")
 		assert.Equal(t, "RSA PRIVATE KEY", BlockTypePrivateKey, "私钥块类型不匹配。")
+	})
+}
+
+// TestOAEPDefaultAPI 测试默认 OAEP API 使用 SHA-256 和 nil label 完成加解密。
+func TestOAEPDefaultAPI(t *testing.T) {
+	privateKey, privateKeyBytes, publicKeyBytes := generateTestKeyPair(t, 2048)
+	publicKey := &privateKey.PublicKey
+
+	testCases := []struct {
+		name      string
+		plainText []byte
+	}{
+		{name: "normal text", plainText: []byte("Hello, RSA-OAEP!")},
+		{name: "empty text", plainText: []byte{}},
+		{name: "binary data", plainText: []byte{0x00, 0x01, 0x02, 0xfe, 0xff}},
+	}
+
+	for _, tc := range testCases {
+		t.Run("PEM/"+tc.name, func(t *testing.T) {
+			cipherText, err := EncryptPubKeyOAEP(publicKeyBytes, tc.plainText)
+			require.NoError(t, err, "默认 OAEP PEM 公钥加密应该成功。")
+			require.NotEmpty(t, cipherText, "OAEP 密文不应为空。")
+
+			decryptedText, err := DecryptPrivKeyOAEP(privateKeyBytes, cipherText)
+			require.NoError(t, err, "默认 OAEP PEM 私钥解密应该成功。")
+			assert.Equal(t, tc.plainText, decryptedText, "OAEP 解密结果应该等于原始明文。")
+
+			explicitDecryptedText, err := DecryptPrivKeyOAEPWithHash(privateKeyBytes, cipherText, sha256.New(), nil)
+			require.NoError(t, err, "默认 OAEP PEM 密文应该能用显式 SHA-256 和 nil label 解密。")
+			assert.Equal(t, tc.plainText, explicitDecryptedText, "默认 OAEP 参数应该等价于显式 SHA-256 和 nil label。")
+
+			explicitCipherText, err := EncryptPubKeyOAEPWithHash(publicKeyBytes, tc.plainText, sha256.New(), nil)
+			require.NoError(t, err, "显式 SHA-256 和 nil label 的 OAEP PEM 公钥加密应该成功。")
+
+			defaultDecryptedText, err := DecryptPrivKeyOAEP(privateKeyBytes, explicitCipherText)
+			require.NoError(t, err, "显式 SHA-256 和 nil label 的 OAEP PEM 密文应该能用默认 API 解密。")
+			assert.Equal(t, tc.plainText, defaultDecryptedText, "显式 SHA-256 和 nil label 应该等价于默认 OAEP 参数。")
+		})
+
+		t.Run("Struct/"+tc.name, func(t *testing.T) {
+			cipherText, err := EncryptPublicKeyOAEP(publicKey, tc.plainText)
+			require.NoError(t, err, "默认 OAEP 公钥结构加密应该成功。")
+			require.NotEmpty(t, cipherText, "OAEP 密文不应为空。")
+
+			decryptedText, err := DecryptPrivateKeyOAEP(privateKey, cipherText)
+			require.NoError(t, err, "默认 OAEP 私钥结构解密应该成功。")
+			assert.Equal(t, tc.plainText, decryptedText, "OAEP 解密结果应该等于原始明文。")
+
+			explicitDecryptedText, err := DecryptPrivateKeyOAEPWithHash(privateKey, cipherText, sha256.New(), nil)
+			require.NoError(t, err, "默认 OAEP 结构体密文应该能用显式 SHA-256 和 nil label 解密。")
+			assert.Equal(t, tc.plainText, explicitDecryptedText, "默认 OAEP 参数应该等价于显式 SHA-256 和 nil label。")
+
+			explicitCipherText, err := EncryptPublicKeyOAEPWithHash(publicKey, tc.plainText, sha256.New(), nil)
+			require.NoError(t, err, "显式 SHA-256 和 nil label 的 OAEP 公钥结构加密应该成功。")
+
+			defaultDecryptedText, err := DecryptPrivateKeyOAEP(privateKey, explicitCipherText)
+			require.NoError(t, err, "显式 SHA-256 和 nil label 的 OAEP 结构体密文应该能用默认 API 解密。")
+			assert.Equal(t, tc.plainText, defaultDecryptedText, "显式 SHA-256 和 nil label 应该等价于默认 OAEP 参数。")
+		})
+	}
+}
+
+// TestOAEPWithHashAPI 测试可配置 hash 和 label 的 OAEP API。
+func TestOAEPWithHashAPI(t *testing.T) {
+	privateKey, privateKeyBytes, publicKeyBytes := generateTestKeyPair(t, 2048)
+	publicKey := &privateKey.PublicKey
+	plainText := []byte("message with OAEP label")
+	label := []byte("kit:rsa:oaep:test")
+
+	t.Run("PEM API with SHA-256 and label", func(t *testing.T) {
+		cipherText, err := EncryptPubKeyOAEPWithHash(publicKeyBytes, plainText, sha256.New(), label)
+		require.NoError(t, err, "带 label 的 OAEP PEM 公钥加密应该成功。")
+
+		decryptedText, err := DecryptPrivKeyOAEPWithHash(privateKeyBytes, cipherText, sha256.New(), label)
+		require.NoError(t, err, "带 label 的 OAEP PEM 私钥解密应该成功。")
+		assert.Equal(t, plainText, decryptedText, "解密结果应该等于原始明文。")
+	})
+
+	t.Run("struct API with SHA-256 and label", func(t *testing.T) {
+		cipherText, err := EncryptPublicKeyOAEPWithHash(publicKey, plainText, sha256.New(), label)
+		require.NoError(t, err, "带 label 的 OAEP 公钥结构加密应该成功。")
+
+		decryptedText, err := DecryptPrivateKeyOAEPWithHash(privateKey, cipherText, sha256.New(), label)
+		require.NoError(t, err, "带 label 的 OAEP 私钥结构解密应该成功。")
+		assert.Equal(t, plainText, decryptedText, "解密结果应该等于原始明文。")
+	})
+}
+
+// TestOAEPErrors 测试 OAEP API 的错误路径。
+func TestOAEPErrors(t *testing.T) {
+	privateKey, privateKeyBytes, publicKeyBytes := generateTestKeyPair(t, 2048)
+	publicKey := &privateKey.PublicKey
+	plainText := []byte("OAEP error path test")
+	invalidKeyData := []byte("invalid key data")
+
+	t.Run("invalid public key", func(t *testing.T) {
+		_, err := EncryptPubKeyOAEP(invalidKeyData, plainText)
+		assert.Error(t, err, "无效 PEM 公钥应该导致 OAEP 加密失败。")
+	})
+
+	t.Run("invalid private key", func(t *testing.T) {
+		cipherText, err := EncryptPubKeyOAEP(publicKeyBytes, plainText)
+		require.NoError(t, err, "准备 OAEP 密文应该成功。")
+
+		_, err = DecryptPrivKeyOAEP(invalidKeyData, cipherText)
+		assert.Error(t, err, "无效 PEM 私钥应该导致 OAEP 解密失败。")
+	})
+
+	t.Run("nil hash on encrypt", func(t *testing.T) {
+		_, err := EncryptPublicKeyOAEPWithHash(publicKey, plainText, nil, nil)
+		assert.ErrorIs(t, err, ErrNilHash, "nil hash 应该返回 ErrNilHash。")
+	})
+
+	t.Run("nil hash on decrypt", func(t *testing.T) {
+		_, err := DecryptPrivateKeyOAEPWithHash(privateKey, []byte("cipher"), nil, nil)
+		assert.ErrorIs(t, err, ErrNilHash, "nil hash 应该返回 ErrNilHash。")
+	})
+
+	t.Run("label mismatch", func(t *testing.T) {
+		cipherText, err := EncryptPublicKeyOAEPWithHash(publicKey, plainText, sha256.New(), []byte("label-a"))
+		require.NoError(t, err, "带 label 的 OAEP 加密应该成功。")
+
+		_, err = DecryptPrivateKeyOAEPWithHash(privateKey, cipherText, sha256.New(), []byte("label-b"))
+		assert.Error(t, err, "label 不一致应该导致 OAEP 解密失败。")
+	})
+
+	t.Run("hash mismatch", func(t *testing.T) {
+		cipherText, err := EncryptPublicKeyOAEPWithHash(publicKey, plainText, sha256.New(), nil)
+		require.NoError(t, err, "SHA-256 OAEP 加密应该成功。")
+
+		_, err = DecryptPrivateKeyOAEPWithHash(privateKey, cipherText, sha1.New(), nil)
+		assert.Error(t, err, "hash 不一致应该导致 OAEP 解密失败。")
+	})
+
+	t.Run("OAEP ciphertext cannot be decrypted by PKCS1v15", func(t *testing.T) {
+		const maxAttempts = 5
+
+		for attempt := 0; attempt < maxAttempts; attempt++ {
+			cipherText, err := EncryptPublicKeyOAEP(publicKey, plainText)
+			require.NoError(t, err, "OAEP 加密应该成功。")
+
+			_, err = DecryptPrivateKey(privateKey, cipherText)
+			if err != nil {
+				return
+			}
+		}
+
+		t.Fatalf("连续 %d 次 OAEP 密文都被 PKCS#1 v1.5 解密接受，可能是极低概率随机事件或实现回归。", maxAttempts)
+	})
+
+	t.Run("PKCS1v15 ciphertext cannot be decrypted by OAEP", func(t *testing.T) {
+		cipherText, err := EncryptPublicKey(publicKey, plainText)
+		require.NoError(t, err, "PKCS#1 v1.5 加密应该成功。")
+
+		_, err = DecryptPrivateKeyOAEP(privateKey, cipherText)
+		assert.Error(t, err, "OAEP 解密 PKCS#1 v1.5 密文应该失败。")
+	})
+
+	t.Run("too long message", func(t *testing.T) {
+		keyBytes := (publicKey.N.BitLen() + 7) / 8
+		maxPlaintextLen := keyBytes - 2*sha256.Size - 2
+		tooLongPlainText := make([]byte, maxPlaintextLen+1)
+		_, err := EncryptPublicKeyOAEP(publicKey, tooLongPlainText)
+		assert.Error(t, err, "超过 SHA-256 OAEP 最大明文长度的输入应该加密失败。")
+	})
+
+	t.Run("nil public key returns error", func(t *testing.T) {
+		_, err := EncryptPublicKeyOAEP(nil, plainText)
+		assert.Error(t, err, "nil 公钥应该返回错误。")
+	})
+
+	t.Run("nil private key returns error", func(t *testing.T) {
+		cipherText, err := EncryptPubKeyOAEP(publicKeyBytes, plainText)
+		require.NoError(t, err, "准备 OAEP 密文应该成功。")
+
+		_, err = DecryptPrivateKeyOAEP(nil, cipherText)
+		assert.Error(t, err, "nil 私钥应该返回错误。")
+	})
+
+	t.Run("PEM nil hash error", func(t *testing.T) {
+		_, err := EncryptPubKeyOAEPWithHash(publicKeyBytes, plainText, nil, nil)
+		assert.ErrorIs(t, err, ErrNilHash, "PEM 版本 nil hash 应该返回 ErrNilHash。")
+
+		_, err = DecryptPrivKeyOAEPWithHash(privateKeyBytes, []byte("cipher"), nil, nil)
+		assert.ErrorIs(t, err, ErrNilHash, "PEM 版本 nil hash 应该返回 ErrNilHash。")
+	})
+}
+
+// TestKeyParsingAdditionalBranches 补充覆盖私钥 PEM 类型正确但 DER 内容非法的分支。
+func TestKeyParsingAdditionalBranches(t *testing.T) {
+	invalidDERPrivateKey := pem.EncodeToMemory(&pem.Block{
+		Type:  BlockTypePrivateKey,
+		Bytes: []byte("not valid DER private key"),
+	})
+
+	_, err := ConvertPrivateKey(invalidDERPrivateKey)
+	require.Error(t, err, "PEM 类型正确但 DER 非法的私钥应该返回解析错误。")
+	assert.False(t, errors.Is(err, ErrDecodePrivateKey), "DER 解析错误不应该被折叠成 ErrDecodePrivateKey。")
+}
+
+// TestConvertPublicKeyWithECDSAKey 覆盖可解析但不是 RSA 公钥的分支。
+func TestConvertPublicKeyWithECDSAKey(t *testing.T) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err, "生成 ECDSA 测试密钥应该成功。")
+
+	publicKeyDER, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	require.NoError(t, err, "编码 ECDSA 公钥应该成功。")
+
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  BlockTypePublicKey,
+		Bytes: publicKeyDER,
+	})
+
+	_, err = convertPublicKey(publicKeyPEM)
+	assert.ErrorIs(t, err, ErrDecodePublicKey, "非 RSA 公钥应该返回 ErrDecodePublicKey。")
+}
+
+// TestOldAPIRecoverBranches 覆盖旧 API 中 nil key 稳定触发 recover 的分支。
+func TestOldAPIRecoverBranches(t *testing.T) {
+	plainText := []byte("recover branch plaintext")
+	cipherText := []byte("cipher")
+
+	testCases := []struct {
+		name string
+		run  func() ([]byte, error)
+	}{
+		{
+			name: "EncryptPublicKey nil key",
+			run: func() ([]byte, error) {
+				return EncryptPublicKey(nil, plainText)
+			},
+		},
+		{
+			name: "DecryptPrivateKey nil key",
+			run: func() ([]byte, error) {
+				return DecryptPrivateKey(nil, cipherText)
+			},
+		},
+		{
+			name: "EncryptPrivateKey nil key",
+			run: func() ([]byte, error) {
+				return EncryptPrivateKey(nil, plainText)
+			},
+		},
+		{
+			name: "DecryptPublicKey nil key",
+			run: func() ([]byte, error) {
+				return DecryptPublicKey(nil, cipherText)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.run()
+			assert.Error(t, err, "旧 API recover 分支应该将 nil key panic 转为 error。")
+		})
+	}
+}
+
+// TestWrapperFunctionBranches 覆盖 PEM wrapper 的成功与失败路径。
+func TestWrapperFunctionBranches(t *testing.T) {
+	_, privateKeyBytes, publicKeyBytes := generateTestKeyPair(t, 2048)
+	plainText := []byte("wrapper branch plaintext")
+	invalidKeyData := []byte("invalid key data")
+
+	t.Run("EncryptPubKeyOAEPWithHash invalid public key", func(t *testing.T) {
+		_, err := EncryptPubKeyOAEPWithHash(invalidKeyData, plainText, sha256.New(), nil)
+		assert.Error(t, err, "无效公钥应该让 OAEP wrapper 返回错误。")
+	})
+
+	t.Run("DecryptPrivKeyOAEPWithHash invalid private key", func(t *testing.T) {
+		_, err := DecryptPrivKeyOAEPWithHash(invalidKeyData, []byte("cipher"), sha256.New(), nil)
+		assert.Error(t, err, "无效私钥应该让 OAEP wrapper 返回错误。")
+	})
+
+	t.Run("EncryptPrivKey wrapper succeeds", func(t *testing.T) {
+		signature, err := EncryptPrivKey(privateKeyBytes, plainText)
+		require.NoError(t, err, "私钥 PEM wrapper 加密应该成功。")
+		assert.NotEmpty(t, signature, "wrapper 返回的签名不应为空。")
+	})
+
+	t.Run("DecryptPubKey wrapper succeeds", func(t *testing.T) {
+		signature, err := EncryptPrivKey(privateKeyBytes, plainText)
+		require.NoError(t, err, "准备签名应该成功。")
+
+		decryptedText, err := DecryptPubKey(publicKeyBytes, signature)
+		require.NoError(t, err, "公钥 PEM wrapper 解密应该成功。")
+		assert.Equal(t, plainText, decryptedText, "wrapper 解密结果应该等于原始明文。")
 	})
 }
