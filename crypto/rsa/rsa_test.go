@@ -20,6 +20,7 @@
 package rsa
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -371,33 +372,20 @@ func TestLeftPadAndUnLeftPad(t *testing.T) {
 
 			// 尝试使用unLeftPad恢复数据，仅当我们期望能够完全恢复时。
 			if tc.expectEqual {
-				// 为了测试unLeftPad，我们需要设置正确的第一个字节和第二个字节。
-				// 创建特殊结构的数据以便unLeftPad函数能正确处理。
-				// 这里模拟PKCS1填充结构：[第一个字节，第二个字节(长度)，填充字节(FF)，结束标记(第一个字节值)，实际数据]
-				specialPadding := make([]byte, tc.padSize)
-				specialPadding[0] = 0x00                // 第一个字节标记
-				specialPadding[1] = byte(len(tc.input)) // 第二个字节表示数据长度
+				paddingLen := tc.padSize - len(tc.input) - 3
+				require.Positive(t, paddingLen, "PKCS#1 v1.5 结构应保留至少一个填充字节。")
 
-				// 填充一些0xFF字节
-				for i := 2; i < 5; i++ {
-					specialPadding[i] = 0xFF
+				specialPadding := make([]byte, 0, tc.padSize)
+				specialPadding = append(specialPadding, 0x00, 0x01)
+				for i := 0; i < paddingLen; i++ {
+					specialPadding = append(specialPadding, 0xff)
 				}
+				specialPadding = append(specialPadding, 0x00)
+				specialPadding = append(specialPadding, tc.input...)
+				require.Len(t, specialPadding, tc.padSize, "构造的填充块长度应等于目标长度。")
 
-				// 结束标记
-				specialPadding[5] = specialPadding[0]
-
-				// 复制原始数据到末尾
-				copy(specialPadding[6:], tc.input)
-
-				// 恢复数据
 				unpadded := unLeftPad(specialPadding)
-
-				// 由于unLeftPad函数的特殊处理逻辑，我们需要谨慎地验证结果
-				t.Logf("原始数据: %v", tc.input)
-				t.Logf("恢复数据: %v", unpadded)
-
-				// 在这个测试用例中，我们主要测试函数的运行，而不是精确的恢复结果
-				assert.NotNil(t, unpadded, "恢复的数据不应为空。")
+				assert.Equal(t, tc.input, unpadded, "标准 PKCS#1 v1.5 填充块应还原出原始数据。")
 			}
 		})
 	}
@@ -518,7 +506,6 @@ func TestPublicDecryptErrors(t *testing.T) {
 		hashed      []byte
 		setup       func() []byte
 		expectError bool
-		skip        bool // 标记应该跳过的测试
 	}{
 		{
 			name:        "Valid signature with no hash",
@@ -529,22 +516,6 @@ func TestPublicDecryptErrors(t *testing.T) {
 				signature, err := rsa.SignPKCS1v15(nil, privateKey, 0, []byte("test data"))
 				require.NoError(t, err, "签名生成失败。")
 				return signature
-			},
-		},
-		{
-			name:        "Invalid signature data",
-			hash:        crypto.Hash(0),
-			hashed:      []byte("test data"),
-			expectError: true,
-			skip:        true, // 由于实现细节，这个测试可能不稳定
-			setup: func() []byte {
-				// 生成一个不正确的签名
-				invalidSig := make([]byte, 256)
-				_, err := rand.Read(invalidSig)
-				require.NoError(t, err, "生成随机数据失败。")
-				// 破坏第一个字节以使验证失败
-				invalidSig[0] = 0xFF
-				return invalidSig
 			},
 		},
 		{
@@ -574,10 +545,6 @@ func TestPublicDecryptErrors(t *testing.T) {
 	// 执行测试用例。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.skip {
-				t.Skip("这个测试被标记为跳过，可能由于实现细节而不稳定。")
-			}
-
 			signature := tc.setup()
 
 			// 测试publicDecrypt函数
@@ -652,10 +619,6 @@ func TestErrorsInRSAFunctions(t *testing.T) {
 		_, err := ConvertPubKey(mockPubKey)
 		assert.Error(t, err, "转换无效公钥结构应该返回错误。")
 	})
-
-	// 注释掉这个不稳定的测试用例，改为记录行为
-	t.Logf("注意：DecryptPubKey 和 DecryptPrivKey 函数在某些情况下可能不会对无效数据返回错误。")
-	t.Logf("这可能是因为内部实现的容错性或错误处理方式。")
 }
 
 // TestStructureEdgeCases 测试数据结构边缘情况。
@@ -809,19 +772,12 @@ func TestOAEPErrors(t *testing.T) {
 	})
 
 	t.Run("OAEP ciphertext cannot be decrypted by PKCS1v15", func(t *testing.T) {
-		const maxAttempts = 5
+		deterministicSeed := bytes.NewReader([]byte("kit:rsa:oaep:deterministic-seed-for-pkcs1v15-negative-case"))
+		cipherText, err := rsa.EncryptOAEP(sha256.New(), deterministicSeed, publicKey, plainText, nil)
+		require.NoError(t, err, "使用固定 OAEP seed 构造密文夹具应该成功。")
 
-		for attempt := 0; attempt < maxAttempts; attempt++ {
-			cipherText, err := EncryptPublicKeyOAEP(publicKey, plainText)
-			require.NoError(t, err, "OAEP 加密应该成功。")
-
-			_, err = DecryptPrivateKey(privateKey, cipherText)
-			if err != nil {
-				return
-			}
-		}
-
-		t.Fatalf("连续 %d 次 OAEP 密文都被 PKCS#1 v1.5 解密接受，可能是极低概率随机事件或实现回归。", maxAttempts)
+		_, err = DecryptPrivateKey(privateKey, cipherText)
+		assert.Error(t, err, "确定性的 OAEP 密文夹具不应被 PKCS#1 v1.5 解密接受。")
 	})
 
 	t.Run("PKCS1v15 ciphertext cannot be decrypted by OAEP", func(t *testing.T) {

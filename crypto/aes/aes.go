@@ -195,6 +195,9 @@ func EncryptGCM(key, nonce, data []byte) ([]byte, error) {
 	} else if aead, errAead := cipher.NewGCM(block); nil != errAead {
 		// 如果 GCM 认证加密模式创建失败，保存错误。
 		err = errAead
+	} else if len(nonce) != aead.NonceSize() {
+		// 如果 nonce 长度不符合 GCM 要求，返回错误，避免 Seal 触发 panic。
+		err = fmt.Errorf("invalid nonce length: got %d, want %d", len(nonce), aead.NonceSize())
 	} else {
 		// 使用 GCM 模式加密数据，nil 表示不使用附加认证数据（AAD）。
 		tmpResult := aead.Seal(nil, nonce, data, nil)
@@ -375,8 +378,10 @@ func DecryptGCMNonceLength(key []byte, nonceLength int, data []byte) ([]byte, []
 	var result []byte
 	var err error
 
-	// 检查数据长度是否大于 nonce 长度。
-	if len(data) > nonceLength {
+	// 检查 nonce 长度是否为有效的非负值，避免公开 API 因负数切片边界触发 panic。
+	if nonceLength < 0 {
+		err = fmt.Errorf("invalid nonce length: %d", nonceLength)
+	} else if len(data) > nonceLength {
 		// 从数据中提取 nonce 部分。
 		nonce = data[:nonceLength]
 		// 提取实际的加密数据部分。
@@ -414,6 +419,9 @@ func DecryptGCM(key, nonce, data []byte) ([]byte, error) {
 	} else if aead, errAead := cipher.NewGCM(block); nil != errAead {
 		// 如果 GCM 认证加密模式创建失败，保存错误。
 		err = errAead
+	} else if len(nonce) != aead.NonceSize() {
+		// 如果 nonce 长度不符合 GCM 要求，返回错误，避免 Open 触发 panic。
+		err = fmt.Errorf("invalid nonce length: got %d, want %d", len(nonce), aead.NonceSize())
 	} else if tmpResult, errOpen := aead.Open(nil, nonce, data, nil); nil != errOpen {
 		// 如果解密或认证失败，保存错误。
 		err = errOpen
