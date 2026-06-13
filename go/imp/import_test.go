@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+// TestCheckAliasAllowsBlankImport 验证副作用导入使用的空白标识符别名不会被误判为非法别名。
+func TestCheckAliasAllowsBlankImport(t *testing.T) {
+	issue := checkAlias(ImportInfo{
+		Path:  "github.com/go-kratos/kratos/v2/encoding/json",
+		Alias: "_",
+		Group: GroupThirdParty,
+	})
+	if issue != "" {
+		t.Fatalf("checkAlias() = %q, want no issue", issue)
+	}
+}
+
 // TestImport 测试导入语句检查功能。
 // 该测试函数遍历项目中的所有 Go 文件，检查每个文件的导入语句是否符合规范，
 // 包括分组、排序和别名规则。如果发现问题，会记录并输出所有问题。

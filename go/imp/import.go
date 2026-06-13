@@ -210,6 +210,9 @@ func getGroupName(group ImportGroup) string {
 // 返回值：
 //   - string：如果不符合规范则返回错误信息，否则返回空字符串。
 func checkAlias(imp ImportInfo) string {
+	if imp.Alias == "_" {
+		return ""
+	}
 	if imp.Group == GroupKit {
 		if !strings.HasPrefix(imp.Alias, "kit") {
 			return fmt.Sprintf("fsyyft-go 包 %s 应使用 kit 前缀别名", imp.Path)
