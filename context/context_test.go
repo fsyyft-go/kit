@@ -25,7 +25,7 @@ var _ stdctx.Context = (*withoutCancelCtx)(nil)
 func TestWithoutCancel_NilParentPanics(t *testing.T) {
 	// 验证 nil parent 会触发明确的 panic 文本，便于调用方定位错误用法。
 	require.PanicsWithValue(t, "context: WithoutCancel with nil parent", func() {
-		_ = WithoutCancel(nil)
+		_ = WithoutCancel(nil) //nolint:staticcheck // 需要传入 nil 以验证 WithoutCancel(nil) panic 契约。
 	})
 }
 
