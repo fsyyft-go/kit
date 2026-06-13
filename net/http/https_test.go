@@ -46,6 +46,54 @@ func newLocalTLSServer(t *testing.T) *httptest.Server {
 	return server
 }
 
+// newLocalTLSServerWithDNSName 构造使用指定 DNS 名称证书的本地 TLS 测试服务。
+//
+// 该辅助函数用于验证请求主机与实际拨号地址不一致的场景，避免依赖 httptest 默认测试证书的固定 SAN。
+//
+// 参数：
+//   - t: 测试上下文，用于注册服务关闭清理逻辑并标记辅助函数调用栈。
+//   - dnsName: 证书中写入的 DNS 名称。
+//
+// 返回：
+//   - *httptest.Server: 已启动的本地 TLS 测试服务。
+func newLocalTLSServerWithDNSName(t *testing.T, dnsName string) *httptest.Server {
+	t.Helper()
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: dnsName},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		DNSNames:              []string{dnsName},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	derBytes, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	require.NoError(t, err)
+	cert, err := x509.ParseCertificate(derBytes)
+	require.NoError(t, err)
+
+	server := httptest.NewUnstartedServer(stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		w.Header().Set("X-Method", r.Method)
+		w.WriteHeader(stdhttp.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	server.TLS = &tls.Config{
+		Certificates: []tls.Certificate{{
+			Certificate: [][]byte{derBytes},
+			PrivateKey:  privateKey,
+			Leaf:        cert,
+		}},
+	}
+	server.StartTLS()
+	t.Cleanup(server.Close)
+
+	return server
+}
+
 // newSelfSignedCertificate 构造用于错误链测试的自签名 x509 证书。
 //
 // 该辅助函数生成内存中的 RSA 私钥和证书模板，便于构造 x509.UnknownAuthorityError 测试数据。
@@ -85,9 +133,11 @@ func newSelfSignedCertificate(t *testing.T) *x509.Certificate {
 //   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestGetCertificates_LocalTLS(t *testing.T) {
 	server := newLocalTLSServer(t)
-	serverURL, err := url.Parse(server.URL)
+	overrideHost := "mock.local"
+	overrideServer := newLocalTLSServerWithDNSName(t, overrideHost)
+	overrideServerURL, err := url.Parse(overrideServer.URL)
 	require.NoError(t, err)
-	requestURLWithHost := "https://example.test"
+	requestURLWithHost := "https://" + overrideHost
 
 	tests := []struct {
 		name        string
@@ -120,10 +170,11 @@ func TestGetCertificates_LocalTLS(t *testing.T) {
 			name:        "success/address-override",
 			description: "验证 requestURL 主机与拨号地址不一致时使用 address 覆盖连接端点并保留 SNI 主机名。",
 			giveURL:     requestURLWithHost,
-			giveAddress: serverURL.Host,
+			giveAddress: overrideServerURL.Host,
 			assert: func(t *testing.T, certs []*x509.Certificate) {
 				require.NotEmpty(t, certs)
 				assert.True(t, certs[0].NotAfter.After(time.Now()))
+				assert.Contains(t, certs[0].DNSNames, overrideHost)
 			},
 		},
 	}
