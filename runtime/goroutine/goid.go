@@ -8,9 +8,12 @@ package goroutine
 
 // GetGoID 返回当前 goroutine 的 ID。
 //
-// 在未提供架构专用快速路径的平台上，本实现退回到基于 runtime.Stack 的慢速解析路径。
+// 该实现仅在未提供 amd64 或 arm64 快速路径的平台上编译，并退回到基于
+// runtime.Stack 的慢速解析路径。
 //
-// 返回值：
+// 参数：无。
+//
+// 返回：
 //   - int64：当前 goroutine 的 ID。
 func GetGoID() int64 {
 	return getGoIDSlow()

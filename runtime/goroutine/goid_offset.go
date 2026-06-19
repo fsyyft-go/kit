@@ -52,7 +52,9 @@ var (
 //
 // 返回 0 通常表示当前 Go 版本尚未写入 offsetDict。
 //
-// 返回值：
+// 参数：无。
+//
+// 返回：
 //   - int64：当前 Go 版本对应的 runtime.g.goid 字段偏移量；未命中 offsetDict 时返回 0。
 func Offset() int64 {
 	return offset

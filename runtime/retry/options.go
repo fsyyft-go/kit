@@ -24,6 +24,9 @@ var (
 // BackoffOption 配置 [Backoff] 的等待参数。
 //
 // 多个选项按传入顺序依次应用；同一字段以后传入的值为准。
+//
+// 参数：
+//   - *Backoff: 待修改的退避配置实例；选项通常由 [NewBackoff]、[Retry] 或 [RetryWithContext] 在初始化时应用。
 type BackoffOption func(*Backoff)
 
 // WithMin 设置 [Backoff] 的最小等待时间。

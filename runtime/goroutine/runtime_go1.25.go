@@ -6,8 +6,7 @@
 
 package goroutine
 
-// stack 表示协程栈的结构。
-// 该结构体与 Go 1.25 版本的运行时实现相匹配。
+// stack 镜像 Go 1.25 及更高版本 arm64 的 runtime.stack 最小前缀布局。
 type stack struct { // nolint:unused
 	// lo 栈的低地址边界。
 	lo uintptr
@@ -15,8 +14,7 @@ type stack struct { // nolint:unused
 	hi uintptr
 }
 
-// gobuf 表示协程的执行上下文。
-// 该结构体与 Go 1.25 版本的运行时实现相匹配。
+// gobuf 镜像 Go 1.25 及更高版本 arm64 的 runtime.gobuf 最小前缀布局。
 type gobuf struct { // nolint:unused
 	// sp 栈指针。
 	sp uintptr
@@ -32,9 +30,8 @@ type gobuf struct { // nolint:unused
 	bp uintptr
 }
 
-// g 表示一个 Go 协程的运行时结构。
-// 该结构体与 Go 1.23 版本的运行时实现相匹配，
-// 只关注 goid 字段的位置，其他字段仅用于确保正确的内存偏移。
+// g 镜像 Go 1.25 及更高版本 arm64 的 runtime.g 最小前缀布局。
+// SAFETY: 本结构仅用于让 goid 字段偏移与目标运行时保持一致，字段顺序不得随意改动。
 type g struct {
 	stack       stack   // nolint:unused // 协程的栈
 	stackguard0 uintptr // nolint:unused // 栈溢出检测，快速路径
@@ -51,5 +48,5 @@ type g struct {
 	param        uintptr // nolint:unused // 唤醒参数
 	atomicstatus uint32  // nolint:unused // goroutine 状态
 	stackLock    uint32  // nolint:unused // 栈锁
-	goid         int64   // 协程的唯一标识符
+	goid         int64   // goroutine 的唯一标识符
 }

@@ -14,9 +14,10 @@ import (
 type (
 	// Backoff 根据尝试次数计算退避等待时间。
 	//
-	// 零值 Backoff 在计算时会回退到默认最小值、最大值和增长因子。
-	// Backoff 持有内部 attempt 计数器；[Backoff.Duration] 会推进该计数器，
-	// 而 [Backoff.ForAttempt] 只按显式给定的尝试次数计算等待时间。
+	// 零值 Backoff 在计算时会回退到默认最小值、最大值和增长因子。Backoff 在创建完成后可被多个
+	// goroutine 共享使用；[Backoff.Duration]、[Backoff.Reset] 和 [Backoff.Attempt] 通过原子操作维护
+	// 内部 attempt 计数，而 [Backoff.ForAttempt] 只按显式给定的尝试次数计算等待时间。Backoff 的方法要求
+	// 接收者非 nil。
 	Backoff struct {
 		// attempt 用于记录当前的重试次数。
 		attempt uint64
@@ -150,10 +151,10 @@ func (b *Backoff) Attempt() float64 {
 // NewBackoff 创建一个新的 [Backoff] 实例。
 //
 // 默认配置为：min 100ms、max 10s、factor 2、jitter false。多个选项按传入顺序依次应用，
-// 同一字段以后传入的值为准。
+// 同一字段以后传入的值为准。返回的实例初始 attempt 计数为 0。
 //
 // 参数：
-//   - opts: 可选的 Backoff 配置项。
+//   - opts: 可选的 Backoff 配置项；nil 选项函数会在应用阶段触发 panic。
 //
 // 返回：
 //   - *Backoff: 应用全部选项后的退避配置实例。
