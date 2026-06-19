@@ -17,22 +17,25 @@ import (
 )
 
 const (
-	// 定义默认的获取证书方法为 HEAD。
+	// defaultGetCertificatesMethod 是获取证书时使用的默认 HTTP 方法。
 	defaultGetCertificatesMethod = "HEAD"
 )
 
-// GetCertificatesExpirestime 获取证书剩余有效期。
+// GetCertificatesExpirestime 返回请求目标提取到的首张证书剩余有效天数。
+//
+// 本函数仅基于 GetCertificates 返回切片中的首张证书计算有效期，
+// 不校验证书链完整性，也不推断中间证书或根证书的剩余有效期。
 //
 // 参数：
-// - ctx context.Context 上下文对象，用于控制超时与取消。
-// - requestURL string 需要进行证书请求的 URL 地址。
-// - method string （可选）请求时使用的方式，如果为空值，则默认使用 HEAD。
-// - address string （可选）指定的服务器 Endpoint，包含 IP 和端口，例如：127.0.0.1:443。
-// - timeout time.Duration 超时时间。
+//   - ctx: 请求上下文，用于控制证书请求的取消和超时。
+//   - requestURL: 目标请求地址，用于生成请求并解析 TLS ServerName。
+//   - method: 请求使用的 HTTP 方法；为空时使用 HEAD。
+//   - address: 可选的实际拨号地址，格式通常为 host:port；非空时只覆盖底层 Dial 目标，不改变 requestURL，也不改变基于 requestURL 生成的 SNI。
+//   - timeout: HTTP 客户端的整体超时时间。
 //
-// 返回值：
-// - int 证书剩余有效天数，-99 表示获取证书失败，-98 表示未获取到证书。
-// - error 错误信息。
+// 返回：
+//   - int: 首张证书剩余的整天数；返回 -99 表示 GetCertificates 返回错误，返回 -98 表示请求过程未提取到任何证书。
+//   - error: GetCertificates 返回的错误；当返回值为 -98 时通常为 nil。
 func GetCertificatesExpirestime(ctx context.Context, requestURL, method, address string, timeout time.Duration) (int, error) {
 	// exitDays 用于存储证书剩余天数。
 	var exitDays int
@@ -64,21 +67,22 @@ func GetCertificatesExpirestime(ctx context.Context, requestURL, method, address
 	return exitDays, err
 }
 
-// GetCertificates 获取证书。
+// GetCertificates 请求目标地址并提取 TLS 对端证书。
 //
-// 如果 TLS 校验因未知 CA 失败，会尝试从错误链中的 x509.UnknownAuthorityError 提取证书并清除错误；
-// 如果响应没有 TLS 状态，则返回空证书链和 nil 错误。
+// 本函数优先从响应的 TLS 状态读取 PeerCertificates。若 TLS 握手因未知 CA 失败，
+// 会尝试从错误链中的 x509.UnknownAuthorityError 提取其中携带的证书并将该错误视为已处理。
+// 这只用于在证书不受本地信任时尽量取回证书，不表示证书链校验成功。
 //
 // 参数：
-// - ctx context.Context 上下文对象，用于控制超时与取消。
-// - requestURL string 需要进行证书请求的 URL 地址。
-// - method string （可选）请求时使用的方式，如果为空值，则默认使用 HEAD。
-// - address string （可选）指定的服务器 Endpoint，包含 IP 和端口，例如：127.0.0.1:443。
-// - timeout time.Duration 超时时间。
+//   - ctx: 请求上下文，用于控制请求取消和超时。
+//   - requestURL: 目标请求地址，用于创建请求并解析 TLS ServerName。
+//   - method: 请求使用的 HTTP 方法；为空时使用 HEAD。
+//   - address: 可选的实际拨号地址，格式通常为 host:port；非空时只覆盖底层 Dial 目标，不改变 requestURL，也不改变基于 requestURL 生成的 SNI。
+//   - timeout: HTTP 客户端的整体超时时间。
 //
-// 返回值：
-// - []*x509.Certificate 获取到的证书链。
-// - error 错误信息。
+// 返回：
+//   - []*x509.Certificate: 提取到的对端证书切片；成功建立 TLS 连接时通常为 PeerCertificates，未知 CA 场景下可能只包含从错误中提取的一张证书；非 TLS 响应或未取到证书时返回空切片。
+//   - error: URL 解析、请求创建、网络访问或 TLS 握手中的未处理错误；当仅因未知 CA 失败且已成功提取证书时返回 nil。
 func GetCertificates(ctx context.Context, requestURL, method, address string, timeout time.Duration) ([]*x509.Certificate, error) {
 	// certs 用于存储获取到的证书链。
 	var certs []*x509.Certificate
@@ -131,15 +135,15 @@ func GetCertificates(ctx context.Context, requestURL, method, address string, ti
 	return certs, err
 }
 
-// generaterClient 构建自定义的 http.Client。
+// generaterClient 构建用于提取证书的 HTTP 客户端。
 //
 // 参数：
-// - url *url.URL 需要进行证书请求的 URL 地址的 url.URL 表示形式。
-// - address string （可选）指定的服务器 Endpoint，包含 IP 和端口，例如：127.0.0.1:443。
-// - timeout time.Duration 超时时间。
+//   - url: 已解析的目标 URL，用于生成 TLS 配置。
+//   - address: 可选的实际拨号地址；非空时传给自定义 DialContext 作为连接目标。
+//   - timeout: HTTP 客户端的整体超时时间。
 //
-// 返回值：
-// - *http.Client 构建好的自定义 HTTP 客户端。
+// 返回：
+//   - *http.Client: 带自定义 TLS 配置和 DialContext 的 HTTP 客户端。
 func generaterClient(url *url.URL, address string, timeout time.Duration) *http.Client {
 	// 生成 TLS 配置。
 	tlsConfig, _ := generateTLSConfig(url)
@@ -160,15 +164,17 @@ func generaterClient(url *url.URL, address string, timeout time.Duration) *http.
 	return client
 }
 
-// generateTLSConfig 构建 tls.Config。
-// 应用于 TLS 的 SNI 扩展协议。
+// generateTLSConfig 根据目标 URL 构建 TLS 配置。
+//
+// 本函数从 url.Host 提取主机名并写入 tls.Config.ServerName，
+// 以便 TLS 握手按 requestURL 的主机名发送 SNI。
 //
 // 参数：
-// - url *url.URL 需要进行证书请求的 URL 地址的 url.URL 表示形式。
+//   - url: 已解析的目标 URL。
 //
-// 返回值：
-// - *tls.Config 构建好的 TLS 配置。
-// - string 服务器主机名。
+// 返回：
+//   - *tls.Config: 仅设置 ServerName 的 TLS 配置。
+//   - string: 从 url.Host 提取出的服务器主机名。
 func generateTLSConfig(url *url.URL) (*tls.Config, string) {
 	// serverName 用于存储主机名。
 	serverName := url.Host
@@ -187,13 +193,13 @@ func generateTLSConfig(url *url.URL) (*tls.Config, string) {
 	return tlsConfig, serverName
 }
 
-// generaterDialContext 构建 http.Transport 的 DialContext。
+// generaterDialContext 构建覆盖拨号目标的 DialContext。
 //
 // 参数：
-// - address string （可选）指定的服务器 Endpoint，包含 IP 和端口，例如：127.0.0.1:443。
+//   - address: 可选的实际拨号地址，格式通常为 host:port。
 //
-// 返回值：
-// - func(ctx context.Context, network, addr string) (net.Conn, error) 自定义的 DialContext 函数。
+// 返回：
+//   - func(ctx context.Context, network, addr string) (net.Conn, error): 自定义 DialContext；当 address 非空时忽略 Transport 传入的 addr，直接拨号到 address，否则沿用原始 addr。
 func generaterDialContext(address string) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	// 返回自定义的 DialContext 函数。
 	dialContext := func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -210,15 +216,17 @@ func generaterDialContext(address string) func(ctx context.Context, network, add
 	return dialContext
 }
 
-// checkError 异常检查。
-// 尝试从错误中提取 x509 证书。
+// checkError 检查客户端错误中是否携带可提取的证书。
+//
+// 本函数只处理经 errors.As 可识别的 *url.Error 包装的
+// x509.UnknownAuthorityError；其它错误保持原样返回。
 //
 // 参数：
-// - clientError error 需要检查的错误。
+//   - clientError: 待检查的客户端错误。
 //
-// 返回值：
-// - *x509.Certificate 提取到的证书，若无则为 nil。
-// - error 错误信息。
+// 返回：
+//   - *x509.Certificate: 从 x509.UnknownAuthorityError 中提取到的证书；无法提取时为 nil。
+//   - error: 未识别或未处理的原始错误；成功提取证书时返回 nil。
 func checkError(clientError error) (*x509.Certificate, error) {
 	// certificate 用于存储提取到的证书。
 	var certificate *x509.Certificate

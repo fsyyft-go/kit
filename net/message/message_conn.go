@@ -26,99 +26,126 @@ var (
 )
 
 type (
-	// Conn 定义自定义消息包传输连接的契约。
+	// Conn 定义按本包协议收发消息的连接契约。
 	//
-	// 只有 Close、Closed 和 SendMessage 设计为可并发使用；Start 只应调用一次。
-	// Message 返回单个共享接收 channel，多个消费者会竞争消费其中的消息；
-	// 其余方法遵循底层 net.Conn 的并发语义。
+	// Close、Closed 和 SendMessage 可以并发调用。Start 不会自行去重，
+	// 调用方只应调用一次；重复调用会额外启动读写循环和可选心跳循环，
+	// 并竞争同一底层连接。Message 返回单个共享接收 channel，多个消费者
+	// 同时读取时会竞争消费消息；连接关闭时该 channel 会被关闭。
+	// 地址查询方法直接委托给底层 net.Conn；截止时间设置会同步影响
+	// [Conn.Start] 启动的内部收发流程。
 	Conn interface {
-		// Close 关闭连接。
+		// Close 关闭连接并通知内部 goroutine 退出。
 		//
-		// Close 可与 Closed 和 SendMessage 并发调用；重复关闭只会在首次关闭时关闭底层连接。
+		// Close 可与 Closed 和 SendMessage 并发调用；重复调用只会在首次关闭时关闭底层连接，
+		// 并关闭 [Conn.Message] 返回的共享接收 channel。
 		//
-		// 返回值：
-		//   - error：关闭底层连接时返回的错误。
+		// 参数：无。
+		//
+		// 返回：
+		//   - error: 首次关闭底层连接时返回的错误。
 		Close() error
-		// LocalAddr 返回本地网络地址。
+		// LocalAddr 返回底层连接的本地网络地址。
 		//
-		// 返回值：
+		// 参数：无。
+		//
+		// 返回：
 		//   - net.Addr: 本地网络地址。
 		LocalAddr() net.Addr
-		// RemoteAddr 返回远程网络地址。
+		// RemoteAddr 返回底层连接的远程网络地址。
 		//
-		// 返回值：
+		// 参数：无。
+		//
+		// 返回：
 		//   - net.Addr: 远程网络地址。
 		RemoteAddr() net.Addr
-		// SetDeadline 设置读写相关的截止时间。
+		// SetDeadline 设置底层连接的读写截止时间。
+		//
+		// 调用后会同时影响 [Conn.Start] 启动的内部收发流程。
 		//
 		// 参数：
-		//   - t: 截止时间。
+		//   - time.Time: 截止时间；零值表示取消已设置的读写截止时间。
 		//
-		// 返回值：
-		//   - error: 错误信息。
+		// 返回：
+		//   - error: 底层连接设置截止时间失败时返回错误。
 		SetDeadline(time.Time) error
-		// SetReadDeadline 设置读截止时间。
+		// SetReadDeadline 设置底层连接的读截止时间。
+		//
+		// 该设置会影响 [Conn.Start] 启动的内部接收流程。
 		//
 		// 参数：
-		//   - t: 截止时间。
+		//   - time.Time: 截止时间；零值表示取消已设置的读截止时间。
 		//
-		// 返回值：
-		//   - error: 错误信息。
+		// 返回：
+		//   - error: 底层连接设置读截止时间失败时返回错误。
 		SetReadDeadline(time.Time) error
-		// SetWriteDeadline 设置写截止时间。
+		// SetWriteDeadline 设置底层连接的写截止时间。
+		//
+		// 该设置会影响 [Conn.Start] 启动的内部发送流程。
 		//
 		// 参数：
-		//   - t: 截止时间。
+		//   - time.Time: 截止时间；零值表示取消已设置的写截止时间。
 		//
-		// 返回值：
-		//   - error: 错误信息。
+		// 返回：
+		//   - error: 底层连接设置写截止时间失败时返回错误。
 		SetWriteDeadline(time.Time) error
 
 		// Closed 返回连接是否已经关闭。
 		//
 		// Closed 可与 Close 和 SendMessage 并发调用。
 		//
-		// 返回值：
-		//   - bool：连接是否已经关闭。
+		// 参数：无。
+		//
+		// 返回：
+		//   - bool: 连接是否已经进入关闭状态。
 		Closed() bool
-		// Start 启动内部消息读写 goroutine。
+		// Start 启动内部发送、接收以及可选心跳 goroutine。
 		//
-		// Start 只应调用一次；重复调用会额外启动读写循环并竞争同一底层连接。
+		// Start 不会自行去重，调用方只应调用一次。传入的上下文结束或连接关闭后，
+		// Start 启动的 goroutine 会退出。
 		//
 		// 参数：
-		//   - ctx：上下文，用于控制 goroutine 生命周期。
+		//   - context.Context: 控制内部 goroutine 生命周期的上下文，不能为空。
 		Start(context.Context)
-		// SendMessage 发送消息。
+		// SendMessage 将消息放入内部发送队列。
 		//
-		// SendMessage 可与 Close 和 Closed 并发调用；连接已关闭时返回错误。
+		// SendMessage 可与 Close 和 Closed 并发调用。返回 nil 仅表示消息已入队，
+		// 不表示已经写入底层连接；当发送队列已满时会阻塞，直到队列腾出空间或连接关闭。
 		//
 		// 参数：
-		//   - message：待发送的消息。
+		//   - Message: 待异步发送的消息；调用方应保证其非 nil。
 		//
-		// 返回值：
-		//   - error：连接已关闭或发送失败时返回错误。
+		// 返回：
+		//   - error: 连接已关闭，或消息在入队前因收到关闭通知而被拒绝时返回错误。
 		SendMessage(Message) error
 		// Message 返回连接的共享接收 channel。
 		//
-		// 该 channel 只创建一次；多个消费者同时读取时会竞争消费其中的消息。
+		// 该 channel 只创建一次；多个消费者同时读取时会竞争消费消息。
+		// 连接关闭时，该 channel 也会被关闭。
 		//
-		// 返回值：
-		//   - <-chan Message：只读消息通道。
+		// 参数：无。
+		//
+		// 返回：
+		//   - <-chan Message: 共享的只读消息通道。
 		Message() <-chan Message
 	}
-	// conn 自定义消息包传输时使用的网络连接，实现接口 net.Conn 和 Conn。
+	// conn 将底层 net.Conn 包装为按本包协议异步收发消息的连接，
+	// 同时实现 [Conn] 和 [net.Conn]。
+	//
+	// conn 的零值不可用，应通过 [WrapConn] 创建。Close、Closed 和 SendMessage
+	// 可并发调用；Start 只应调用一次。
 	conn struct {
-		conn net.Conn // 底层网络连接。
+		conn net.Conn // 承载原始协议字节流的底层网络连接，必须非 nil。
 
-		closed       atomic.Bool   // 连接关闭标志。
-		closedLocker sync.Locker   // 关闭操作互斥锁，保证并发安全。
-		closedNotify chan struct{} // 连接关闭通知通道。
+		closed       atomic.Bool   // 标记连接是否已进入关闭状态；true 后不会恢复。
+		closedLocker sync.Locker   // 串行化首次关闭流程，避免并发重复关闭底层连接和通道。
+		closedNotify chan struct{} // 首次关闭时关闭，用于通知内部 goroutine 退出。
 
-		messageRead       chan Message // 读取到的消息队列通道。
-		messageReadLocker sync.RWMutex // 保护消息读取通道的发送与关闭。
-		messageWrite      chan Message // 待发送的消息队列通道。
+		messageRead       chan Message // 供 Message 返回的共享接收 channel，首次 Close 时关闭。
+		messageReadLocker sync.RWMutex // 协调接收 goroutine 投递消息与 Close 关闭 messageRead。
+		messageWrite      chan Message // 内部异步发送队列，由 SendMessage 入队、send 出队；Close 不关闭该通道。
 
-		heartbeatInterval time.Duration // 心跳包发送间隔。
+		heartbeatInterval time.Duration // 大于 0 时，Start 会按该间隔额外启动心跳发送循环；小于等于 0 时禁用心跳。
 	}
 )
 
@@ -126,18 +153,22 @@ type (
 //
 // Closed 可与 Close 和 SendMessage 并发调用。
 //
-// 返回值：
-//   - bool：连接是否已经关闭。
+// 参数：无。
+//
+// 返回：
+//   - bool: 连接是否已经进入关闭状态。
 func (c *conn) Closed() bool {
 	return c.closed.Load()
 }
 
-// Start 启动内部消息读写 goroutine。
+// Start 启动内部发送、接收以及可选心跳 goroutine。
 //
-// Start 只应调用一次。配置了正数心跳间隔时，会额外启动定时心跳发送 goroutine。
+// Start 不会自行去重，调用方只应调用一次。传入的上下文结束或连接关闭后，
+// Start 启动的 goroutine 会退出；heartbeatInterval 大于 0 时，
+// Start 会额外启动定时心跳发送 goroutine。
 //
 // 参数：
-//   - ctx：上下文，用于控制 goroutine 生命周期。
+//   - ctx: 控制内部 goroutine 生命周期的上下文，不能为空。
 func (c *conn) Start(ctx context.Context) {
 	_ = kitgoroutine.Submit(func() { c.send(ctx) })    // 启动发送消息的 goroutine。
 	_ = kitgoroutine.Submit(func() { c.receive(ctx) }) // 启动接收消息的 goroutine。
@@ -148,15 +179,16 @@ func (c *conn) Start(ctx context.Context) {
 	}
 }
 
-// SendMessage 发送消息。
+// SendMessage 将消息放入内部发送队列。
 //
-// SendMessage 可与 Close 和 Closed 并发调用；连接已关闭时返回错误。
+// SendMessage 可与 Close 和 Closed 并发调用。返回 nil 仅表示消息已入队，
+// 不表示消息已经写入底层连接；当发送队列已满时会阻塞，直到队列腾出空间或连接关闭。
 //
 // 参数：
-//   - message：待发送的消息。
+//   - message: 待异步发送的消息；调用方应保证其非 nil。
 //
-// 返回值：
-//   - error：连接已关闭或发送失败时返回错误。
+// 返回：
+//   - error: 连接已关闭，或消息在入队前因收到关闭通知而被拒绝时返回错误。
 func (c *conn) SendMessage(message Message) error {
 	var err error
 
@@ -176,44 +208,54 @@ func (c *conn) SendMessage(message Message) error {
 
 // Message 返回连接的共享接收 channel。
 //
-// 该 channel 只创建一次；多个消费者同时读取时会竞争消费其中的消息。
+// 该 channel 只创建一次；多个消费者同时读取时会竞争消费消息。
+// 连接关闭时，该 channel 也会被关闭。
 //
-// 返回值：
-//   - <-chan Message：只读消息通道。
+// 参数：无。
+//
+// 返回：
+//   - <-chan Message: 共享的只读消息通道。
 func (c *conn) Message() <-chan Message {
 	return c.messageRead
 }
 
-// Read 从连接中读取数据。
+// Read 从底层连接读取原始协议字节流。
+//
+// 该方法直接委托给底层 net.Conn，不参与本类型的消息拆包流程。
 //
 // 参数：
 //   - b: 读取缓冲区。
 //
-// 返回值：
+// 返回：
 //   - int: 实际读取的字节数。
-//   - error: 错误信息。
+//   - error: 底层连接读取失败时返回错误。
 func (c *conn) Read(b []byte) (n int, err error) {
 	return c.conn.Read(b)
 }
 
-// Write 向连接中写数据。
+// Write 向底层连接写入原始协议字节流。
+//
+// 该方法直接委托给底层 net.Conn，不参与本类型的消息封包流程。
 //
 // 参数：
-//   - b: 写入缓冲区。
+//   - b: 待写入的原始字节数据。
 //
-// 返回值：
+// 返回：
 //   - int: 实际写入的字节数。
-//   - error: 错误信息。
+//   - error: 底层连接写入失败时返回错误。
 func (c *conn) Write(b []byte) (n int, err error) {
 	return c.conn.Write(b)
 }
 
-// Close 关闭连接。
+// Close 关闭连接并通知内部 goroutine 退出。
 //
-// Close 可与 Closed 和 SendMessage 并发调用；重复关闭只会在首次关闭时关闭底层连接。
+// Close 可与 Closed 和 SendMessage 并发调用；重复调用只会在首次关闭时关闭底层连接，
+// 并关闭 [Conn.Message] 返回的共享接收 channel。
 //
-// 返回值：
-//   - error：关闭底层连接时返回的错误。
+// 参数：无。
+//
+// 返回：
+//   - error: 首次关闭底层连接时返回的错误；连接已关闭时返回 nil。
 func (c *conn) Close() error {
 	var err error
 
@@ -237,63 +279,76 @@ func (c *conn) Close() error {
 	return err
 }
 
-// LocalAddr 返回本地网络地址。
+// LocalAddr 返回底层连接的本地网络地址。
 //
-// 返回值：
+// 参数：无。
+//
+// 返回：
 //   - net.Addr: 本地网络地址。
 func (c *conn) LocalAddr() net.Addr {
 	return c.conn.LocalAddr()
 }
 
-// RemoteAddr 返回远程网络地址。
+// RemoteAddr 返回底层连接的远程网络地址。
 //
-// 返回值：
+// 参数：无。
+//
+// 返回：
 //   - net.Addr: 远程网络地址。
 func (c *conn) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
-// SetDeadline 设置读写相关的截止时间。
+// SetDeadline 设置底层连接的读写截止时间。
+//
+// 该设置会同时影响直接调用 Read 和 Write，以及 Start 启动的内部收发流程。
 //
 // 参数：
-//   - t: 截止时间。
+//   - t: 截止时间；零值表示取消已设置的读写截止时间。
 //
-// 返回值：
-//   - error: 错误信息。
+// 返回：
+//   - error: 底层连接设置截止时间失败时返回错误。
 func (c *conn) SetDeadline(t time.Time) error {
 	return c.conn.SetDeadline(t)
 }
 
-// SetReadDeadline 设置读截止时间。
+// SetReadDeadline 设置底层连接的读截止时间。
+//
+// 该设置会影响直接调用 Read，以及 Start 启动的内部接收流程。
 //
 // 参数：
-//   - t: 截止时间。
+//   - t: 截止时间；零值表示取消已设置的读截止时间。
 //
-// 返回值：
-//   - error: 错误信息。
+// 返回：
+//   - error: 底层连接设置读截止时间失败时返回错误。
 func (c *conn) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
 }
 
-// SetWriteDeadline 设置写截止时间。
+// SetWriteDeadline 设置底层连接的写截止时间。
+//
+// 该设置会影响直接调用 Write，以及 Start 启动的内部发送流程。
 //
 // 参数：
-//   - t: 截止时间。
+//   - t: 截止时间；零值表示取消已设置的写截止时间。
 //
-// 返回值：
-//   - error: 错误信息。
+// 返回：
+//   - error: 底层连接设置写截止时间失败时返回错误。
 func (c *conn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }
 
-// pack 封包，将消息类型、长度和 payload 组装为完整数据包。
+// pack 将消息编码为本包协议定义的完整数据包。
+//
+// 返回结果依次包含 2 字节消息类型、2 字节 payload 长度和 payload 本体，
+// 其中消息类型与长度字段均使用大端序编码。payload 长度超过 uint16 上限时返回错误。
 //
 // 参数：
-//   - message: 待封包的消息。
+//   - message: 待封包的消息；必须非 nil，否则调用 Pack 或 MessageType 时会 panic。
 //
-// 返回值：
-//   - []byte: 完整数据包字节数组。
-//   - error: 错误信息。
+// 返回：
+//   - []byte: 封包成功后的完整协议数据包。
+//   - error: message.Pack 失败、payload 长度超限，或协议头与 payload 写入失败时返回错误。
 func (c *conn) pack(message Message) ([]byte, error) {
 	// 定义最终返回的数据包字节数组和错误变量。
 	var data []byte
@@ -337,10 +392,14 @@ func (c *conn) pack(message Message) ([]byte, error) {
 	return data, err
 }
 
-// send 向网络连接发送消息。
+// send 持续消费内部发送队列并将消息写入底层连接。
+//
+// send 会先调用 pack 生成协议数据包，再通过 Write 写入底层连接。
+// ctx 结束、连接收到关闭通知、发送队列被关闭，或封包与写入失败时，
+// send 会退出；其中除收到关闭通知外，其余异常路径都会主动关闭连接。
 //
 // 参数：
-//   - ctx: 上下文，用于控制 goroutine 生命周期。
+//   - ctx: 控制发送循环生命周期的上下文，不能为空。
 func (c *conn) send(ctx context.Context) {
 LoopSend:
 	for {
@@ -366,16 +425,18 @@ LoopSend:
 	}
 }
 
-// generateMessage 生成消息，从 bufio.Scanner 解析出完整消息并还原为 Message 实例。
+// generateMessage 从 scanner 读取一个完整协议包并还原为消息实例。
+//
+// scanner 应由 [NewScanner] 创建，以保证每次 Scan 返回的 token 都是完整协议包。
+// 当 scanner 为 nil、scanner 已记录错误、数据流结束，或消息类型与 payload 还原失败时，
+// generateMessage 返回错误。
 //
 // 参数：
-//   - scanner: 消息包扫描器，负责从底层流中分割出完整的消息包字节数据。
-//     该 scanner 必须使用自定义的 scanMessage 分割函数，确保每次 Scan() 都返回一条完整的消息包。
-//     若为 nil，则无法进行消息解析。
+//   - scanner: 按本包协议拆分消息包的扫描器；为 nil 时无法继续解析消息。
 //
-// 返回值：
-//   - Message: 还原得到的消息对象，若解析失败则为 nil。
-//   - error:   解析过程中遇到的错误信息；数据流结束或无更多消息时也会返回非 nil 错误。
+// 返回：
+//   - Message: 成功还原的消息实例；解析失败时返回 nil。
+//   - error: 扫描失败、数据流结束、消息类型读取失败，或调用 FactoryGenerate 还原消息失败时返回错误。
 func (c *conn) generateMessage(scanner *bufio.Scanner) (Message, error) {
 	// 定义返回的消息对象和错误变量。
 	var message Message
@@ -420,10 +481,15 @@ func (c *conn) generateMessage(scanner *bufio.Scanner) (Message, error) {
 	return message, err
 }
 
-// receive 从网络连接接收消息。
+// receive 持续从底层连接读取协议包并投递到共享消息通道。
+//
+// receive 使用 NewScanner 拆分完整协议包，并通过 generateMessage 还原消息。
+// ctx 结束、连接收到关闭通知、消息解析失败、投递前观察到连接关闭，
+// 或完成一次扫描后发现距离上次投递消息已超过超时阈值时，receive 会退出；
+// 其中除收到关闭通知外，其余异常路径都会主动关闭连接。
 //
 // 参数：
-//   - ctx: 上下文，用于控制 goroutine 生命周期。
+//   - ctx: 控制接收循环生命周期的上下文，不能为空。
 func (c *conn) receive(ctx context.Context) {
 	scanner := NewScanner(c)
 	lastReceived := time.Now()
@@ -470,11 +536,14 @@ LoopReceive:
 	}
 }
 
-// sendHeartbeat 定时发送心跳消息。
+// sendHeartbeat 按 ticker 周期生成并发送心跳消息。
+//
+// 每次触发都会生成新的心跳序列号并调用 SendMessage 入队。ctx 结束或连接收到关闭通知时，
+// sendHeartbeat 会退出；ctx 结束时还会主动关闭连接。本方法不会停止传入的 ticker。
 //
 // 参数：
-//   - ctx: 上下文，用于控制 goroutine 生命周期。
-//   - ticker: 定时器。
+//   - ctx: 控制心跳循环生命周期的上下文，不能为空。
+//   - ticker: 心跳触发定时器，不能为空。
 func (c *conn) sendHeartbeat(ctx context.Context, ticker *time.Ticker) {
 	generateSerialNumber := func(serialNumberSingle uint16) (uint16, uint64) {
 		const serialNumberSingleMax = 10000
@@ -508,17 +577,18 @@ LoopHeartbeat:
 	}
 }
 
-// WrapConn 将底层 net.Conn 包装为按本包协议收发消息的连接。
+// WrapConn 将底层 net.Conn 包装为按本包协议异步收发消息的连接。
 //
-// 返回的连接需要由调用方显式调用 [Conn.Start] 启动读写循环；heartbeatInterval 大于 0 时，
-// Start 会额外启动定时心跳发送 goroutine。
+// 返回的连接会创建固定容量的接收与发送队列，但不会自动启动后台 goroutine；
+// 调用方需要显式调用 [Conn.Start] 启动读写循环，且 Start 只应调用一次。
+// heartbeatInterval 大于 0 时，Start 会额外启动定时心跳发送 goroutine。
 //
 // 参数：
-//   - c: 待包装的底层网络连接。
+//   - c: 待包装的底层网络连接，必须非 nil；调用方负责保证其满足所需的 net.Conn 语义。
 //   - heartbeatInterval: 心跳发送间隔；小于等于 0 时不会启动心跳 goroutine。
 //
 // 返回：
-//   - *conn: 包装后的协议连接实例。
+//   - *conn: 包装后的协议连接实例，初始处于未关闭状态。
 func WrapConn(c net.Conn, heartbeatInterval time.Duration) *conn {
 	newConn := &conn{
 		conn:              c,
