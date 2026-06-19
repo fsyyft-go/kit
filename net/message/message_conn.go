@@ -29,7 +29,7 @@ type (
 	// Conn 定义按本包协议收发消息的连接契约。
 	//
 	// Close、Closed 和 SendMessage 可以并发调用。Start 不会自行去重，
-	// 调用方只应调用一次；重复调用会额外启动读写循环和可选心跳循环，
+	// 调用方只应调用一次；重复调用会重复提交内部收发任务和可选心跳任务，
 	// 并竞争同一底层连接。Message 返回单个共享接收 channel，多个消费者
 	// 同时读取时会竞争消费消息；连接关闭时该 channel 会被关闭。
 	// 地址查询方法直接委托给底层 net.Conn；截止时间设置会同步影响
@@ -43,7 +43,7 @@ type (
 		// 参数：无。
 		//
 		// 返回：
-		//   - error: 首次关闭底层连接时返回的错误。
+		//   - error: 首次关闭底层连接时返回的错误；连接已关闭时返回 nil。
 		Close() error
 		// LocalAddr 返回底层连接的本地网络地址。
 		//
@@ -99,10 +99,11 @@ type (
 		// 返回：
 		//   - bool: 连接是否已经进入关闭状态。
 		Closed() bool
-		// Start 启动内部发送、接收以及可选心跳 goroutine。
+		// Start 提交内部发送、接收以及可选心跳任务。
 		//
 		// Start 不会自行去重，调用方只应调用一次。传入的上下文结束或连接关闭后，
-		// Start 启动的 goroutine 会退出。
+		// 已成功启动的内部任务会退出。任务提交通过包级 goroutine 池完成，提交失败时
+		// 当前签名不会向调用方返回错误。
 		//
 		// 参数：
 		//   - context.Context: 控制内部 goroutine 生命周期的上下文，不能为空。
@@ -133,7 +134,8 @@ type (
 	// 同时实现 [Conn] 和 [net.Conn]。
 	//
 	// conn 的零值不可用，应通过 [WrapConn] 创建。Close、Closed 和 SendMessage
-	// 可并发调用；Start 只应调用一次。
+	// 可并发调用；Start 只应调用一次。conn 持有底层 net.Conn，调用方不再使用
+	// 包装连接时应调用 Close 释放底层连接并通知内部任务退出。
 	conn struct {
 		conn net.Conn // 承载原始协议字节流的底层网络连接，必须非 nil。
 
@@ -161,11 +163,12 @@ func (c *conn) Closed() bool {
 	return c.closed.Load()
 }
 
-// Start 启动内部发送、接收以及可选心跳 goroutine。
+// Start 提交内部发送、接收以及可选心跳任务。
 //
 // Start 不会自行去重，调用方只应调用一次。传入的上下文结束或连接关闭后，
-// Start 启动的 goroutine 会退出；heartbeatInterval 大于 0 时，
-// Start 会额外启动定时心跳发送 goroutine。
+// 已成功启动的内部任务会退出；heartbeatInterval 大于 0 时，
+// Start 会额外提交定时心跳发送任务。任务提交通过包级 goroutine 池完成，
+// 提交失败时当前签名不会向调用方返回错误。
 //
 // 参数：
 //   - ctx: 控制内部 goroutine 生命周期的上下文，不能为空。
@@ -342,12 +345,13 @@ func (c *conn) SetWriteDeadline(t time.Time) error {
 //
 // 返回结果依次包含 2 字节消息类型、2 字节 payload 长度和 payload 本体，
 // 其中消息类型与长度字段均使用大端序编码。payload 长度超过 uint16 上限时返回错误。
+// message.Pack 及二进制写入错误会被包装后返回。
 //
 // 参数：
 //   - message: 待封包的消息；必须非 nil，否则调用 Pack 或 MessageType 时会 panic。
 //
 // 返回：
-//   - []byte: 封包成功后的完整协议数据包。
+//   - []byte: 封包成功后的完整协议数据包；失败时为 nil。
 //   - error: message.Pack 失败、payload 长度超限，或协议头与 payload 写入失败时返回错误。
 func (c *conn) pack(message Message) ([]byte, error) {
 	// 定义最终返回的数据包字节数组和错误变量。
@@ -428,15 +432,15 @@ LoopSend:
 // generateMessage 从 scanner 读取一个完整协议包并还原为消息实例。
 //
 // scanner 应由 [NewScanner] 创建，以保证每次 Scan 返回的 token 都是完整协议包。
-// 当 scanner 为 nil、scanner 已记录错误、数据流结束，或消息类型与 payload 还原失败时，
-// generateMessage 返回错误。
+// 当 scanner 为 nil、调用前 scanner 已记录错误、数据流结束，或消息类型与 payload
+// 还原失败时，generateMessage 返回错误。
 //
 // 参数：
 //   - scanner: 按本包协议拆分消息包的扫描器；为 nil 时无法继续解析消息。
 //
 // 返回：
 //   - Message: 成功还原的消息实例；解析失败时返回 nil。
-//   - error: 扫描失败、数据流结束、消息类型读取失败，或调用 FactoryGenerate 还原消息失败时返回错误。
+//   - error: 调用前已有扫描错误、数据流结束、消息类型读取失败，或调用 FactoryGenerate 还原消息失败时返回错误。
 func (c *conn) generateMessage(scanner *bufio.Scanner) (Message, error) {
 	// 定义返回的消息对象和错误变量。
 	var message Message
@@ -485,8 +489,9 @@ func (c *conn) generateMessage(scanner *bufio.Scanner) (Message, error) {
 //
 // receive 使用 NewScanner 拆分完整协议包，并通过 generateMessage 还原消息。
 // ctx 结束、连接收到关闭通知、消息解析失败、投递前观察到连接关闭，
-// 或完成一次扫描后发现距离上次投递消息已超过超时阈值时，receive 会退出；
-// 其中除收到关闭通知外，其余异常路径都会主动关闭连接。
+// 或完成一次扫描后发现距离上次成功投递消息已超过超时阈值时，receive 会退出；
+// 其中除收到关闭通知以及投递前观察到连接已关闭外，其余异常路径都会主动关闭连接。
+// 未配置心跳时超时阈值为 5 秒；配置心跳时为 heartbeatInterval 的 2 倍。
 //
 // 参数：
 //   - ctx: 控制接收循环生命周期的上下文，不能为空。
@@ -540,6 +545,8 @@ LoopReceive:
 //
 // 每次触发都会生成新的心跳序列号并调用 SendMessage 入队。ctx 结束或连接收到关闭通知时，
 // sendHeartbeat 会退出；ctx 结束时还会主动关闭连接。本方法不会停止传入的 ticker。
+// 当前内部调用路径由 Start 创建该 ticker，因此 ticker 生命周期随连接任务退出而结束，
+// 不向外部 API 调用方暴露单独停止入口。
 //
 // 参数：
 //   - ctx: 控制心跳循环生命周期的上下文，不能为空。
@@ -579,16 +586,16 @@ LoopHeartbeat:
 
 // WrapConn 将底层 net.Conn 包装为按本包协议异步收发消息的连接。
 //
-// 返回的连接会创建固定容量的接收与发送队列，但不会自动启动后台 goroutine；
+// 返回的连接会创建容量为 5120 的接收与发送队列，但不会自动启动后台任务；
 // 调用方需要显式调用 [Conn.Start] 启动读写循环，且 Start 只应调用一次。
-// heartbeatInterval 大于 0 时，Start 会额外启动定时心跳发送 goroutine。
+// heartbeatInterval 大于 0 时，Start 会额外提交定时心跳发送任务。
 //
 // 参数：
-//   - c: 待包装的底层网络连接，必须非 nil；调用方负责保证其满足所需的 net.Conn 语义。
-//   - heartbeatInterval: 心跳发送间隔；小于等于 0 时不会启动心跳 goroutine。
+//   - c: 待包装的底层网络连接，必须非 nil；调用方负责保证其满足所需的 net.Conn 语义，传入 nil 会导致后续使用时 panic。
+//   - heartbeatInterval: 心跳发送间隔；小于等于 0 时不会启动心跳任务。
 //
 // 返回：
-//   - *conn: 包装后的协议连接实例，初始处于未关闭状态。
+//   - *conn: 包装后的协议连接实例，初始处于未关闭状态；调用方应在不再使用时调用 Close。
 func WrapConn(c net.Conn, heartbeatInterval time.Duration) *conn {
 	newConn := &conn{
 		conn:              c,

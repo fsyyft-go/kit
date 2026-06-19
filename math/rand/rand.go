@@ -33,8 +33,12 @@ const (
 
 // Int63n 返回范围在 [min, max) 内的随机 int64。
 //
+// 本函数不额外校验边界，会直接将 max-min 作为 math/rand.Int63n 的上界。
+// 调用方应保证 max > min，且 max-min 在 int64 中可表示；否则可能 panic
+// 或产生不符合预期的范围。
+//
 // 参数：
-//   - random：随机数生成器；为 nil 时使用 math/rand 包级默认随机数生成器。
+//   - random：随机数生成器；为 nil 时使用 math/rand 包级默认随机数生成器，非 nil 时调用方负责其并发安全。
 //   - min：结果范围的下限（含）。
 //   - max：结果范围的上限（不含）。
 //
@@ -59,8 +63,12 @@ func Int63n(random *rand.Rand, min, max int64) int64 {
 
 // Intn 返回范围在 [min, max) 内的随机 int。
 //
+// 本函数不额外校验边界，会直接将 max-min 作为 math/rand.Intn 的上界。
+// 调用方应保证 max > min，且 max-min 在 int 中可表示；否则可能 panic
+// 或产生不符合预期的范围。
+//
 // 参数：
-//   - random：随机数生成器；为 nil 时使用 math/rand 包级默认随机数生成器。
+//   - random：随机数生成器；为 nil 时使用 math/rand 包级默认随机数生成器，非 nil 时调用方负责其并发安全。
 //   - min：结果范围的下限（含）。
 //   - max：结果范围的上限（不含）。
 //
