@@ -15,15 +15,18 @@ import (
 )
 
 type (
+	// traceHook 通过 httptrace 采集一次 HTTP 请求的关键阶段耗时。
 	traceHook struct {
-		logger kitlog.Logger
+		logger kitlog.Logger // logger 是输出 trace 调试日志时使用的日志记录器。
 	}
+
+	// traceInfo 保存 httptrace.ClientTrace 回调采集到的时间点和事件数据。
 	traceInfo struct {
 		TimeGetConn     time.Time // TimeGetConn 准备获取连接的时间，在 ClientTrace.GetConn 事件中产生。
 		HostPortGetConn string    // HostPortGetConn 目标服务器的信息，格式为 host:port，在 ClientTrace.GetConn 事件中产生。
 
 		TimeGotConn time.Time              // TimeGotConn 获取到连接的时间，在 ClientTrace.GotConn 事件中产生。
-		GotConnInfo *httptrace.GotConnInfo //GotConnInfo 获取到的连接信息，在 ClientTrace.GotConn 事件中产生。
+		GotConnInfo *httptrace.GotConnInfo // GotConnInfo 获取到的连接信息，在 ClientTrace.GotConn 事件中产生。
 
 		TimePutIdleConn  time.Time // TimePutIdleConn 将连接放回连接池的时间，在 ClientTrace.PutIdleConn 事件中产生。
 		ErrorPutIdleConn error     // ErrorPutIdleConn 连接放回连接池的错误信息，在 ClientTrace.PutIdleConn 事件中产生。
@@ -60,6 +63,14 @@ type (
 	}
 )
 
+// DNSUseTime 返回 DNS 解析耗时。
+//
+// 如果 DNSStart 或 DNSDone 回调未发生，则返回 0。
+//
+// 参数：无。
+//
+// 返回：
+//   - time.Duration: DNSDone 与 DNSStart 的时间差。
 func (i *traceInfo) DNSUseTime() time.Duration {
 	if i.TimeDNSDone.IsZero() || i.TimeDNSStart.IsZero() {
 		return 0
@@ -67,6 +78,14 @@ func (i *traceInfo) DNSUseTime() time.Duration {
 	return i.TimeDNSDone.Sub(i.TimeDNSStart)
 }
 
+// ConnectUseTime 返回连接获取耗时。
+//
+// 如果 GetConn 或 GotConn 回调未发生，则返回 0。
+//
+// 参数：无。
+//
+// 返回：
+//   - time.Duration: GotConn 与 GetConn 的时间差。
 func (i *traceInfo) ConnectUseTime() time.Duration {
 	if i.TimeGetConn.IsZero() || i.TimeGotConn.IsZero() {
 		return 0
@@ -74,12 +93,28 @@ func (i *traceInfo) ConnectUseTime() time.Duration {
 	return i.TimeGotConn.Sub(i.TimeGetConn)
 }
 
+// TLSUseTime 返回 TLS 握手耗时。
+//
+// 如果 TLSHandshakeStart 或 TLSHandshakeDone 回调未发生，则返回 0。
+//
+// 参数：无。
+//
+// 返回：
+//   - time.Duration: TLSHandshakeDone 与 TLSHandshakeStart 的时间差。
 func (i *traceInfo) TLSUseTime() time.Duration {
 	if i.TimeTLSHandshakeStart.IsZero() || i.TimeTLSHandshakeDone.IsZero() {
 		return 0
 	}
 	return i.TimeTLSHandshakeDone.Sub(i.TimeTLSHandshakeStart)
 }
+
+// Before 在请求发送前注入 httptrace.ClientTrace。
+//
+// 参数：
+//   - ctx: 当前 HTTP Hook 上下文，Before 会替换其中请求对象的 Context。
+//
+// 返回：
+//   - error: 固定返回 nil。
 func (h *traceHook) Before(ctx *HookContext) error {
 	traceInfo := &traceInfo{
 		TimeConnectStart:    make([]time.Time, 0),
@@ -185,12 +220,19 @@ func (h *traceHook) Before(ctx *HookContext) error {
 		},
 	}
 	traceContext := httptrace.WithClientTrace(ctx.request.Context(), trace)
-	// 注意：这里需要修改 Request，这个 Hook 尽量放在 Hook 列表的前面。
+	// traceHook 需要替换请求上下文才能让 http.Transport 触发 ClientTrace，注册顺序应尽量靠前。
 	ctx.request = ctx.request.WithContext(traceContext)
 
 	return nil
 }
 
+// After 在请求完成后异步输出 trace 调试日志。
+//
+// 参数：
+//   - ctx: 当前 HTTP Hook 上下文，用于读取 Before 保存的 traceInfo。
+//
+// 返回：
+//   - error: 固定返回 nil；异步日志任务提交失败时错误会被忽略。
 func (h *traceHook) After(ctx *HookContext) error {
 	if ti, ok := ctx.GetHookValue("traceInfo"); ok {
 		l := h.logger
@@ -202,6 +244,7 @@ func (h *traceHook) After(ctx *HookContext) error {
 				l = l.WithField("remoteAddr", i.DNSDoneInfo.Addrs[0].String())
 			}
 		}
+		// 不等待 trace 日志任务执行完成，协程池提交失败也不改变原始请求结果。
 		_ = kitgoroutine.Submit(func() {
 			l.Debug("")
 		})
@@ -214,6 +257,12 @@ func (h *traceHook) After(ctx *HookContext) error {
 //
 // 该 Hook 会在 Before 中把 ClientTrace 写入请求上下文，并在 After 中通过 runtime/goroutine
 // 包级默认协程池输出日志；若协程池提交失败，错误会被忽略。
+//
+// 参数：
+//   - logger: 输出 trace 调试日志时使用的日志记录器。
+//
+// 返回：
+//   - *traceHook: 可注册到 HookManager 的 trace Hook。
 func NewTraceHook(logger kitlog.Logger) *traceHook {
 	h := &traceHook{
 		logger: logger,

@@ -81,8 +81,8 @@ type (
 	// 适配函数收到的 payload 不包含协议头中的 MessageType 和长度字段。
 	//
 	// 参数：
-	//   - messageType: 目标消息类型。
-	//   - payload: 待解码的消息 payload。
+	//   - MessageType: 目标消息类型。
+	//   - []byte: 待解码的消息 payload。
 	//
 	// 返回：
 	//   - Message: 生成的消息实例。

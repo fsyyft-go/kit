@@ -1,9 +1,6 @@
 // Copyright 2025 fsyyft-go
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
-//
-// HTTP 客户端配置选项定义及默认参数。
-// 通过 Option 机制灵活配置 HTTP 客户端行为。
 
 package http
 
@@ -16,9 +13,12 @@ import (
 )
 
 type (
-	// Option 定义用于配置 client 的函数类型。
+	// Option 定义修改 HTTP client 配置的函数。
 	//
-	// 通过 Option，可以灵活地设置 client 的各项参数。
+	// Option 由 [NewClient] 按传入顺序执行，后传入的配置可覆盖先前写入的同一字段。
+	//
+	// 参数：
+	//   - c: 待修改的 client 配置实例，由 NewClient 创建并传入。
 	Option func(c *client)
 )
 
@@ -63,24 +63,28 @@ var (
 
 // WithName 设置 HTTP 客户端名称。
 //
-// 参数：
-//   - name string：自定义客户端名称。
+// 该名称当前用于配置保存，默认 Hook 日志不会自动输出该字段。
 //
-// 返回值：
-//   - Option：用于设置客户端名称的配置项。
+// 参数：
+//   - name: 自定义客户端名称，空字符串会按原值写入。
+//
+// 返回：
+//   - Option: 应用于 [NewClient] 的客户端名称配置项。
 func WithName(name string) Option {
 	return func(c *client) {
 		c.name = name
 	}
 }
 
-// WithTimeout 设置 HTTP 客户端超时时间。
+// WithTimeout 设置 HTTP 客户端总超时时间。
+//
+// timeout 会写入底层 http.Client.Timeout；非正值表示不设置整体超时，正值会限制包含连接、重定向和读取响应体在内的完整请求周期。
 //
 // 参数：
-//   - timeout time.Duration：自定义超时时间。
+//   - timeout: 自定义客户端总超时时间。
 //
-// 返回值：
-//   - Option：用于设置超时时间的配置项。
+// 返回：
+//   - Option: 应用于 [NewClient] 的超时时间配置项。
 func WithTimeout(timeout time.Duration) Option {
 	return func(c *client) {
 		c.timeout = timeout
@@ -89,26 +93,28 @@ func WithTimeout(timeout time.Duration) Option {
 
 // WithTraceEnable 控制是否为默认 HookManager 自动注入 traceHook。
 //
-// 仅在未通过 WithHook 提供自定义 Hook 时生效。
+// 仅在未通过 [WithHook] 提供自定义 Hook 时生效。
 //
 // 参数：
-//   - enable：是否启用默认 traceHook 注入。
+//   - enable: true 表示启用默认 traceHook 注入，false 表示不注入。
 //
-// 返回值：
-//   - Option：用于设置 traceEnable 的配置项。
+// 返回：
+//   - Option: 应用于 [NewClient] 的 traceHook 开关配置项。
 func WithTraceEnable(enable bool) Option {
 	return func(c *client) {
 		c.traceEnable = enable
 	}
 }
 
-// WithProxy 设置 HTTP 客户端代理。
+// WithProxy 设置 HTTP 客户端代理函数。
+//
+// 该选项只在使用 NewClient 内置 Transport 时生效；通过 [WithTransport] 提供自定义 Transport 后，代理行为由自定义 Transport 决定。
 //
 // 参数：
-//   - proxy func(*http.Request) (*url.URL, error)：自定义代理函数，用于根据请求返回代理 URL。
+//   - proxy: 自定义代理函数，用于根据请求返回代理 URL；可为 nil，含义与 http.Transport.Proxy 一致。
 //
-// 返回值：
-//   - Option：用于设置代理的配置项。
+// 返回：
+//   - Option: 应用于 [NewClient] 的代理配置项。
 func WithProxy(proxy func(*http.Request) (*url.URL, error)) Option {
 	return func(c *client) {
 		c.proxy = proxy
@@ -117,13 +123,13 @@ func WithProxy(proxy func(*http.Request) (*url.URL, error)) Option {
 
 // WithTransport 设置自定义的 http.Transport。
 //
-// 提供该选项后，NewClient 不再根据 proxy、TLS 和连接池默认参数构造内置 Transport。
+// 当该选项最终写入非 nil transport 时，NewClient 不再根据 proxy、TLS 和连接池默认参数构造内置 Transport；传入 nil 时继续使用默认构造逻辑。Transport 的生命周期由调用方负责。
 //
 // 参数：
-//   - transport：自定义的 HTTP 传输层配置。
+//   - transport: 自定义的 HTTP 传输层配置；为 nil 时 NewClient 会继续构造内置 Transport。
 //
-// 返回值：
-//   - Option：用于设置 transport 的配置项。
+// 返回：
+//   - Option: 应用于 [NewClient] 的 Transport 配置项。
 func WithTransport(transport *http.Transport) Option {
 	return func(c *client) {
 		c.transport = transport
@@ -132,11 +138,13 @@ func WithTransport(transport *http.Transport) Option {
 
 // WithMaxConnsPerHost 设置每个主机的最大连接数。
 //
-// 参数：
-//   - maxConnsPerHost int：自定义的最大连接数。
+// 该选项只在使用 NewClient 内置 Transport 时生效，取值语义与 http.Transport.MaxConnsPerHost 保持一致。
 //
-// 返回值：
-//   - Option：用于设置最大连接数的配置项。
+// 参数：
+//   - maxConnsPerHost: 自定义的每主机最大连接数。
+//
+// 返回：
+//   - Option: 应用于 [NewClient] 的连接池配置项。
 func WithMaxConnsPerHost(maxConnsPerHost int) Option {
 	return func(c *client) {
 		c.maxConnsPerHost = maxConnsPerHost
@@ -145,11 +153,13 @@ func WithMaxConnsPerHost(maxConnsPerHost int) Option {
 
 // WithMaxIdleConnsPerHost 设置每个主机的最大空闲连接数。
 //
-// 参数：
-//   - maxIdleConnsPerHost int：自定义的最大空闲连接数。
+// 该选项只在使用 NewClient 内置 Transport 时生效，取值语义与 http.Transport.MaxIdleConnsPerHost 保持一致。
 //
-// 返回值：
-//   - Option：用于设置最大空闲连接数的配置项。
+// 参数：
+//   - maxIdleConnsPerHost: 自定义的每主机最大空闲连接数。
+//
+// 返回：
+//   - Option: 应用于 [NewClient] 的连接池配置项。
 func WithMaxIdleConnsPerHost(maxIdleConnsPerHost int) Option {
 	return func(c *client) {
 		c.maxIdleConnsPerHost = maxIdleConnsPerHost
@@ -158,11 +168,13 @@ func WithMaxIdleConnsPerHost(maxIdleConnsPerHost int) Option {
 
 // WithMaxIdleConns 设置所有主机的最大空闲连接数。
 //
-// 参数：
-//   - maxIdleConns int：自定义的最大空闲连接数。
+// 该选项只在使用 NewClient 内置 Transport 时生效，取值语义与 http.Transport.MaxIdleConns 保持一致。
 //
-// 返回值：
-//   - Option：用于设置最大空闲连接数的配置项。
+// 参数：
+//   - maxIdleConns: 自定义的全局最大空闲连接数。
+//
+// 返回：
+//   - Option: 应用于 [NewClient] 的连接池配置项。
 func WithMaxIdleConns(maxIdleConns int) Option {
 	return func(c *client) {
 		c.maxIdleConns = maxIdleConns
@@ -171,13 +183,13 @@ func WithMaxIdleConns(maxIdleConns int) Option {
 
 // WithLogSlow 设置默认慢请求日志 Hook 的阈值。
 //
-// 仅在未通过 WithHook 提供自定义 Hook 时生效；当阈值小于等于 0 时，不会自动安装慢请求 Hook。
+// 仅在未通过 [WithHook] 提供自定义 Hook 时生效；当阈值小于等于 0 时，不会自动安装慢请求 Hook。
 //
 // 参数：
-//   - logSlow：默认慢请求日志 Hook 的阈值。
+//   - logSlow: 默认慢请求日志 Hook 的阈值。
 //
-// 返回值：
-//   - Option：用于设置慢请求阈值的配置项。
+// 返回：
+//   - Option: 应用于 [NewClient] 的慢请求日志配置项。
 func WithLogSlow(logSlow time.Duration) Option {
 	return func(c *client) {
 		c.logSlow = logSlow
@@ -186,13 +198,13 @@ func WithLogSlow(logSlow time.Duration) Option {
 
 // WithLogError 控制是否为默认 HookManager 自动注入错误日志 Hook。
 //
-// 仅在未通过 WithHook 提供自定义 Hook 时生效。
+// 仅在未通过 [WithHook] 提供自定义 Hook 时生效。
 //
 // 参数：
-//   - logError：是否启用默认错误日志 Hook。
+//   - logError: true 表示启用默认错误日志 Hook，false 表示不注入。
 //
-// 返回值：
-//   - Option：用于设置错误日志 Hook 开关的配置项。
+// 返回：
+//   - Option: 应用于 [NewClient] 的错误日志 Hook 开关配置项。
 func WithLogError(logError bool) Option {
 	return func(c *client) {
 		c.logError = logError
@@ -201,13 +213,13 @@ func WithLogError(logError bool) Option {
 
 // WithHook 设置自定义 Hook。
 //
-// 提供该选项后，NewClient 不会再自动组装 logSlow、traceEnable 和 logError 对应的默认 HookManager。
+// 当该选项最终写入非 nil hook 时，NewClient 不再自动组装 logSlow、traceEnable 和 logError 对应的默认 HookManager；传入 nil 时继续按这些选项组装默认 HookManager。
 //
 // 参数：
-//   - hook：自定义的 Hook 实现。
+//   - hook: 自定义的 Hook 实现；为 nil 时 NewClient 会继续组装默认 HookManager。
 //
-// 返回值：
-//   - Option：用于设置 Hook 的配置项。
+// 返回：
+//   - Option: 应用于 [NewClient] 的 Hook 配置项。
 func WithHook(hook Hook) Option {
 	return func(c *client) {
 		c.hook = hook
@@ -216,11 +228,13 @@ func WithHook(hook Hook) Option {
 
 // WithLogger 设置 HTTP 客户端的日志记录器。
 //
-// 参数：
-//   - logger kitlog.Logger：自定义的日志记录器实现。
+// 该日志记录器只会传递给自动组装的默认慢请求、trace 和错误日志 Hook；如果通过 WithHook 提供自定义 Hook，NewClient 不会把 logger 自动注入到自定义 Hook。调用方应提供可用的 Logger。
 //
-// 返回值：
-//   - Option：用于设置日志记录器的配置项。
+// 参数：
+//   - logger: 自定义的日志记录器实现。
+//
+// 返回：
+//   - Option: 应用于 [NewClient] 的日志配置项。
 func WithLogger(logger kitlog.Logger) Option {
 	return func(c *client) {
 		c.logger = logger
