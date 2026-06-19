@@ -14,37 +14,27 @@ const (
 	logHeader = "=-=       "
 )
 
-// Println 输出带有统一前缀的日志信息，并在末尾自动添加换行符。
-// 该函数会在实际内容前添加 logHeader 前缀，并使用空格分隔多个参数。
+// Println 将 a 按 fmt.Println 语义写入标准输出，并在内容前添加统一日志前缀。
+//
+// 每次调用先写入 logHeader，再由 fmt.Println 写入 a 和换行。该函数不提供额外同步；
+// 并发调用时前缀和正文可能与其他输出交错。
 //
 // 参数：
-//   - a ...interface{}：要输出的任意类型参数列表。
-//
-// 示例：
-//
-//	testing.Println("测试信息")
-//	testing.Println("值：", 100, "状态：", "成功")
+//   - a: 要输出的值列表；未传入时仅输出前缀和换行，多个值按 fmt.Println 规则以空格分隔。
 func Println(a ...interface{}) {
-	// 先输出统一的日志前缀。
 	fmt.Print(logHeader)
-	// 使用 fmt.Println 输出参数，参数之间会自动添加空格。
 	fmt.Println(a...)
 }
 
-// Printf 输出带有统一前缀的格式化日志信息。
-// 该函数会在实际内容前添加 logHeader 前缀，并根据提供的格式字符串格式化输出内容。
+// Printf 将 format 和 a 按 fmt.Printf 语义写入标准输出，并在内容前添加统一日志前缀。
+//
+// 每次调用先写入 logHeader，再由 fmt.Printf 写入格式化结果。该函数不提供额外同步；
+// 并发调用时前缀和正文可能与其他输出交错，换行完全由 format 决定。
 //
 // 参数：
-//   - format string：格式化字符串，支持所有 fmt.Printf 的格式化指令。
-//   - a ...interface{}：要格式化输出的参数列表。
-//
-// 示例：
-//
-//	testing.Printf("当前进度：%d%%\n", 50)
-//	testing.Printf("用户：%s，年龄：%d\n", "张三", 25)
+//   - format: 格式字符串，支持 fmt.Printf 的格式化指令；空字符串时仅输出前缀。
+//   - a: 用于 format 的值列表；数量或类型不匹配时保留 fmt.Printf 的诊断输出。
 func Printf(format string, a ...interface{}) {
-	// 先输出统一的日志前缀。
 	fmt.Print(logHeader)
-	// 使用 fmt.Printf 按照指定格式输出内容。
 	fmt.Printf(format, a...)
 }

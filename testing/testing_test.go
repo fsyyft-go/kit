@@ -204,16 +204,17 @@ func TestPrintFunctions_ConcurrentWriteFragments(t *stdtesting.T) {
 	}
 }
 
-// captureStdout 捕获被测函数写入标准输出的内容。
+// captureStdout 捕获 giveFunc 写入标准输出的完整内容。
 //
-// 该辅助函数串行化 os.Stdout 替换，并通过清理函数恢复全局状态和关闭管道资源，供验证直接写标准输出的函数使用。
+// 该辅助函数串行化 os.Stdout 替换，并通过 t.Cleanup 恢复全局状态和关闭管道资源，
+// 供验证直接写标准输出的函数使用。
 //
 // 参数：
 //   - t: 测试上下文，用于报告捕获过程中的错误并标记辅助函数调用栈。
-//   - giveFunc: 需要在标准输出被捕获期间执行的函数。
+//   - giveFunc: 在标准输出被捕获期间执行的函数；调用方应传入非 nil 函数。
 //
 // 返回：
-//   - string: giveFunc 执行期间写入标准输出的完整内容。
+//   - string: giveFunc 执行期间写入标准输出的全部内容。
 func captureStdout(t *stdtesting.T, giveFunc func()) string {
 	t.Helper()
 
