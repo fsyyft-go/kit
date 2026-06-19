@@ -47,10 +47,10 @@ var (
 type (
 	// LogrusLogger 实现了 Logger 接口，使用 Logrus 作为底层日志库。
 	// 这个实现提供了丰富的日志功能，包括：
-	// - 结构化日志记录。
-	// - 多种输出格式（文本、JSON）。
-	// - 灵活的日志级别控制。
-	// - 支持同时输出到多个目标。
+	//   - 结构化日志记录。
+	//   - 多种输出格式（文本、JSON）。
+	//   - 灵活的日志级别控制。
+	//   - 支持同时输出到多个目标。
 	LogrusLogger struct {
 		// logger 是 Logrus 的日志实例，包含了所有的上下文信息。
 		logger *logrus.Entry
@@ -58,21 +58,21 @@ type (
 
 	// LogrusLoggerOptions 包含了 LogrusLogger 的所有配置选项。
 	LogrusLoggerOptions struct {
-		// OutputPath 输出文件路径。
+		// OutputPath 指定日志文件路径。空字符串表示保留 Logrus 默认 stderr 输出。
 		OutputPath string
-		// Formatter 日志格式化器。
+		// Formatter 指定 Logrus 日志格式化器。nil 会传递给 Logrus 并由调用方承担后续使用风险。
 		Formatter logrus.Formatter
-		// Level 日志级别。
+		// Level 指定 Logrus 日志过滤级别。
 		Level logrus.Level
-		// FileMode 文件权限。
+		// FileMode 指定禁用轮转时创建日志文件使用的权限模式。
 		FileMode os.FileMode
-		// DirMode 目录权限。
+		// DirMode 指定创建日志目录使用的权限模式。
 		DirMode os.FileMode
-		// EnableRotate 是否启用日志滚动。
+		// EnableRotate 控制文件输出是否使用 rotatelogs 轮转 writer。
 		EnableRotate bool
-		// RotateTime 日志滚动时间间隔。
+		// RotateTime 指定启用轮转时的日志轮转周期。
 		RotateTime time.Duration
-		// MaxAge 日志保留时间。
+		// MaxAge 指定启用轮转时旧日志文件的最大保留时间。
 		MaxAge time.Duration
 	}
 
@@ -83,10 +83,10 @@ type (
 // WithOutputPath 设置日志输出路径。
 //
 // 参数：
-//   - path：日志文件的输出路径，支持绝对路径和相对路径。
+//   - path：日志文件路径，支持绝对路径和相对路径；空字符串表示保留 Logrus 默认 stderr 输出。
 //
-// 返回值：
-//   - LogrusOption：返回一个配置选项函数。
+// 返回：
+//   - LogrusOption：应用于 LogrusLoggerOptions 的配置选项。
 func WithOutputPath(path string) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
 		o.OutputPath = path
@@ -98,7 +98,7 @@ func WithOutputPath(path string) LogrusOption {
 // 参数：
 //   - formatter：自定义的日志格式化器实例，用于控制日志的输出格式。
 //
-// 返回值：
+// 返回：
 //   - LogrusOption：返回一个配置选项函数。
 func WithFormatter(formatter logrus.Formatter) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
@@ -112,7 +112,7 @@ func WithFormatter(formatter logrus.Formatter) LogrusOption {
 //   - timestampFormat：时间戳的格式化模板，例如："2006-01-02 15:04:05"。
 //   - prettyPrint：是否美化 JSON 输出格式，true 表示美化，false 表示单行输出。
 //
-// 返回值：
+// 返回：
 //   - LogrusOption：返回一个配置选项函数。
 func WithJSONFormatter(timestampFormat string, prettyPrint bool) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
@@ -130,7 +130,7 @@ func WithJSONFormatter(timestampFormat string, prettyPrint bool) LogrusOption {
 //   - fullTimestamp：是否显示完整时间戳，true 表示显示完整时间戳，false 表示显示相对时间。
 //   - disableColors：是否禁用控制台颜色输出，true 表示禁用颜色，false 表示启用颜色。
 //
-// 返回值：
+// 返回：
 //   - LogrusOption：返回一个配置选项函数。
 func WithTextFormatter(timestampFormat string, fullTimestamp bool, disableColors bool) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
@@ -142,13 +142,13 @@ func WithTextFormatter(timestampFormat string, fullTimestamp bool, disableColors
 	}
 }
 
-// WithLogrusLevel 设置日志级别。
+// WithLogrusLevel 设置 Logrus 日志过滤级别。
 //
 // 参数：
-//   - level：日志输出的级别，可选值包括 DebugLevel、InfoLevel、WarnLevel、ErrorLevel、FatalLevel。
+//   - level：日志过滤级别，可选值包括 DebugLevel、InfoLevel、WarnLevel、ErrorLevel 和 FatalLevel。
 //
-// 返回值：
-//   - LogrusOption：返回一个配置选项函数。
+// 返回：
+//   - LogrusOption：应用于 LogrusLoggerOptions 的配置选项；未知级别会保持当前 Logrus 级别不变。
 func WithLogrusLevel(level Level) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
 		if logrusLevel, ok := logrusLevelMap[level]; ok {
@@ -162,7 +162,7 @@ func WithLogrusLevel(level Level) LogrusOption {
 // 参数：
 //   - mode：日志文件的权限模式，使用八进制表示，例如：0666。
 //
-// 返回值：
+// 返回：
 //   - LogrusOption：返回一个配置选项函数。
 func WithFileMode(mode os.FileMode) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
@@ -175,7 +175,7 @@ func WithFileMode(mode os.FileMode) LogrusOption {
 // 参数：
 //   - mode：日志目录的权限模式，使用八进制表示，例如：0755。
 //
-// 返回值：
+// 返回：
 //   - LogrusOption：返回一个配置选项函数。
 func WithDirMode(mode os.FileMode) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
@@ -188,7 +188,7 @@ func WithDirMode(mode os.FileMode) LogrusOption {
 // 参数：
 //   - enable：是否启用日志滚动功能，true 表示启用，false 表示禁用。
 //
-// 返回值：
+// 返回：
 //   - LogrusOption：返回一个配置选项函数。
 func WithLogrusEnableRotate(enable bool) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
@@ -201,7 +201,7 @@ func WithLogrusEnableRotate(enable bool) LogrusOption {
 // 参数：
 //   - duration：日志滚动的时间间隔，例如：time.Hour 表示每小时滚动一次。
 //
-// 返回值：
+// 返回：
 //   - LogrusOption：返回一个配置选项函数。
 func WithLogrusRotateTime(duration time.Duration) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
@@ -214,7 +214,7 @@ func WithLogrusRotateTime(duration time.Duration) LogrusOption {
 // 参数：
 //   - duration：日志文件的最大保留时间，超过这个时间的日志文件会被自动删除。
 //
-// 返回值：
+// 返回：
 //   - LogrusOption：返回一个配置选项函数。
 func WithLogrusMaxAge(duration time.Duration) LogrusOption {
 	return func(o *LogrusLoggerOptions) {
@@ -227,7 +227,7 @@ func WithLogrusMaxAge(duration time.Duration) LogrusOption {
 // 参数：
 //   - opts：可选的配置选项列表，用于自定义日志记录器的行为。
 //
-// 返回值：
+// 返回：
 //   - Logger：返回创建的日志实例。
 //   - error：返回创建过程中可能发生的错误。
 func NewLogrusLogger(opts ...LogrusOption) (Logger, error) {
@@ -288,7 +288,7 @@ func NewLogrusLogger(opts ...LogrusOption) (Logger, error) {
 // SetLevel 实现 Logger 接口的日志级别设置方法。
 //
 // 参数：
-//   - level：要设置的日志级别。
+//   - level：日志过滤级别；未知级别会被忽略并保持当前 Logrus 级别不变。
 func (l *LogrusLogger) SetLevel(level Level) {
 	if logrusLevel, ok := logrusLevelMap[level]; ok {
 		l.logger.Logger.SetLevel(logrusLevel)
@@ -297,7 +297,7 @@ func (l *LogrusLogger) SetLevel(level Level) {
 
 // GetLevel 实现 Logger 接口的日志级别获取方法。
 //
-// 返回值：
+// 返回：
 //   - Level：返回当前日志记录器的日志级别。
 func (l *LogrusLogger) GetLevel() Level {
 	logrusLevel := l.logger.Logger.GetLevel()
@@ -402,7 +402,7 @@ func (l *LogrusLogger) Fatalf(format string, args ...interface{}) {
 //   - key：字段名。
 //   - value：字段值。
 //
-// 返回值：
+// 返回：
 //   - Logger：返回一个包含新字段的新 Logger 实例。
 func (l *LogrusLogger) WithField(key string, value interface{}) Logger {
 	return &LogrusLogger{
@@ -415,7 +415,7 @@ func (l *LogrusLogger) WithField(key string, value interface{}) Logger {
 // 参数：
 //   - fields：要添加的字段映射。
 //
-// 返回值：
+// 返回：
 //   - Logger：返回一个包含新字段的新 Logger 实例。
 func (l *LogrusLogger) WithFields(fields map[string]interface{}) Logger {
 	return &LogrusLogger{
