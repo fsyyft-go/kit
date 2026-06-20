@@ -7,8 +7,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -30,36 +32,97 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// 当没有提供子命令时，运行示例函数。
 			if len(args) == 0 {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
-				sigChan := make(chan os.Signal, 1)
-				signal.Notify(sigChan, syscall.SIGILL, syscall.SIGTERM)
-
-				_ = kitgoroutine.Submit(func() {
-					<-sigChan
-					cancel()
-				})
-
-				s := &server{}
-				_ = kitgoroutine.Submit(func() { _ = s.Run(ctx) })
-
-				time.Sleep(50 * time.Millisecond)
-
-				c := &client{}
-				_ = kitgoroutine.Submit(func() { _ = c.Run(ctx) })
-
-				<-ctx.Done()
-
-				return nil
+				return runRootDefaultExample()
 			}
 			return nil
 		},
 	}
 )
 
-const (
-	addr = "127.0.0.1:44444"
+var (
+	addr             = "127.0.0.1:44444"
+	rootRunTimeout   = 5 * time.Second
+	startupWaitDelay = 50 * time.Millisecond
 )
+
+// runRootDefaultExample 运行 root 命令的默认网络消息示例。
+//
+// 该函数在启动时快照当前地址，并等待服务端与客户端 goroutine 完成，避免示例退出后继续读取包级状态。
+func runRootDefaultExample() error {
+	ctx, cancel := context.WithTimeout(context.Background(), rootRunTimeout)
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGILL, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+
+	signalDone := make(chan struct{})
+	if err := kitgoroutine.Submit(func() {
+		defer close(signalDone)
+		select {
+		case <-sigChan:
+			cancel()
+		case <-ctx.Done():
+		}
+	}); err != nil {
+		return err
+	}
+
+	var waitGroup sync.WaitGroup
+	serverReady := make(chan net.Listener, 1)
+	serverDone := make(chan error, 1)
+	serverAddr := addr
+	s := &server{addr: serverAddr}
+	s.notifyListenReady = func(listener net.Listener) {
+		select {
+		case serverReady <- listener:
+		default:
+		}
+	}
+
+	cleanup := func() {
+		cancel()
+		_ = s.Stop(ctx)
+		waitGroup.Wait()
+		<-signalDone
+	}
+	defer cleanup()
+
+	waitGroup.Add(1)
+	if err := kitgoroutine.Submit(func() {
+		defer waitGroup.Done()
+		serverDone <- s.Run(ctx)
+	}); err != nil {
+		waitGroup.Done()
+		return err
+	}
+
+	var listener net.Listener
+	select {
+	case listener = <-serverReady:
+	case <-serverDone:
+		return nil
+	case <-ctx.Done():
+		return nil
+	}
+
+	c := &client{addr: listener.Addr().String()}
+	waitGroup.Add(1)
+	if err := kitgoroutine.Submit(func() {
+		defer waitGroup.Done()
+		_ = c.Run(ctx)
+	}); err != nil {
+		waitGroup.Done()
+		return err
+	}
+	defer func() {
+		_ = c.Stop(ctx)
+	}()
+
+	<-ctx.Done()
+
+	return nil
+}
 
 // Execute 将所有子命令添加到根命令并适当设置标志。
 // 这个函数由 main.main() 调用，只需要对 rootCmd 执行一次。
@@ -69,9 +132,4 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-}
-
-// init 函数在包初始化时运行，用于设置全局标志。
-func init() {
-	// 这里可以添加全局标志。
 }

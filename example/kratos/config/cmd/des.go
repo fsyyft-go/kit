@@ -56,7 +56,7 @@ var desCmd = &cobra.Command{
 		if encrypt {
 			result, err = kitcryptodes.EncryptStringCBCPkCS7PaddingStringHex(key, data)
 		} else {
-			result, err = kitcryptodes.EncryptStringCBCPkCS7PaddingStringHex(key, data)
+			result, err = kitcryptodes.DecryptStringCBCPkCS7PaddingStringHex(key, data)
 		}
 
 		// 处理操作结果。

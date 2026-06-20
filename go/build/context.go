@@ -251,70 +251,78 @@ func (c *buildingContextValue) Debug() bool {
 	return c.debug
 }
 
-// init 初始化构建上下文，设置默认值和运行时状态。
-func init() {
-	// 定义检查是否为调试模式的函数。
-	funcCheckDebug := func() bool {
-		// 获取临时构建目录。
-		goTmpDir := os.Getenv(GoEnvNameTmpDir)
-		if goTmpDir == "" {
-			// 如果未设置 GOTMPDIR，则使用系统临时目录。
-			goTmpDir = os.TempDir()
-		}
-
-		// 确保路径以分隔符结尾。
-		if !strings.HasSuffix(goTmpDir, string(os.PathSeparator)) {
-			goTmpDir = goTmpDir + string(os.PathSeparator)
-		}
-
-		// 构建 go-build 临时目录路径。
-		goBuildDir := filepath.Join(goTmpDir, "go-build")
-
-		// 获取当前执行文件的路径。
-		exePath, err := os.Executable()
-		if err != nil {
-			return false
-		}
-
-		// 规范化路径，处理符号链接。
-		exePath, err = filepath.EvalSymlinks(exePath)
-		if err != nil {
-			return false
-		}
-
-		// 获取程序名称。
-		exeName := filepath.Base(os.Args[0])
-
-		// 检查是否为测试模式。
-		isTestMode := strings.HasSuffix(exeName, ".test") ||
-			strings.Contains(exeName, ".test.") ||
-			strings.HasPrefix(exeName, "_testmain")
-
-		// 检查是否通过 go run 运行。
-		isGoRun := strings.HasPrefix(
-			strings.ToLower(exePath),
-			strings.ToLower(goBuildDir),
-		)
-
-		// 检查环境变量，判断是否在 go 命令执行环境中。
-		goCommand := os.Getenv("GOEXE") != "" || // go 命令设置的环境变量
-			os.Getenv("GOPATH") != "" ||
-			os.Getenv("GOROOT") != ""
-
-		// 检查命令行参数是否包含测试相关标志。
-		hasTestFlags := false
-		for _, arg := range os.Args[1:] {
-			if strings.HasPrefix(arg, "-test.") {
-				hasTestFlags = true
-				break
-			}
-		}
-
-		return isTestMode || isGoRun || (goCommand && hasTestFlags)
+// defaultCheckDebug 检查当前进程是否处于调试或测试运行环境。
+//
+// 返回值：
+//   - bool：true 表示处于调试或测试运行环境，false 表示普通运行环境。
+func defaultCheckDebug() bool {
+	// 获取临时构建目录。
+	goTmpDir := os.Getenv(GoEnvNameTmpDir)
+	if goTmpDir == "" {
+		// 如果未设置 GOTMPDIR，则使用系统临时目录。
+		goTmpDir = os.TempDir()
 	}
 
-	// 初始化当前构建上下文对象。
-	CurrentBuildingContext = &buildingContextValue{
+	// 确保路径以分隔符结尾。
+	if !strings.HasSuffix(goTmpDir, string(os.PathSeparator)) {
+		goTmpDir = goTmpDir + string(os.PathSeparator)
+	}
+
+	// 构建 go-build 临时目录路径。
+	goBuildDir := filepath.Join(goTmpDir, "go-build")
+
+	// 获取当前执行文件的路径。
+	exePath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+
+	// 规范化路径，处理符号链接。
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return false
+	}
+
+	// 获取程序名称。
+	exeName := filepath.Base(os.Args[0])
+
+	// 检查是否为测试模式。
+	isTestMode := strings.HasSuffix(exeName, ".test") ||
+		strings.Contains(exeName, ".test.") ||
+		strings.HasPrefix(exeName, "_testmain")
+
+	// 检查是否通过 go run 运行。
+	isGoRun := strings.HasPrefix(
+		strings.ToLower(exePath),
+		strings.ToLower(goBuildDir),
+	)
+
+	// 检查环境变量，判断是否在 go 命令执行环境中。
+	goCommand := os.Getenv("GOEXE") != "" || // go 命令设置的环境变量
+		os.Getenv("GOPATH") != "" ||
+		os.Getenv("GOROOT") != ""
+
+	// 检查命令行参数是否包含测试相关标志。
+	hasTestFlags := false
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "-test.") {
+			hasTestFlags = true
+			break
+		}
+	}
+
+	return isTestMode || isGoRun || (goCommand && hasTestFlags)
+}
+
+// newBuildingContext 使用指定调试状态构造当前构建上下文。
+//
+// 参数：
+//   - debug：是否按调试或测试运行环境补齐构建上下文。
+//
+// 返回值：
+//   - *buildingContextValue：初始化后的构建上下文。
+func newBuildingContext(debug bool) *buildingContextValue {
+	ctx := &buildingContextValue{
 		version:               version,
 		gitVersion:            gitVersion,
 		libGitVersion:         libGitVersion,
@@ -327,36 +335,43 @@ func init() {
 	}
 
 	// 设置是否为调试模式。
-	CurrentBuildingContext.debug = funcCheckDebug()
+	ctx.debug = debug
 
 	// 设置构建时间(如果未设置则使用当前时间)。
-	if len(CurrentBuildingContext.buildTimeString) == 0 {
-		if CurrentBuildingContext.debug {
+	if len(ctx.buildTimeString) == 0 {
+		if ctx.debug {
 			// 调试模式使用当前时间。
-			CurrentBuildingContext.buildTimeString = time.Now().Format(TimeLayout)
+			ctx.buildTimeString = time.Now().Format(TimeLayout)
 		} else {
 			// 非调试模式使用默认时间格式。
-			CurrentBuildingContext.buildTimeString = buildTimeString
+			ctx.buildTimeString = buildTimeString
 		}
 	}
 
 	// 在调试模式下设置额外的环境信息。
-	if CurrentBuildingContext.debug {
+	if ctx.debug {
 		// 设置工作目录。
-		if len(CurrentBuildingContext.buildWorkingDirectory) == 0 {
+		if len(ctx.buildWorkingDirectory) == 0 {
 			if pwd, err := os.Getwd(); nil == err {
-				CurrentBuildingContext.buildWorkingDirectory = pwd
+				ctx.buildWorkingDirectory = pwd
 			}
 		}
 
 		// 设置 GOPATH 目录。
-		if len(CurrentBuildingContext.buildGopathDirectory) == 0 {
-			CurrentBuildingContext.buildGopathDirectory = os.Getenv(GoEnvNamePath)
+		if len(ctx.buildGopathDirectory) == 0 {
+			ctx.buildGopathDirectory = os.Getenv(GoEnvNamePath)
 		}
 
 		// 设置 GOROOT 目录。
-		if len(CurrentBuildingContext.buildGorootDirectory) == 0 {
-			CurrentBuildingContext.buildGorootDirectory = os.Getenv(GoEnvNameRoot)
+		if len(ctx.buildGorootDirectory) == 0 {
+			ctx.buildGorootDirectory = os.Getenv(GoEnvNameRoot)
 		}
 	}
+
+	return ctx
+}
+
+// init 初始化构建上下文，设置默认值和运行时状态。
+func init() {
+	CurrentBuildingContext = newBuildingContext(defaultCheckDebug())
 }

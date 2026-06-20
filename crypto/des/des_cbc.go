@@ -184,6 +184,9 @@ func DecryptCBCPkCS7PaddingAloneIV(key, iv, data []byte) ([]byte, error) {
 	} else if len(iv) != block.BlockSize() {
 		// 验证 IV 长度是否等于块大小。
 		err = fmt.Errorf("IV length must equal block size")
+	} else if len(data)%block.BlockSize() != 0 {
+		// 验证密文长度是否为块大小的整数倍，避免底层 CBC 解密器 panic。
+		err = fmt.Errorf("ciphertext length must be a multiple of block size: got %d, block size %d", len(data), block.BlockSize())
 	} else {
 		// 创建 CBC 解密器。
 		mode := cipher.NewCBCDecrypter(block, iv)
