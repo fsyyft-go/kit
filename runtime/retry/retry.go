@@ -2,10 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package retry 提供基于 Backoff 的重试循环，支持不带上下文和带 context.Context 的函数重试。
-//
-// Retry 和 RetryWithContext 都会在函数返回 nil 前持续重试；普通错误不会直接返回，
-// 只有成功或 context 取消时才结束。
 package retry
 
 import (

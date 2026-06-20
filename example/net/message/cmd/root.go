@@ -2,6 +2,7 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+// Package cmd 实现网络消息示例命令，提供默认示例流程以及 server、client 子命令。
 package cmd
 
 import (

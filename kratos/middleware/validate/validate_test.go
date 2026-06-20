@@ -2,6 +2,8 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+package validate
+
 // validate_test.go 提供了对验证中间件的测试用例。
 //
 // 测试设计思路：
@@ -16,7 +18,6 @@
 // go test -v github.com/fsyyft-go/kratos/middleware/validate
 // 或者使用覆盖率检查：
 // go test -cover github.com/fsyyft-go/kratos/middleware/validate
-package validate
 
 import (
 	"context"

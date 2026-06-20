@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// 声明 net 包，提供与网络相关的工具函数。
 package net
 
 import (

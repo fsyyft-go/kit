@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// package basicauth 实现 HTTP 基本认证中间件，用于保护 API 接口。
 package basicauth
 
 import (

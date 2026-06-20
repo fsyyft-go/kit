@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// package validate 提供了请求验证的中间件功能，用于在处理请求前验证请求的合法性。
 package validate
 
 import (

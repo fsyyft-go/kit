@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package cmd 实现了配置工具的命令行功能。
 package cmd
 
 import (

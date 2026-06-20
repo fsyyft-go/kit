@@ -2,6 +2,8 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+package basicauth
+
 // basicauth_test.go 文件设计思路与使用方法说明：
 //
 // 本测试文件用于测试基本认证（Basic Authentication）中间件的功能实现。
@@ -33,8 +35,6 @@
 // - 默认验证器行为（TestDefaultValidator）
 // - 非传输层上下文处理（TestNonTransportContext）
 // - 错误类型比较（TestErrorComparison）
-
-package basicauth
 
 import (
 	"context"
