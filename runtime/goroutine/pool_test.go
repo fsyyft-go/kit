@@ -111,6 +111,44 @@ func TestNewGoroutinePool(t *testing.T) {
 	}
 }
 
+// TestNewGoroutinePool_InvalidConfig 验证协程池创建会拒绝底层 ants 不接受的配置。
+//
+// 该测试通过表驱动用例覆盖预分配负容量和非法过期时间，确保构造失败时返回错误且不会暴露部分初始化的池或清理函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestNewGoroutinePool_InvalidConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		opts        []Option
+	}{
+		{
+			name:        "error/negative-prealloc-size",
+			description: "验证预分配模式下容量为负数时 NewGoroutinePool 返回创建错误，且不返回可用池或清理函数。",
+			opts:        []Option{WithSize(-1), WithPreAlloc(true), WithMetrics(false)},
+		},
+		{
+			name:        "error/invalid-expiry",
+			description: "验证过期时间为负数时 NewGoroutinePool 返回创建错误，且不返回可用池或清理函数。",
+			opts:        []Option{WithSize(1), WithExpiry(-time.Nanosecond), WithMetrics(false)},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			pool, cleanup, err := NewGoroutinePool(tt.opts...)
+
+			require.Error(t, err)
+			assert.Nil(t, pool)
+			assert.Nil(t, cleanup)
+		})
+	}
+}
+
 // TestGoroutinePool_Submit 验证协程池提交任务的执行、panic 处理和后续可用性。
 //
 // 该测试通过表驱动用例覆盖普通任务、最小可观测任务和 panic 任务，确保 Submit 不仅返回成功，

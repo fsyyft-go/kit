@@ -232,6 +232,32 @@ func TestRetryWithContext_Behavior(t *testing.T) {
 	}
 }
 
+// TestRetryWithContext_RealDeadlineDuringBackoff 验证真实 context deadline 会中断退避等待。
+//
+// 该测试使用真实 deadline 和远长于 deadline 的退避配置，确保 RetryWithContext 在等待下一次重试时返回
+// context.DeadlineExceeded，且不会等完整退避时长或执行第二次调用。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestRetryWithContext_RealDeadlineDuringBackoff(t *testing.T) {
+	transientErr := errors.New("transient failure")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	t.Cleanup(cancel)
+	calls := 0
+	startedAt := time.Now()
+
+	err := RetryWithContext(ctx, func(ctx context.Context) error {
+		calls++
+		require.NoError(t, ctx.Err())
+		return transientErr
+	}, WithMin(time.Hour), WithMax(time.Hour), WithFactor(1))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, 1, calls)
+	assert.Less(t, time.Since(startedAt), time.Second, "deadline 应中断长退避等待")
+}
+
 // controllableContext 是测试专用的可控 context 实现。
 //
 // 该类型允许测试在函数首次调用后同步完成 context，避免使用极短 timeout 造成时序脆弱性。

@@ -160,6 +160,13 @@ func TestWithDSNParams_Compose(t *testing.T) {
 			wantDSN:     "user:pass@tcp(127.0.0.1:3306)/app",
 		},
 		{
+			name:        "boundary/non-empty-base-nil-params-keeps-base",
+			description: "验证参数为 nil 且基础 DSN 非空时保持原始 DSN 完全不变。",
+			giveBaseDSN: "user:pass@tcp(127.0.0.1:3306)/app",
+			giveParams:  nil,
+			wantDSN:     "user:pass@tcp(127.0.0.1:3306)/app",
+		},
+		{
 			name:        "success/appends-params-to-base-without-query",
 			description: "验证基础 DSN 无查询串时使用问号追加稳定排序后的参数。",
 			giveBaseDSN: "user:pass@tcp(127.0.0.1:3306)/app",
@@ -197,6 +204,20 @@ func TestWithDSNParams_Compose(t *testing.T) {
 				"time_zone": "Asia/Shanghai +08:00",
 			},
 			wantDSN: "user:pass@tcp(127.0.0.1:3306)/app?time_zone=Asia%2FShanghai+%2B08%3A00",
+		},
+		{
+			name:        "boundary/existing-query-empty-params-keeps-base",
+			description: "验证基础 DSN 已有查询串但参数为空时不追加多余分隔符或改写原始参数顺序。",
+			giveBaseDSN: "user:pass@tcp(127.0.0.1:3306)/app?parseTime=true&loc=Local",
+			giveParams:  map[string]string{},
+			wantDSN:     "user:pass@tcp(127.0.0.1:3306)/app?parseTime=true&loc=Local",
+		},
+		{
+			name:        "boundary/existing-query-nil-params-keeps-base",
+			description: "验证基础 DSN 已有查询串且参数为 nil 时保持原始 DSN 完全不变。",
+			giveBaseDSN: "user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&timeout=3s",
+			giveParams:  nil,
+			wantDSN:     "user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&timeout=3s",
 		},
 	}
 

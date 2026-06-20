@@ -99,6 +99,375 @@ func TestKitDriver_Open(t *testing.T) {
 	}
 }
 
+// TestKitDriver_WrappedConnectionLifecycle 验证 KitDriver 返回的连接、语句和事务包装链保持 Hook 编排与底层委托语义。
+//
+// 该测试通过 fake driver 从公开 Open 入口创建完整包装链，覆盖 Open、PrepareContext、Stmt Exec/Query/Close、Conn Exec/Query/Ping、BeginTx、Commit/Rollback、NamedValueChecker 与 SessionResetter，确保 wrapper 不丢失底层对象、Hook 顺序和可选接口代理语义。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestKitDriver_WrappedConnectionLifecycle(t *testing.T) {
+	// 该用例验证从 driver.Open 到连接、语句、事务和可选接口代理的完整成功路径。
+	stmtArgs := []driver.NamedValue{{Ordinal: 1, Value: "alice"}}
+	connArgs := []driver.NamedValue{{Ordinal: 1, Value: true}}
+	stmtExecResult := driver.RowsAffected(4)
+	connExecResult := driver.RowsAffected(3)
+	stmtRows := &testRows{columns: []string{"stmt_name"}}
+	connRows := &testRows{columns: []string{"conn_id"}}
+	calls := make([]string, 0)
+	originCalls := make([]string, 0)
+	begunTxs := make([]*testTx, 0, 2)
+
+	preparedStmt := &testFullStmt{
+		execContextFn: func(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+			originCalls = append(originCalls, "stmt.exec")
+			assert.Equal(t, stmtArgs, args)
+			return stmtExecResult, nil
+		},
+		queryContextFn: func(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+			originCalls = append(originCalls, "stmt.query")
+			assert.Equal(t, stmtArgs, args)
+			return stmtRows, nil
+		},
+		closeFn: func() error {
+			originCalls = append(originCalls, "stmt.close")
+			return nil
+		},
+	}
+	baseConn := &testFullConn{
+		prepareContextFn: func(ctx context.Context, query string) (driver.Stmt, error) {
+			originCalls = append(originCalls, "conn.prepare")
+			assert.Equal(t, "SELECT name FROM users WHERE id=?", query)
+			return preparedStmt, nil
+		},
+		execContextFn: func(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+			originCalls = append(originCalls, "conn.exec")
+			assert.Equal(t, "UPDATE users SET active=?", query)
+			assert.Equal(t, connArgs, args)
+			return connExecResult, nil
+		},
+		queryContextFn: func(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+			originCalls = append(originCalls, "conn.query")
+			assert.Equal(t, "SELECT id FROM users WHERE active=?", query)
+			assert.Equal(t, connArgs, args)
+			return connRows, nil
+		},
+		pingFn: func(ctx context.Context) error {
+			originCalls = append(originCalls, "conn.ping")
+			return nil
+		},
+		beginTxFn: func(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+			originCalls = append(originCalls, "conn.begin")
+			assert.Equal(t, driver.IsolationLevel(2), opts.Isolation)
+			assert.True(t, opts.ReadOnly)
+			tx := &testTx{}
+			begunTxs = append(begunTxs, tx)
+			return tx, nil
+		},
+		checkNamedValueFn: func(nv *driver.NamedValue) error {
+			originCalls = append(originCalls, "conn.check-named-value")
+			assert.Equal(t, "before-check", nv.Value)
+			nv.Value = "after-check"
+			return nil
+		},
+		resetSessionFn: func(ctx context.Context) error {
+			originCalls = append(originCalls, "conn.reset-session")
+			return nil
+		},
+	}
+	fakeDriver := &testDriver{conn: baseConn}
+	hook := &recordingHook{
+		name:  "wrapped",
+		calls: &calls,
+		afterFn: func(ctx *HookContext) {
+			assert.NoError(t, ctx.OriginError())
+			switch ctx.OpType() {
+			case OpConnect:
+				assert.Same(t, baseConn, ctx.OriginResult())
+			case OpPrepare:
+				assert.Same(t, preparedStmt, ctx.OriginResult())
+			case OpStmtExec:
+				assert.Equal(t, stmtExecResult, ctx.OriginResult())
+			case OpStmtQuery:
+				assert.Same(t, stmtRows, ctx.OriginResult())
+			case OpExec:
+				assert.Equal(t, connExecResult, ctx.OriginResult())
+			case OpQuery:
+				assert.Same(t, connRows, ctx.OriginResult())
+			case OpBegin:
+				assert.IsType(t, &testTx{}, ctx.OriginResult())
+			case OpPing, OpStmtClose, OpCommit, OpRollback:
+				assert.Nil(t, ctx.OriginResult())
+			}
+		},
+	}
+	kitDriver := NewKitDriver(fakeDriver, hook)
+
+	gotConn, err := kitDriver.Open("wrapped-dsn")
+	require.NoError(t, err)
+	require.NotNil(t, gotConn)
+	assert.Equal(t, []string{"wrapped-dsn"}, fakeDriver.openNames)
+
+	conn, ok := gotConn.(*kitConn)
+	require.True(t, ok)
+	assert.Same(t, baseConn, conn.Conn)
+	assert.Same(t, hook, conn.hook)
+
+	gotStmt, err := conn.PrepareContext(context.Background(), "SELECT name FROM users WHERE id=?")
+	require.NoError(t, err)
+	stmt, ok := gotStmt.(*kitStmt)
+	require.True(t, ok)
+	assert.Same(t, preparedStmt, stmt.Stmt)
+	assert.Same(t, hook, stmt.hook)
+	assert.Equal(t, "SELECT name FROM users WHERE id=?", stmt.query)
+	stmtExec, ok := gotStmt.(driver.StmtExecContext)
+	require.True(t, ok)
+	gotStmtExecResult, err := stmtExec.ExecContext(context.Background(), stmtArgs)
+	require.NoError(t, err)
+	assert.Equal(t, stmtExecResult, gotStmtExecResult)
+	stmtQuery, ok := gotStmt.(driver.StmtQueryContext)
+	require.True(t, ok)
+	gotStmtRows, err := stmtQuery.QueryContext(context.Background(), stmtArgs)
+	require.NoError(t, err)
+	assert.Same(t, stmtRows, gotStmtRows)
+	require.NoError(t, stmt.Close())
+
+	gotExecResult, err := conn.ExecContext(context.Background(), "UPDATE users SET active=?", connArgs)
+	require.NoError(t, err)
+	assert.Equal(t, connExecResult, gotExecResult)
+	gotConnRows, err := conn.QueryContext(context.Background(), "SELECT id FROM users WHERE active=?", connArgs)
+	require.NoError(t, err)
+	assert.Same(t, connRows, gotConnRows)
+	require.NoError(t, conn.Ping(context.Background()))
+	gotCommitTx, err := conn.BeginTx(context.Background(), driver.TxOptions{Isolation: driver.IsolationLevel(2), ReadOnly: true})
+	require.NoError(t, err)
+	commitTx, ok := gotCommitTx.(*kitTx)
+	require.True(t, ok)
+	require.NoError(t, commitTx.Commit())
+	gotRollbackTx, err := conn.BeginTx(context.Background(), driver.TxOptions{Isolation: driver.IsolationLevel(2), ReadOnly: true})
+	require.NoError(t, err)
+	rollbackTx, ok := gotRollbackTx.(*kitTx)
+	require.True(t, ok)
+	require.NoError(t, rollbackTx.Rollback())
+	namedValue := &driver.NamedValue{Ordinal: 1, Value: "before-check"}
+	require.NoError(t, conn.CheckNamedValue(namedValue))
+	assert.Equal(t, "after-check", namedValue.Value)
+	require.NoError(t, conn.ResetSession(context.Background()))
+
+	assert.Equal(t, []string{
+		"conn.prepare",
+		"stmt.exec",
+		"stmt.query",
+		"stmt.close",
+		"conn.exec",
+		"conn.query",
+		"conn.ping",
+		"conn.begin",
+		"conn.begin",
+		"conn.check-named-value",
+		"conn.reset-session",
+	}, originCalls)
+	require.Len(t, begunTxs, 2)
+	assert.True(t, begunTxs[0].commitCalled)
+	assert.False(t, begunTxs[0].rollbackCalled)
+	assert.False(t, begunTxs[1].commitCalled)
+	assert.True(t, begunTxs[1].rollbackCalled)
+	assert.Equal(t, []string{
+		"before:wrapped:Connect",
+		"after:wrapped:Connect",
+		"before:wrapped:Prepare",
+		"after:wrapped:Prepare",
+		"before:wrapped:StmtExec",
+		"after:wrapped:StmtExec",
+		"before:wrapped:StmtQuery",
+		"after:wrapped:StmtQuery",
+		"before:wrapped:StmtClose",
+		"after:wrapped:StmtClose",
+		"before:wrapped:Exec",
+		"after:wrapped:Exec",
+		"before:wrapped:Query",
+		"after:wrapped:Query",
+		"before:wrapped:Ping",
+		"after:wrapped:Ping",
+		"before:wrapped:Begin",
+		"after:wrapped:Begin",
+		"before:wrapped:Commit",
+		"after:wrapped:Commit",
+		"before:wrapped:Begin",
+		"after:wrapped:Begin",
+		"before:wrapped:Rollback",
+		"after:wrapped:Rollback",
+	}, calls)
+}
+
+// TestKitDriver_FakeDriverErrorPropagation 验证 fake driver 包装链中的错误传播和不支持接口分支。
+//
+// 该测试通过表驱动用例从 NewKitDriver.Open 获取包装连接，覆盖连接执行、预处理语句执行、事务回滚的底层错误传播，以及底层连接缺少可选接口时的稳定降级错误。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestKitDriver_FakeDriverErrorPropagation(t *testing.T) {
+	originErr := errors.New("wrapped origin failed")
+	execResult := driver.RowsAffected(5)
+	stmtResult := driver.RowsAffected(6)
+
+	tests := []struct {
+		name             string
+		description      string
+		setup            func(t *testing.T) (driver.Conn, func(t *testing.T))
+		act              func(t *testing.T, conn *kitConn) (interface{}, error)
+		wantOp           OpType
+		wantResult       interface{}
+		wantErrIs        error
+		wantErrText      string
+		wantTargetAfter  bool
+		wantTargetBefore bool
+	}{
+		{
+			name:        "error/conn-exec-origin-error",
+			description: "验证经 fake driver 打开的包装连接会原样传播底层 ExecContext 错误和结果。",
+			setup: func(t *testing.T) (driver.Conn, func(t *testing.T)) {
+				originCalled := false
+				return &testFullConn{execContextFn: func(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+						originCalled = true
+						assert.Equal(t, "UPDATE users SET active=0", query)
+						return execResult, originErr
+					}}, func(t *testing.T) {
+						assert.True(t, originCalled)
+					}
+			},
+			act: func(t *testing.T, conn *kitConn) (interface{}, error) {
+				return conn.ExecContext(context.Background(), "UPDATE users SET active=0", nil)
+			},
+			wantOp:           OpExec,
+			wantResult:       execResult,
+			wantErrIs:        originErr,
+			wantTargetAfter:  true,
+			wantTargetBefore: true,
+		},
+		{
+			name:        "error/stmt-exec-origin-error",
+			description: "验证经包装连接创建的包装语句会原样传播底层 Stmt ExecContext 错误和结果。",
+			setup: func(t *testing.T) (driver.Conn, func(t *testing.T)) {
+				originCalled := false
+				stmt := &testFullStmt{execContextFn: func(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+					originCalled = true
+					assert.Equal(t, []driver.NamedValue{{Ordinal: 1, Value: "inactive"}}, args)
+					return stmtResult, originErr
+				}}
+				return &testFullConn{prepareContextFn: func(ctx context.Context, query string) (driver.Stmt, error) {
+						assert.Equal(t, "UPDATE users SET status=?", query)
+						return stmt, nil
+					}}, func(t *testing.T) {
+						assert.True(t, originCalled)
+					}
+			},
+			act: func(t *testing.T, conn *kitConn) (interface{}, error) {
+				gotStmt, err := conn.PrepareContext(context.Background(), "UPDATE users SET status=?")
+				require.NoError(t, err)
+				stmtExec, ok := gotStmt.(driver.StmtExecContext)
+				require.True(t, ok)
+				return stmtExec.ExecContext(context.Background(), []driver.NamedValue{{Ordinal: 1, Value: "inactive"}})
+			},
+			wantOp:           OpStmtExec,
+			wantResult:       stmtResult,
+			wantErrIs:        originErr,
+			wantTargetAfter:  true,
+			wantTargetBefore: true,
+		},
+		{
+			name:        "error/tx-rollback-origin-error",
+			description: "验证经包装连接开启的包装事务会原样传播底层 Rollback 错误。",
+			setup: func(t *testing.T) (driver.Conn, func(t *testing.T)) {
+				tx := &testTx{rollbackErr: originErr}
+				return &testFullConn{beginTxFn: func(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+						return tx, nil
+					}}, func(t *testing.T) {
+						assert.True(t, tx.rollbackCalled)
+					}
+			},
+			act: func(t *testing.T, conn *kitConn) (interface{}, error) {
+				gotTx, err := conn.BeginTx(context.Background(), driver.TxOptions{})
+				require.NoError(t, err)
+				return nil, gotTx.Rollback()
+			},
+			wantOp:           OpRollback,
+			wantErrIs:        originErr,
+			wantTargetAfter:  true,
+			wantTargetBefore: true,
+		},
+		{
+			name:        "error/unsupported-exec-context",
+			description: "验证经 fake driver 打开的底层基础连接缺少 ExecerContext 时返回稳定的不支持错误且不触发执行 Hook。",
+			setup: func(t *testing.T) (driver.Conn, func(t *testing.T)) {
+				return &testBasicConn{}, func(t *testing.T) {}
+			},
+			act: func(t *testing.T, conn *kitConn) (interface{}, error) {
+				return conn.ExecContext(context.Background(), "UPDATE users SET active=0", nil)
+			},
+			wantOp:      OpExec,
+			wantErrText: "driver does not support exec context",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			var targetBeforeObserved bool
+			var targetAfterObserved bool
+			baseConn, assertOrigin := tt.setup(t)
+			calls := make([]string, 0)
+			hook := &recordingHook{
+				name:  "error-wrapper",
+				calls: &calls,
+				beforeFn: func(ctx *HookContext) {
+					if ctx.OpType() == tt.wantOp {
+						targetBeforeObserved = true
+					}
+				},
+				afterFn: func(ctx *HookContext) {
+					if ctx.OpType() != tt.wantOp {
+						return
+					}
+					targetAfterObserved = true
+					assert.ErrorIs(t, ctx.OriginError(), originErr)
+					assert.Equal(t, tt.wantResult, ctx.OriginResult())
+				},
+			}
+			kitDriver := NewKitDriver(&testDriver{conn: baseConn}, hook)
+			gotConn, err := kitDriver.Open("error-dsn")
+			require.NoError(t, err)
+			conn, ok := gotConn.(*kitConn)
+			require.True(t, ok)
+
+			got, err := tt.act(t, conn)
+
+			require.Error(t, err)
+			if tt.wantErrIs != nil {
+				assert.ErrorIs(t, err, tt.wantErrIs)
+			}
+			if tt.wantErrText != "" {
+				assert.EqualError(t, err, tt.wantErrText)
+				assert.Nil(t, got)
+			} else {
+				assert.Equal(t, tt.wantResult, got)
+			}
+			assert.Equal(t, tt.wantTargetBefore, targetBeforeObserved)
+			assert.Equal(t, tt.wantTargetAfter, targetAfterObserved)
+			assert.Contains(t, calls, "before:error-wrapper:Connect")
+			assert.Contains(t, calls, "after:error-wrapper:Connect")
+			if tt.wantTargetBefore {
+				assert.Contains(t, calls, "before:error-wrapper:"+tt.wantOp.String())
+			}
+			if tt.wantTargetAfter {
+				assert.Contains(t, calls, "after:error-wrapper:"+tt.wantOp.String())
+			}
+			assertOrigin(t)
+		})
+	}
+}
+
 // TestKitConn_ContextOperations 验证 kitConn 对上下文数据库操作的 Hook 包装行为。
 //
 // 该测试覆盖 PrepareContext、ExecContext、QueryContext、Ping 和 BeginTx 的成功路径，确保原始结果被返回且 HookContext 包含操作类型、SQL 和参数。
