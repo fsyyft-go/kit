@@ -508,14 +508,17 @@ LoopHeartbeat:
 	}
 }
 
-// WrapConn 将 net.Conn 包装成自定义消息包传输时使用的网络连接。
+// WrapConn 将底层 net.Conn 包装为按本包协议收发消息的连接。
+//
+// 返回的连接需要由调用方显式调用 [Conn.Start] 启动读写循环；heartbeatInterval 大于 0 时，
+// Start 会额外启动定时心跳发送 goroutine。
 //
 // 参数：
-//   - c: 底层网络连接。
-//   - heartbeatInterval: 心跳包发送间隔。
+//   - c: 待包装的底层网络连接。
+//   - heartbeatInterval: 心跳发送间隔；小于等于 0 时不会启动心跳 goroutine。
 //
-// 返回值：
-//   - *conn: 自定义连接实例。
+// 返回：
+//   - *conn: 包装后的协议连接实例。
 func WrapConn(c net.Conn, heartbeatInterval time.Duration) *conn {
 	newConn := &conn{
 		conn:              c,

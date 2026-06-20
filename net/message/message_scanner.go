@@ -18,16 +18,16 @@ const (
 	maxMessagePacketLength = messageHeaderLength + 1<<16 - 1
 )
 
-// scanMessage 用于 bufio.Scanner 按照自定义协议分割消息包。
+// scanMessage 供 [bufio.Scanner] 按自定义协议分割完整消息包。
 //
 // 参数：
-//   - data: 输入数据缓冲区。
-//   - atEOF: 是否到达输入结尾。
+//   - data: 当前缓冲区中的原始字节数据。
+//   - atEOF: 是否已经到达输入流末尾。
 //
-// 返回值：
-//   - int: 已消费字节数。
-//   - []byte: 完整消息包。
-//   - error: 错误信息。
+// 返回：
+//   - int: 已消费的字节数。
+//   - []byte: 当前解析出的完整消息包；数据不足时返回 nil。
+//   - error: 读取长度字段失败时返回错误。
 func scanMessage(data []byte, atEOF bool) (int, []byte, error) {
 	// advance：已消费的字节数。
 	var advance int
@@ -63,13 +63,15 @@ func scanMessage(data []byte, atEOF bool) (int, []byte, error) {
 	return advance, token, err
 }
 
-// NewScanner 创建自定义消息包分割的 bufio.Scanner。
+// NewScanner 创建按本包协议拆分消息包的 [bufio.Scanner]。
+//
+// 返回的 Scanner 使用 [scanMessage] 作为 SplitFunc，并将 token 缓冲区上限设置为协议允许的最大完整包长度。
 //
 // 参数：
-//   - r: 输入流。
+//   - r: 提供协议字节流的输入源。
 //
-// 返回值：
-//   - *bufio.Scanner: 自定义分割的 Scanner。
+// 返回：
+//   - *bufio.Scanner: 按本包协议拆分消息包的 Scanner。
 func NewScanner(r io.Reader) *bufio.Scanner {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, messageHeaderLength), maxMessagePacketLength)

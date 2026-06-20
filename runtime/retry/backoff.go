@@ -12,9 +12,11 @@ import (
 )
 
 type (
-	// Backoff 结构体用于实现带有指数退避和可选抖动机制的重试等待时间生成器。
-	// 支持设置最小、最大等待时间、增长因子等参数。
-	// 注意：Backoff 结构体本身不是并发安全的，但 ForAttempt 方法是并发安全的。
+	// Backoff 根据尝试次数计算退避等待时间。
+	//
+	// 零值 Backoff 在计算时会回退到默认最小值、最大值和增长因子。
+	// Backoff 持有内部 attempt 计数器；[Backoff.Duration] 会推进该计数器，
+	// 而 [Backoff.ForAttempt] 只按显式给定的尝试次数计算等待时间。
 	Backoff struct {
 		// attempt 用于记录当前的重试次数。
 		attempt uint64
@@ -42,11 +44,14 @@ const (
 	maxInt64 = float64(math.MaxInt64 - 512)
 )
 
-// Copy 返回一个与当前 Backoff 实例参数相同的新实例。
-// 新实例不会复制尝试次数，只复制参数配置。
+// Copy 返回一个参数配置与当前实例一致的新 [Backoff]。
 //
-// 返回值：
-//   - *Backoff：新建的 Backoff 实例，参数与当前实例一致。
+// 新实例不会复制当前的 attempt 计数，返回后的第一次 [Backoff.Duration] 调用会从第 0 次尝试重新开始。
+//
+// 参数：无。
+//
+// 返回：
+//   - *Backoff: 与当前实例配置一致、但 attempt 计数重置为 0 的新实例。
 func (b *Backoff) Copy() *Backoff {
 	return &Backoff{
 		factor: b.factor,
@@ -56,32 +61,40 @@ func (b *Backoff) Copy() *Backoff {
 	}
 }
 
-// Reset 将当前尝试次数重置为零。
+// Reset 将内部 attempt 计数重置为 0。
 //
-// 无参数，无返回值。
+// 调用后，下一次 [Backoff.Duration] 会重新按第 0 次尝试计算等待时间。
+//
+// 参数：无。
 func (b *Backoff) Reset() {
 	atomic.StoreUint64(&b.attempt, 0)
 }
 
-// Duration 返回当前尝试次数对应的等待时间，并将尝试次数加一。
-// 本方法不是并发安全的，若需并发安全请使用 ForAttempt 方法。
+// Duration 返回当前 attempt 对应的等待时间，并将 attempt 加 1。
 //
-// 返回值：
-//   - time.Duration：当前尝试次数对应的等待时间。
+// 多个 goroutine 并发调用 Duration 时会共享同一 attempt 序列，返回顺序取决于竞争结果；
+// 需要按指定尝试次数独立计算等待时间时，请使用 [Backoff.ForAttempt]。
+//
+// 参数：无。
+//
+// 返回：
+//   - time.Duration: 当前 attempt 对应的退避等待时间。
 func (b *Backoff) Duration() time.Duration {
 	// 先自增 attempt 计数器，再计算对应的等待时间。
 	d := b.ForAttempt(float64(atomic.AddUint64(&b.attempt, 1) - 1))
 	return d
 }
 
-// ForAttempt 根据指定的尝试次数计算对应的等待时间。
-// 该方法是并发安全的，适用于多个独立 Backoff 实例共享参数的场景。
+// ForAttempt 根据指定的尝试次数计算等待时间。
+//
+// 当 min、max 或 factor 为非正值时，本方法会回退到默认配置；当 min 大于等于 max 时，
+// 直接返回 max。启用 jitter 后，结果会在最小值和理论退避值之间随机取值，再按 max 截断。
 //
 // 参数：
-//   - attempt float64：尝试次数，从 0 开始，表示第 0 次尝试。
+//   - attempt: 目标尝试次数，从 0 开始；第 0 次尝试的理论等待时间为 min。
 //
-// 返回值：
-//   - time.Duration：指定尝试次数对应的等待时间。
+// 返回：
+//   - time.Duration: 指定尝试次数对应的退避等待时间。
 func (b *Backoff) ForAttempt(attempt float64) time.Duration {
 	// 若参数为零值，则使用默认值。
 	min := b.min
@@ -122,21 +135,28 @@ func (b *Backoff) ForAttempt(attempt float64) time.Duration {
 	return dur
 }
 
-// Attempt 返回当前的尝试次数。
-// 返回值为 float64 类型，便于与 ForAttempt 方法配合使用。
+// Attempt 返回当前内部 attempt 计数。
 //
-// 返回值：
-//   - float64：当前的尝试次数。
+// 返回值使用 float64，以便直接作为 [Backoff.ForAttempt] 的参数复用。
+//
+// 参数：无。
+//
+// 返回：
+//   - float64: 当前内部 attempt 计数。
 func (b *Backoff) Attempt() float64 {
 	return float64(atomic.LoadUint64(&b.attempt))
 }
 
-// NewBackoff 创建一个新的 Backoff 实例，并应用所有给定的选项。
-// 参数：
-//   - opts ...BackoffOption：可选参数，用于配置 Backoff。
+// NewBackoff 创建一个新的 [Backoff] 实例。
 //
-// 返回值：
-//   - *Backoff：新建的 Backoff 实例。
+// 默认配置为：min 100ms、max 10s、factor 2、jitter false。多个选项按传入顺序依次应用，
+// 同一字段以后传入的值为准。
+//
+// 参数：
+//   - opts: 可选的 Backoff 配置项。
+//
+// 返回：
+//   - *Backoff: 应用全部选项后的退避配置实例。
 func NewBackoff(opts ...BackoffOption) *Backoff {
 	b := &Backoff{
 		factor: factorDefault,

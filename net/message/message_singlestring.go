@@ -17,16 +17,18 @@ var (
 )
 
 type (
-	// SingleStringMessage 简单的字符串消息包接口。
+	// SingleStringMessage 表示仅携带一个字符串 payload 的消息。
 	SingleStringMessage interface {
-		// Message 返回字符串消息内容。
+		// Message 返回消息中的字符串内容。
 		//
-		// 返回值：
-		//   - string: 字符串消息内容。
+		// 参数：无。
+		//
+		// 返回：
+		//   - string: 当前消息中的字符串内容。
 		Message() string
 	}
 
-	// singleStringMessage 简单的字符串消息包，实现接口 Message 和 SingleStringMessage。
+	// singleStringMessage 是 [SingleStringMessage] 的默认实现。
 	singleStringMessage struct {
 		messageType MessageType // 消息类型。
 		message     string      // 字符串消息内容。
@@ -35,19 +37,23 @@ type (
 
 // MessageType 返回消息类型。
 //
-// 返回值：
-//   - uint16: 消息类型。
+// 参数：无。
+//
+// 返回：
+//   - MessageType: 当前消息的协议类型。
 func (m *singleStringMessage) MessageType() MessageType {
 	return m.messageType
 }
 
-// Pack 将字符串消息内容转换为 payload 字节数组。
+// Pack 将字符串内容编码为 payload。
 //
-// payload 长度不能超过 uint16 最大值。
+// 编码后的 payload 长度不能超过 uint16 最大值，因为协议头只用 2 字节记录长度。
 //
-// 返回值：
-//   - []byte: 字符串消息的字节数组。
-//   - error: 错误信息。
+// 参数：无。
+//
+// 返回：
+//   - []byte: 当前消息编码后的字符串 payload。
+//   - error: payload 超过协议长度上限或发生 panic 恢复时返回错误。
 func (m *singleStringMessage) Pack() (msg []byte, err error) {
 	defer func() {
 		if r := recover(); nil != r {
@@ -66,13 +72,13 @@ func (m *singleStringMessage) Pack() (msg []byte, err error) {
 	return msg, err
 }
 
-// Unpack 从 payload 字节数组还原字符串消息内容。
+// Unpack 从 payload 还原字符串内容。
 //
 // 参数：
-//   - payload: 字符串消息的字节数组。
+//   - payload: 待解码的字符串消息 payload。
 //
-// 返回值：
-//   - error: 错误信息。
+// 返回：
+//   - error: 当前实现仅在发生 panic 恢复时返回错误。
 func (m *singleStringMessage) Unpack(payload []byte) (err error) {
 	defer func() {
 		if r := recover(); nil != r {
@@ -85,21 +91,23 @@ func (m *singleStringMessage) Unpack(payload []byte) (err error) {
 	return err
 }
 
-// Message 返回字符串消息内容。
+// Message 返回消息中的字符串内容。
 //
-// 返回值：
-//   - string: 字符串消息内容。
+// 参数：无。
+//
+// 返回：
+//   - string: 当前消息中的字符串内容。
 func (m *singleStringMessage) Message() string {
 	return m.message
 }
 
-// NewSingleStringMessage 创建一个简单的字符串消息包。
+// NewSingleStringMessage 创建单字符串消息。
 //
 // 参数：
-//   - message: 字符串消息内容。
+//   - message: 要写入消息 payload 的字符串内容。
 //
-// 返回值：
-//   - *singleStringMessage: 新建的字符串消息包。
+// 返回：
+//   - *singleStringMessage: 新创建的单字符串消息实例。
 func NewSingleStringMessage(message string) *singleStringMessage {
 	m := &singleStringMessage{
 		messageType: SingleStringMessageType,
@@ -109,17 +117,17 @@ func NewSingleStringMessage(message string) *singleStringMessage {
 	return m
 }
 
-// GenerateSingleStringMessage 生成简单的字符串消息包结构体。
+// GenerateSingleStringMessage 根据消息类型和 payload 生成单字符串消息。
 //
-// nil payload 会被拒绝；非 nil 的空 payload 表示合法空字符串。
+// messageType 必须等于 [SingleStringMessageType]；nil payload 会被拒绝，非 nil 的空 payload 表示合法空字符串。
 //
 // 参数：
-//   - messageType: 消息类型。
-//   - payload: 字符串消息的字节数组。
+//   - messageType: 目标消息类型。
+//   - payload: 待解码的字符串消息 payload。
 //
-// 返回值：
-//   - Message: 生成的字符串消息包。
-//   - error: 错误信息。
+// 返回：
+//   - Message: 生成的单字符串消息实例。
+//   - error: messageType 不匹配、payload 为 nil 或解码失败时返回错误。
 func GenerateSingleStringMessage(messageType MessageType, payload []byte) (Message, error) {
 	var m *singleStringMessage
 	var err error

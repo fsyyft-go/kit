@@ -9,27 +9,33 @@ import (
 )
 
 const (
-	// EnvTestNetwork 是环境变量 TEST_NETWORKS 的常量名。
-	// 用于控制是否执行网络相关的单元测试。
+	// EnvTestNetwork 是控制网络相关测试是否启用的环境变量名。
+	//
+	// 当 TEST_NETWORKS 为任意非空字符串时，[TestNetwork] 返回 true。
 	EnvTestNetwork = "TEST_NETWORKS"
 )
 
-// TestNetwork 判断是否需要进行网络相关的单元测试。
-// 通过调用 TestNetworkValue 获取测试网络相关的环境变量值，
-// 若环境变量值非空，则返回 true，表示需要进行网络相关的单元测试。
-// 返回值：
-//   - bool 类型，true 表示需要进行网络相关的单元测试，false 表示不需要。
+// TestNetwork 判断是否启用依赖外部网络的测试。
+//
+// 当 [TestNetworkValue] 返回非空字符串时，TestNetwork 返回 true。
+//
+// 参数：无。
+//
+// 返回：
+//   - bool: true 表示启用网络相关测试；false 表示跳过这类测试。
 func TestNetwork() bool {
-	// needTest 变量用于存储是否需要进行网络相关单元测试的判断结果。
 	needTest := len(TestNetworkValue()) > 0
 	return needTest
 }
 
-// TestNetworkValue 获取测试网络相关的环境变量值。
-// 该函数通过 os.Getenv 获取名为 EnvTestNetwork 的环境变量值，
-// 若未设置该环境变量，则返回空字符串。
-// 返回值：
-//   - string 类型，表示 TEST_NETWORKS 环境变量的值。
+// TestNetworkValue 返回 TEST_NETWORKS 环境变量的原始值。
+//
+// 未设置该环境变量时返回空字符串。
+//
+// 参数：无。
+//
+// 返回：
+//   - string: TEST_NETWORKS 的原始环境变量值。
 func TestNetworkValue() string {
 	return os.Getenv(EnvTestNetwork)
 }
