@@ -42,18 +42,16 @@ var (
 )
 
 type (
-	// MySQLOptions 定义了 MySQL 数据库连接的配置选项。
-	// 该结构体提供了以下功能：
-	// - 配置数据库连接的基本参数。
-	// - 管理连接池的行为。
-	// - 控制日志记录和监控。
-	// - 支持钩子机制。
+	// MySQLOptions 保存 NewMySQL 的构造参数。
+	//
+	// MySQLOptions 通常通过 MySQLOption 函数组合填充，而不是由调用方直接操作
+	// 内部字段。NewMySQL 会先建立一份默认配置，再按传入顺序应用这些选项。
 	MySQLOptions struct {
 		// dns 定义数据库的连接字符串。
 		dns string
-		// poolIdleTime 定义连接在连接池中的空闲超时时间。
+		// poolIdleTime 定义连接的最大生命周期。
 		poolIdleTime time.Duration
-		// poolMaxIdleTime 定义连接在连接池中的最大空闲时间。
+		// poolMaxIdleTime 定义连接的最大空闲时长。
 		poolMaxIdleTime time.Duration
 		// poolMaxOpenConns 定义连接池中允许的最大打开连接数。
 		poolMaxOpenConns int
@@ -71,39 +69,40 @@ type (
 		slowThreshold time.Duration
 	}
 
-	// MySQLOption 定义了用于配置 MySQL 选项的函数类型。
+	// MySQLOption 定义按引用修改 MySQLOptions 的函数式选项。
+	//
+	// 多个选项按传入顺序应用，后面的设置会覆盖前面的同类配置。
 	MySQLOption func(*MySQLOptions)
 )
 
-// WithDSN 设置 MySQL 数据源名称（DSN）。
-// 该函数提供了以下功能：
-// - 配置数据库连接的基本信息。
-// - 支持完整的 DSN 格式。
-// - 支持自定义连接参数。
+// WithDSN 设置传递给 NewMySQL 的原始 DSN。
+//
+// DSN 会在 NewMySQL 中通过 go-sql-driver/mysql 的 ParseDSN 校验；
+// 本选项本身不执行格式检查。
 //
 // 参数：
-//   - dsn：数据库连接字符串，格式为 "user:password@tcp(host:port)/dbname?param1=value1&param2=value2"。
+//   - dsn：数据库连接字符串，例如 "user:password@tcp(host:port)/dbname?param=value"。
 //
 // 返回值：
-//   - MySQLOption：返回配置函数。
+//   - MySQLOption：设置 DSN 的配置函数。
 func WithDSN(dsn string) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.dns = dsn
 	}
 }
 
-// WithDSNParams 使用基础 DSN 和额外参数设置 MySQL 数据源名称。
-// 该函数提供了以下功能：
-// - 支持基础 DSN 和额外参数的组合。
-// - 自动处理参数分隔符。
-// - 支持参数值的 URL 编码。
+// WithDSNParams 基于基础 DSN 追加一组查询参数。
+//
+// baseDSN 为空时使用包内默认 DSN。params 中的值会按 URL 查询串规则编码；
+// 当基础 DSN 已包含查询参数时继续使用 "&" 追加，否则使用 "?"。params
+// 为空时保持基础 DSN 原样不变。
 //
 // 参数：
-//   - baseDSN: 基础数据源名称字符串，如果为空则使用默认 DSN。
-//   - params: DSN 参数映射，key 为参数名，value 为参数值。
+//   - baseDSN：基础 DSN；为空时使用包内默认 DSN。
+//   - params：要追加的 DSN 查询参数。
 //
 // 返回值：
-//   - MySQLOption：返回配置函数。
+//   - MySQLOption：设置 DSN 的配置函数。
 func WithDSNParams(baseDSN string, params map[string]string) MySQLOption {
 	return func(o *MySQLOptions) {
 		if baseDSN == "" {
@@ -128,78 +127,106 @@ func WithDSNParams(baseDSN string, params map[string]string) MySQLOption {
 	}
 }
 
-// WithPoolIdleTime 设置连接的空闲超时时间。
+// WithPoolIdleTime 设置 NewMySQL 创建的 *sql.DB 的连接最大生命周期。
+//
+// 该选项最终映射到 (*sql.DB).SetConnMaxLifetime。
 func WithPoolIdleTime(idleTime time.Duration) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.poolIdleTime = idleTime
 	}
 }
 
-// WithPoolMaxIdleTime 设置连接的最大空闲时间。
+// WithPoolMaxIdleTime 设置 NewMySQL 创建的 *sql.DB 的连接最大空闲时长。
+//
+// 该选项最终映射到 (*sql.DB).SetConnMaxIdleTime。
 func WithPoolMaxIdleTime(maxIdleTime time.Duration) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.poolMaxIdleTime = maxIdleTime
 	}
 }
 
-// WithPoolMaxOpenConns 设置最大打开连接数。
+// WithPoolMaxOpenConns 设置 NewMySQL 创建的 *sql.DB 的最大打开连接数。
 func WithPoolMaxOpenConns(maxOpenConns int) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.poolMaxOpenConns = maxOpenConns
 	}
 }
 
-// WithPoolMaxIdleConns 设置最大空闲连接数。
+// WithPoolMaxIdleConns 设置 NewMySQL 创建的 *sql.DB 的最大空闲连接数。
 func WithPoolMaxIdleConns(maxIdleConns int) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.poolMaxIdleConns = maxIdleConns
 	}
 }
 
-// WithNamespace 设置数据库连接的命名空间。
+// WithNamespace 设置当前配置对应的驱动注册命名空间。
+//
+// NewMySQL 会使用 "mysql-kit-<namespace>" 作为 driver 名称；同一 namespace
+// 的后续调用会复用已注册的 driver 与其初次注册时确定的 Hook 配置。
 func WithNamespace(namespace string) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.namespace = namespace
 	}
 }
 
-// WithLogger 设置日志记录器。
+// WithLogger 设置构造阶段和自动日志 Hook 使用的 logger。
+//
+// 该 logger 用于记录 DSN 校验失败、sql.Open 失败和 cleanup 关闭失败，
+// 也会在自动安装 HookLogError 或 HookLogSlow 时复用。
 func WithLogger(logger kitlog.Logger) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.logger = logger
 	}
 }
 
-// WithLogError 设置是否启用错误日志记录。
+// WithLogError 请求为自动创建的 HookManager 安装 HookLogError。
+//
+// 该选项只在 NewMySQL 首次为某个 namespace 注册 driver 且未显式提供
+// WithHookManager 时生效。
 func WithLogError(logError bool) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.logError = logError
 	}
 }
 
-// WithSlowThreshold 设置慢查询的时间阈值。
+// WithSlowThreshold 设置自动慢操作日志 Hook 的耗时阈值。
+//
+// 该选项只在 NewMySQL 首次为某个 namespace 注册 driver 且未显式提供
+// WithHookManager 时生效；当操作耗时大于等于该阈值时会记录 Warn 日志。
 func WithSlowThreshold(slowThreshold time.Duration) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.slowThreshold = slowThreshold
 	}
 }
 
-// WithHookManager 设置钩子管理器。
+// WithHookManager 指定一个自定义 HookManager 供驱动包装使用。
+//
+// 提供该选项后，NewMySQL 不会再为当前调用自动安装 HookLogError 或 HookLogSlow；
+// 调用方需要自行向该管理器注册所需 Hook。
 func WithHookManager(hook *kitdriver.HookManager) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.hook = hook
 	}
 }
 
-// NewMySQL 创建并返回一个新的 MySQL 数据库连接实例。
+// NewMySQL 基于 go-sql-driver/mysql 构造一个 *sql.DB 和清理函数。
+//
+// NewMySQL 会先应用默认配置与传入选项，使用 ParseDSN 校验 DSN，然后以
+// "mysql-kit-<namespace>" 为名称按需注册带 Hook 的包装 driver，最后调用
+// sql.Open 创建 *sql.DB 并设置连接池参数。该函数只调用 sql.Open，不会主动
+// Ping 数据库，调用方需要在需要时自行验证连通性。
+//
+// 同一 namespace 的 driver 只会注册一次，后续调用会复用既有 driver 和其
+// 初次注册时确定的 Hook 配置；新的 WithHookManager、WithLogError 和
+// WithSlowThreshold 不会重新装配已注册 driver。
 //
 // 参数：
-//   - opts: MySQL 配置选项的可变参数列表。
+//   - opts：按顺序应用的 MySQL 构造选项。
 //
 // 返回值：
-//   - *sql.DB: 数据库连接实例。
-//   - func(): 清理函数，用于关闭数据库连接。
-//   - error: 如果创建过程中发生错误，返回相应的错误信息。
+//   - *sql.DB：创建成功的数据库句柄。
+//   - func()：清理函数，内部调用 db.Close；调用方在不再使用时应负责调用 cleanup 或等价的 db.Close。
+//   - error：DSN 校验失败、自动创建 logger 失败、sql.Open 失败，或驱动注册前 Hook 配置失败时返回错误。
 func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 	// 加锁保护驱动注册过程。
 	driverLocker.Lock()

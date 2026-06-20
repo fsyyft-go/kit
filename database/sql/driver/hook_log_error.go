@@ -13,7 +13,11 @@ import (
 )
 
 type (
-	// HookLogError 用于记录数据库操作中的错误信息。
+	// HookLogError 是一个只记录失败操作的 Hook。
+	//
+	// HookLogError 会在 After 阶段检查 HookContext.OriginError；当底层操作返回
+	// 错误时，它会异步提交一条包含操作类型、耗时以及可选 namespace、SQL 和
+	// 参数摘要的错误日志。
 	HookLogError struct {
 		// namespace 是日志记录的命名空间。
 		namespace string
@@ -22,14 +26,14 @@ type (
 	}
 )
 
-// NewHookLogError 创建一个新的 HookLogError 实例。
+// NewHookLogError 创建一个错误日志 Hook。
 //
 // 参数：
-//   - namespace：日志记录的命名空间。
-//   - logger：用于记录错误信息的日志记录器。
+//   - namespace：写入日志字段的命名空间；为空时省略该字段。
+//   - logger：用于输出错误日志的记录器。
 //
 // 返回值：
-//   - *HookLogError：返回一个新创建的 HookLogError 实例。
+//   - *HookLogError：在数据库操作失败时异步写日志的 Hook。
 func NewHookLogError(namespace string, logger kitlog.Logger) *HookLogError {
 	return &HookLogError{
 		namespace: namespace,
@@ -37,24 +41,27 @@ func NewHookLogError(namespace string, logger kitlog.Logger) *HookLogError {
 	}
 }
 
-// Before 实现 Hook 接口的 Before 方法。
+// Before 在执行数据库操作前不做任何处理。
 //
 // 参数：
-//   - ctx：钩子上下文，包含操作的相关信息。
+//   - ctx：当前操作的 HookContext。
 //
 // 返回值：
-//   - error：始终返回 nil，因为这个钩子不会中断操作。
+//   - error：始终返回 nil，不会阻止底层操作执行。
 func (h *HookLogError) Before(ctx *HookContext) error {
 	return nil
 }
 
-// After 实现 Hook 接口的 After 方法，用于记录操作中的错误信息。
+// After 在底层操作返回错误时异步记录错误日志。
+//
+// After 仅在 HookContext.OriginError 非 nil 时写日志。日志字段包含 operation、
+// duration，以及存在时的 namespace、query 和 args。
 //
 // 参数：
-//   - ctx：钩子上下文，包含操作的相关信息和结果。
+//   - ctx：当前操作的 HookContext。
 //
 // 返回值：
-//   - error：始终返回 nil，因为这个钩子不会中断操作。
+//   - error：始终返回 nil，不会覆盖原始操作结果。
 func (h *HookLogError) After(ctx *HookContext) error {
 	// 只有在出现错误时才记录日志。
 	if nil == ctx.OriginError() {

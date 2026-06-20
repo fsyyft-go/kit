@@ -23,7 +23,11 @@ var (
 	_ driver.SessionResetter    = (*kitConn)(nil)
 )
 
-// KitDriver 是一个数据库驱动包装器，用于添加钩子功能。
+// KitDriver 包装底层 driver.Driver，并在连接及其派生对象的操作前后执行 Hook。
+//
+// KitDriver 只负责把 Open 创建出的连接、语句和事务再包装为带 Hook 的实现，
+// 不改变底层驱动对 DSN、结果类型或错误值的基础语义。调用方应为 d 和 h 提供
+// 可用的非 nil 实现。
 type KitDriver struct {
 	// 原始数据库驱动实例。
 	driver driver.Driver
@@ -31,14 +35,14 @@ type KitDriver struct {
 	hook Hook
 }
 
-// NewKitDriver 创建一个新的 KitDriver 实例。
+// NewKitDriver 创建一个带 Hook 的 driver.Driver 包装器。
 //
 // 参数：
-//   - d：原始数据库驱动实例，用于执行实际的数据库操作。
-//   - h：钩子接口实例，用于在数据库操作前后执行自定义逻辑。
+//   - d：实际执行数据库协议的底层 driver。
+//   - h：在 Open 以及后续连接、语句和事务操作前后执行的 Hook；调用方应传入非 nil 实现。
 //
 // 返回值：
-//   - *KitDriver：返回一个新创建的 KitDriver 实例。
+//   - *KitDriver：对 d 的包装实例。
 func NewKitDriver(d driver.Driver, h Hook) *KitDriver {
 	return &KitDriver{
 		driver: d,
@@ -46,14 +50,18 @@ func NewKitDriver(d driver.Driver, h Hook) *KitDriver {
 	}
 }
 
-// Open 实现 driver.Driver 接口，用于创建数据库连接。
+// Open 打开一个新的底层数据库连接，并为该连接安装 Hook 包装。
+//
+// Open 会先以 OpConnect 调用 Hook.Before，再调用底层 driver 的 Open，随后
+// 将连接或错误写入 HookContext 并调用 Hook.After。由于 driver.Driver.Open
+// 不接收上下文，HookContext 使用 context.Background 作为原始上下文。
 //
 // 参数：
-//   - name：数据源名称（DSN），包含数据库连接所需的配置信息。
+//   - name：原样传递给底层 driver 的 DSN。
 //
 // 返回值：
-//   - driver.Conn：数据库连接接口。
-//   - error：如果连接过程中发生错误，返回相应的错误信息。
+//   - driver.Conn：成功时返回带 Hook 包装的连接。
+//   - error：底层驱动错误，或 Hook.Before 与 Hook.After 返回的错误。
 func (d *KitDriver) Open(name string) (driver.Conn, error) {
 	// 创建一个新的钩子上下文，用于连接操作。
 	ctx := NewHookContext(context.Background(), OpConnect, "", nil)
