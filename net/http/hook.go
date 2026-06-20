@@ -221,9 +221,9 @@ type (
 	}
 )
 
-// HookManager 管理多个 Hook 的执行。
+// HookManager 管理多个 Hook 的执行顺序。
 //
-// 该结构体用于统一管理和调度多个钩子的执行顺序。
+// Before 按注册顺序执行，After 按逆序执行，便于为一次请求构建成对包裹的 Hook 链。
 type HookManager struct {
 	// hooks 存储注册的所有钩子。
 	hooks []Hook

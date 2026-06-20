@@ -6,13 +6,12 @@
 
 package goroutine
 
-// GetGoID 获取当前协程的 ID。
-// 此函数在非 arm64 和非 amd64 架构下使用较慢的方法获取协程 ID。
+// GetGoID 返回当前 goroutine 的 ID。
 //
-// 已废弃：请考虑使用特定平台的实现或其他替代方法。
+// 在未提供架构专用快速路径的平台上，本实现退回到基于 runtime.Stack 的慢速解析路径。
 //
 // 返回值：
-//   - int64：返回当前协程的 ID。
+//   - int64：当前 goroutine 的 ID。
 func GetGoID() int64 {
 	return getGoIDSlow()
 }

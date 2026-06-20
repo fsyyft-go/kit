@@ -14,10 +14,12 @@ var (
 	defaultDESKey = "go-kit-k"
 )
 
-// GetDefaultDESKey 返回默认的 DES 密钥。
+// GetDefaultDESKey 返回包内置的默认 DES 密钥。
+//
+// 该密钥仅供历史兼容包装函数复用，不应被视为新的安全默认配置。
 //
 // 返回：
-//   - string：默认的 DES 密钥。
+//   - string：供历史兼容包装函数复用的默认 DES 密钥。
 func GetDefaultDESKey() string {
 	return defaultDESKey
 }

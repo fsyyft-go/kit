@@ -26,13 +26,18 @@ var (
 )
 
 type (
-	// Conn 自定义消息包传输时使用的网络连接接口。
-	// 多个 goroutine 可以同时调用 Conn 上的方法。
+	// Conn 定义自定义消息包传输连接的契约。
+	//
+	// 只有 Close、Closed 和 SendMessage 设计为可并发使用；Start 只应调用一次。
+	// Message 返回单个共享接收 channel，多个消费者会竞争消费其中的消息；
+	// 其余方法遵循底层 net.Conn 的并发语义。
 	Conn interface {
 		// Close 关闭连接。
 		//
+		// Close 可与 Closed 和 SendMessage 并发调用；重复关闭只会在首次关闭时关闭底层连接。
+		//
 		// 返回值：
-		//   - error: 错误信息。
+		//   - error：关闭底层连接时返回的错误。
 		Close() error
 		// LocalAddr 返回本地网络地址。
 		//
@@ -71,26 +76,34 @@ type (
 
 		// Closed 返回连接是否已经关闭。
 		//
+		// Closed 可与 Close 和 SendMessage 并发调用。
+		//
 		// 返回值：
-		//   - bool: 连接是否关闭。
+		//   - bool：连接是否已经关闭。
 		Closed() bool
-		// Start 启动消息读写 goroutine。
+		// Start 启动内部消息读写 goroutine。
+		//
+		// Start 只应调用一次；重复调用会额外启动读写循环并竞争同一底层连接。
 		//
 		// 参数：
-		//   - ctx: 上下文，用于控制 goroutine 生命周期。
+		//   - ctx：上下文，用于控制 goroutine 生命周期。
 		Start(context.Context)
 		// SendMessage 发送消息。
 		//
+		// SendMessage 可与 Close 和 Closed 并发调用；连接已关闭时返回错误。
+		//
 		// 参数：
-		//   - message: 待发送的消息。
+		//   - message：待发送的消息。
 		//
 		// 返回值：
-		//   - error: 错误信息。
+		//   - error：连接已关闭或发送失败时返回错误。
 		SendMessage(Message) error
-		// Message 返回只读消息通道。
+		// Message 返回连接的共享接收 channel。
+		//
+		// 该 channel 只创建一次；多个消费者同时读取时会竞争消费其中的消息。
 		//
 		// 返回值：
-		//   - <-chan Message: 只读消息通道。
+		//   - <-chan Message：只读消息通道。
 		Message() <-chan Message
 	}
 	// conn 自定义消息包传输时使用的网络连接，实现接口 net.Conn 和 Conn。
@@ -111,18 +124,20 @@ type (
 
 // Closed 返回连接是否已经关闭。
 //
+// Closed 可与 Close 和 SendMessage 并发调用。
+//
 // 返回值：
-//   - bool: 连接是否关闭。
+//   - bool：连接是否已经关闭。
 func (c *conn) Closed() bool {
 	return c.closed.Load()
 }
 
-// Start 启动消息读写 goroutine。
+// Start 启动内部消息读写 goroutine。
 //
-// 配置了正数心跳间隔时，会额外启动定时心跳发送 goroutine。
+// Start 只应调用一次。配置了正数心跳间隔时，会额外启动定时心跳发送 goroutine。
 //
 // 参数：
-//   - ctx: 上下文，用于控制 goroutine 生命周期。
+//   - ctx：上下文，用于控制 goroutine 生命周期。
 func (c *conn) Start(ctx context.Context) {
 	_ = kitgoroutine.Submit(func() { c.send(ctx) })    // 启动发送消息的 goroutine。
 	_ = kitgoroutine.Submit(func() { c.receive(ctx) }) // 启动接收消息的 goroutine。
@@ -135,11 +150,13 @@ func (c *conn) Start(ctx context.Context) {
 
 // SendMessage 发送消息。
 //
+// SendMessage 可与 Close 和 Closed 并发调用；连接已关闭时返回错误。
+//
 // 参数：
-//   - message: 待发送的消息。
+//   - message：待发送的消息。
 //
 // 返回值：
-//   - error: 错误信息。
+//   - error：连接已关闭或发送失败时返回错误。
 func (c *conn) SendMessage(message Message) error {
 	var err error
 
@@ -157,10 +174,12 @@ func (c *conn) SendMessage(message Message) error {
 	return err
 }
 
-// Message 返回只读消息通道。
+// Message 返回连接的共享接收 channel。
+//
+// 该 channel 只创建一次；多个消费者同时读取时会竞争消费其中的消息。
 //
 // 返回值：
-//   - <-chan Message: 只读消息通道。
+//   - <-chan Message：只读消息通道。
 func (c *conn) Message() <-chan Message {
 	return c.messageRead
 }
@@ -191,8 +210,10 @@ func (c *conn) Write(b []byte) (n int, err error) {
 
 // Close 关闭连接。
 //
+// Close 可与 Closed 和 SendMessage 并发调用；重复关闭只会在首次关闭时关闭底层连接。
+//
 // 返回值：
-//   - error: 错误信息。
+//   - error：关闭底层连接时返回的错误。
 func (c *conn) Close() error {
 	var err error
 

@@ -19,39 +19,17 @@ var (
 	once sync.Once
 )
 
-// InitCache 初始化全局缓存实例。
-// 这个函数使用 sync.Once 确保全局缓存只被初始化一次。
-// 如果已经初始化过，该函数将不会执行任何操作。
+// InitCache 初始化包级默认缓存实例。
+//
+// InitCache 通过 sync.Once 只尝试初始化一次默认缓存。首次初始化失败时，只有当前调用会返回该错误；
+// 后续调用不会重试，且当前实现也不会再次返回首次错误。无论首次是否成功，后续调用都不会替换默认实例，
+// 也不会重新应用新的 Option。
 //
 // 参数：
-//   - options：可选的配置选项，如果不提供则使用默认配置。
+//   - options：用于首次初始化默认缓存的可选配置项；后续调用即使传入新选项也不会重新应用。
 //
 // 返回值：
-//   - error：如果初始化失败则返回错误。
-//
-// 示例：
-//
-//	// 使用默认配置
-//	if err := cache.InitCache(); err != nil {
-//	    panic(err)
-//	}
-//	defer cache.Close()
-//
-//	// 使用自定义配置
-//	if err := cache.InitCache(
-//	    cache.WithNumCounters(1e7),
-//	    cache.WithMaxCost(1<<30),
-//	    cache.WithBufferItems(64),
-//	); err != nil {
-//	    panic(err)
-//	}
-//	defer cache.Close()
-//
-//	// 使用 CacheOptions 配置（迁移方式）
-//	if err := cache.InitCache(cache.WithOptions(cache.DefaultConfig())...); err != nil {
-//	    panic(err)
-//	}
-//	defer cache.Close()
+//   - error：仅在首次初始化调用中返回 NewCache 失败产生的错误。
 func InitCache(options ...Option) error {
 	var err error
 	once.Do(func() {

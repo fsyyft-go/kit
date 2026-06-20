@@ -1,9 +1,10 @@
 // Copyright 2025 fsyyft-go
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
-//
-// 本测试文件验证 Snowflake 节点生成、编码转换、解析错误和全局配置边界行为。
+
 package snowflake
+
+// 本测试文件覆盖 Snowflake 节点生成、编码转换、解析错误和全局配置边界行为。
 
 import (
 	"encoding/base64"

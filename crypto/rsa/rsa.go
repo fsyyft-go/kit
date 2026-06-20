@@ -40,7 +40,7 @@ func EncryptPubKey(publicKey, dataClear []byte) ([]byte, error) {
 	var dataCipher []byte
 	var err error
 
-	// 使用 defer 和 recover 捕获可能发生的 panic，并转换为错误返回。
+	// 使用 defer 和 recover 尝试拦截底层 panic，避免 panic 继续向外传播。
 	defer func() {
 		if r := recover(); nil != r {
 			err = fmt.Errorf("公钥加密发生错误：%v", r)
@@ -74,7 +74,7 @@ func EncryptPubKey(publicKey, dataClear []byte) ([]byte, error) {
 // EncryptPublicKeyOAEP。默认 OAEP 函数使用 SHA-256 和 nil label；如需指定 OAEP
 // hash 或 label，请使用 EncryptPublicKeyOAEPWithHash。该旧函数仅用于兼容历史密文格式或既有协议。
 func EncryptPublicKey(pubKey *rsa.PublicKey, dataClear []byte) (dataCipher []byte, err error) {
-	// 使用 defer 和 recover 捕获可能发生的 panic，并转换为错误返回。
+	// 使用 defer 和 recover 尝试拦截底层 panic，避免 panic 继续向外传播。
 	defer func() {
 		if r := recover(); nil != r {
 			err = fmt.Errorf("公钥加密发生错误：%v", r)
@@ -164,7 +164,7 @@ func EncryptPublicKeyOAEPWithHash(pubKey *rsa.PublicKey, dataClear []byte, hash 
 		return nil, ErrNilHash
 	}
 
-	// 使用 defer 和 recover 捕获可能发生的 panic，并转换为错误返回。
+	// 使用 defer 和 recover 尝试拦截底层 panic，避免 panic 继续向外传播。
 	defer func() {
 		if r := recover(); nil != r {
 			err = fmt.Errorf("OAEP 公钥加密发生错误：%v", r)
@@ -177,21 +177,24 @@ func EncryptPublicKeyOAEPWithHash(pubKey *rsa.PublicKey, dataClear []byte, hash 
 	return dataCipher, err
 }
 
-// DecryptPubKey 使用公钥对数据进行解密（通常用于验证签名场景）。
+// DecryptPubKey 使用 PEM 公钥执行与 EncryptPrivKey 兼容的历史公钥恢复操作。
+//
+// 该函数不会先做哈希，也不执行标准意义上的签名验签。
+// 它仅适用于兼容历史“私钥加密、公钥解密”数据格式。
 //
 // 参数：
-//   - publicKey：字节切片形式的 RSA 公钥数据。
-//   - dataCipher：需要解密的密文数据，通常是由对应私钥加密的数据。
+//   - publicKey：PEM 编码的 RSA 公钥字节切片。
+//   - dataCipher：由历史私钥操作产生、待恢复的输入数据。
 //
 // 返回值：
-//   - []byte：解密后的明文数据。
-//   - error：解密过程中可能发生的错误，如公钥格式错误或解密失败。
+//   - []byte：恢复出的原始消息块。
+//   - error：公钥解析失败、公钥恢复失败或底层 panic 被拦截后返回的错误。
 func DecryptPubKey(publicKey, dataCipher []byte) ([]byte, error) {
 	// 声明明文变量和错误变量。
 	var dataClear []byte
 	var err error
 
-	// 使用 defer 和 recover 捕获可能发生的 panic，并转换为错误返回。
+	// 使用 defer 和 recover 尝试拦截底层 panic，避免 panic 继续向外传播。
 	defer func() {
 		if r := recover(); nil != r {
 			err = fmt.Errorf("公钥解密发生错误：%v", r)
@@ -211,17 +214,19 @@ func DecryptPubKey(publicKey, dataCipher []byte) ([]byte, error) {
 	return dataClear, err
 }
 
-// DecryptPublicKey 使用公钥对数据进行解密（通常用于验证签名场景）。
+// DecryptPublicKey 使用 RSA 公钥执行与 EncryptPrivateKey 兼容的历史公钥恢复操作。
+//
+// 该函数调用的是原始 PKCS#1 v1.5 公钥恢复流程，不会对输入做哈希，也不等同于标准验签 API。
 //
 // 参数：
-//   - publicKey：RSA 公钥结构指针。
-//   - dataCipher：需要解密的密文数据，通常是由对应私钥加密的数据。
+//   - publicKey：RSA 公钥对象。
+//   - dataCipher：由历史私钥操作产生、待恢复的输入数据。
 //
 // 返回值：
-//   - []byte：解密后的明文数据。
-//   - error：解密过程中可能发生的错误。
+//   - []byte：恢复出的原始消息块。
+//   - error：公钥恢复失败或底层 panic 被拦截后返回的错误。
 func DecryptPublicKey(publicKey *rsa.PublicKey, dataCipher []byte) (dataClear []byte, err error) {
-	// 使用 defer 和 recover 捕获可能发生的 panic，并转换为错误返回。
+	// 使用 defer 和 recover 尝试拦截底层 panic，避免 panic 继续向外传播。
 	defer func() {
 		if r := recover(); nil != r {
 			err = fmt.Errorf("公钥解密发生错误：%v", r)
@@ -236,21 +241,24 @@ func DecryptPublicKey(publicKey *rsa.PublicKey, dataCipher []byte) (dataClear []
 	return dataClear, err
 }
 
-// EncryptPrivKey 使用私钥对数据进行加密（通常用于数字签名场景）。
+// EncryptPrivKey 使用 PEM 私钥执行与 DecryptPubKey 兼容的历史私钥操作。
+//
+// 该函数不会先对 dataClear 做哈希，也不等同于标准签名 API。
+// 需要标准签名语义时，应直接使用 crypto/rsa 的签名函数。
 //
 // 参数：
-//   - privateKey：字节切片形式的 RSA 私钥数据。
-//   - dataClear：需要加密的明文数据。
+//   - privateKey：PEM 编码的 RSA 私钥字节切片。
+//   - dataClear：待处理的原始消息块。
 //
 // 返回值：
-//   - []byte：加密后的密文数据，实际上是一个签名。
-//   - error：加密过程中可能发生的错误，如私钥格式错误或加密失败。
+//   - []byte：与历史公钥恢复流程兼容的输出数据。
+//   - error：私钥解析失败、私钥操作失败或底层 panic 被拦截后返回的错误。
 func EncryptPrivKey(privateKey, dataClear []byte) ([]byte, error) {
 	// 声明密文变量和错误变量。
 	var dataCipher []byte
 	var err error
 
-	// 使用 defer 和 recover 捕获可能发生的 panic，并转换为错误返回。
+	// 使用 defer 和 recover 尝试拦截底层 panic，避免 panic 继续向外传播。
 	defer func() {
 		if r := recover(); nil != r {
 			err = fmt.Errorf("私钥加密发生错误：%v", r)
@@ -270,17 +278,20 @@ func EncryptPrivKey(privateKey, dataClear []byte) ([]byte, error) {
 	return dataCipher, err
 }
 
-// EncryptPrivateKey 使用私钥对数据进行加密（通常用于数字签名场景）。
+// EncryptPrivateKey 使用 RSA 私钥执行与 DecryptPublicKey 兼容的历史私钥操作。
+//
+// 它基于 PKCS#1 v1.5 原始私钥流程处理输入数据，不会先做哈希；
+// 如需标准签名语义，应使用 crypto/rsa 的签名函数。
 //
 // 参数：
-//   - privateKey：RSA 私钥结构指针。
-//   - dataClear：需要加密的明文数据。
+//   - privateKey：RSA 私钥对象。
+//   - dataClear：待处理的原始消息块。
 //
 // 返回值：
-//   - []byte：使用 PKCS#1 v1.5 签名算法加密后的密文数据，实际上是一个签名。
-//   - error：加密过程中可能发生的错误。
+//   - []byte：与历史公钥恢复流程兼容的输出数据。
+//   - error：私钥操作失败或底层 panic 被拦截后返回的错误。
 func EncryptPrivateKey(privateKey *rsa.PrivateKey, dataClear []byte) (dataCipher []byte, err error) {
-	// 使用 defer 和 recover 捕获可能发生的 panic，并转换为错误返回。
+	// 使用 defer 和 recover 尝试拦截底层 panic，避免 panic 继续向外传播。
 	defer func() {
 		if r := recover(); nil != r {
 			err = fmt.Errorf("私钥加密发生错误：%v", r)
@@ -313,7 +324,7 @@ func DecryptPrivKey(privateKey, dataCipher []byte) ([]byte, error) {
 	var dataClear []byte
 	var err error
 
-	// 使用 defer 和 recover 捕获可能发生的 panic，并转换为错误返回。
+	// 使用 defer 和 recover 尝试拦截底层 panic，避免 panic 继续向外传播。
 	defer func() {
 		if r := recover(); nil != r {
 			err = fmt.Errorf("私钥解密发生错误：%v", r)
@@ -347,7 +358,7 @@ func DecryptPrivKey(privateKey, dataCipher []byte) ([]byte, error) {
 // DecryptPrivateKeyOAEP。默认 OAEP 函数使用 SHA-256 和 nil label；如需指定 OAEP
 // hash 或 label，请使用 DecryptPrivateKeyOAEPWithHash。该旧函数仅用于兼容历史密文格式或既有协议。
 func DecryptPrivateKey(privateKey *rsa.PrivateKey, dataCipher []byte) (dataClear []byte, err error) {
-	// 使用 defer 和 recover 捕获可能发生的 panic，并转换为错误返回。
+	// 使用 defer 和 recover 尝试拦截底层 panic，避免 panic 继续向外传播。
 	defer func() {
 		if r := recover(); nil != r {
 			err = fmt.Errorf("私钥解密发生错误：%v", r)
@@ -437,7 +448,7 @@ func DecryptPrivateKeyOAEPWithHash(privateKey *rsa.PrivateKey, dataCipher []byte
 		return nil, ErrNilHash
 	}
 
-	// 使用 defer 和 recover 捕获可能发生的 panic，并转换为错误返回。
+	// 使用 defer 和 recover 尝试拦截底层 panic，避免 panic 继续向外传播。
 	defer func() {
 		if r := recover(); nil != r {
 			err = fmt.Errorf("OAEP 私钥解密发生错误：%v", r)

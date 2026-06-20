@@ -2,8 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// 本文件实现了 Snowflake 算法，用于生成分布式唯一 ID。
-// Snowflake 算法通过时间戳、节点编号和序列号组合生成 64 位唯一 ID。
 package snowflake
 
 import (

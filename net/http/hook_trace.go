@@ -210,6 +210,10 @@ func (h *traceHook) After(ctx *HookContext) error {
 	return nil
 }
 
+// NewTraceHook 创建一个通过 httptrace 采集 DNS、连接、TLS 等阶段耗时并异步输出调试日志的 Hook。
+//
+// 该 Hook 会在 Before 中把 ClientTrace 写入请求上下文，并在 After 中通过 runtime/goroutine
+// 包级默认协程池输出日志；若协程池提交失败，错误会被忽略。
 func NewTraceHook(logger kitlog.Logger) *traceHook {
 	h := &traceHook{
 		logger: logger,

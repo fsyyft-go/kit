@@ -112,7 +112,9 @@ func WithDigits(digits int) OneTimePasswordOption {
 	return (OneTimePasswordOptionFunc)(f)
 }
 
-// WithPeriodSeconds 返回密码的有效期（单位为秒）选项。
+// WithPeriodSeconds 设置 TOTP 的时间步长，单位为秒。
+//
+// periodSeconds 必须大于 0。当前实现不会在设置时做校验；若传入 0，后续生成或校验口令时可能因除零而 panic。
 func WithPeriodSeconds(periodSeconds int) OneTimePasswordOption {
 	// 定义一个函数，用于设置 oneTimePassword 实例的密码有效期。
 	f := func(password *oneTimePassword) {
@@ -180,12 +182,16 @@ type (
 	OneTimePassword interface {
 		// Password 根据当前时间生成密码。
 		//
+		// periodSeconds 必须大于 0。当前实现若配置为 0，会在生成过程中因除零 panic。
+		//
 		// 返回：
 		//   - string：生成的一次性密码字符串。
 		//   - error：如果生成过程中出现错误，则返回相应的错误。
 		Password() (string, error)
 
-		// EffectivePassword 根据当前时间，生成指定时间窗口内的所有密码。
+		// EffectivePassword 根据当前时间生成指定时间窗口内的所有密码。
+		//
+		// periodSeconds 必须大于 0。当前实现若配置为 0，会在计算时间步长时因除零 panic。
 		//
 		// 返回：
 		//   - []string：时间窗口内的所有有效密码字符串切片。
@@ -193,6 +199,8 @@ type (
 		EffectivePassword() ([]string, error)
 
 		// VeryfyPassword 验证密码是否在指定时间窗口内。
+		//
+		// periodSeconds 必须大于 0。当前实现若配置为 0，会在计算时间步长时因除零 panic。
 		//
 		// 参数：
 		//   - password：需要验证的密码字符串。
@@ -202,6 +210,8 @@ type (
 		VeryfyPassword(password string) bool
 
 		// GenerateURL 生成对应的 URL 表示形式的字符串。
+		//
+		// 该方法不会校验 periodSeconds；若配置为 0，返回结果会直接包含 period=0。
 		//
 		// 返回：
 		//   - string：生成的 URL 字符串，可用于设置二维码等。
@@ -224,6 +234,12 @@ type (
 )
 
 // Password 根据当前时间生成密码。
+//
+// periodSeconds 必须大于 0。当前实现若配置为 0，会在生成过程中因除零 panic。
+//
+// 返回：
+//   - string：生成的一次性密码字符串。
+//   - error：如果生成过程中出现错误，则返回相应的错误。
 func (o *oneTimePassword) Password() (string, error) {
 	// 定义返回值。
 	var passwordString string
@@ -242,7 +258,13 @@ func (o *oneTimePassword) Password() (string, error) {
 	return passwordString, err
 }
 
-// EffectivePassword 根据当前时间，生成指定时间窗口内的所有密码。
+// EffectivePassword 根据当前时间生成指定时间窗口内的所有密码。
+//
+// periodSeconds 必须大于 0。当前实现若配置为 0，会在计算时间步长时因除零 panic。
+//
+// 返回：
+//   - []string：时间窗口内的所有有效密码字符串切片。
+//   - error：如果生成过程中出现错误，则返回相应的错误。
 func (o *oneTimePassword) EffectivePassword() ([]string, error) {
 	// 初始化一个容量为 o.windowSize*2+1 的字符串切片，用于存储生成的密码。
 	var passwordStrings = make([]string, 0, o.windowSize*2+1)
@@ -279,10 +301,10 @@ func (o *oneTimePassword) EffectivePassword() ([]string, error) {
 
 // VeryfyPassword 验证密码是否在指定时间窗口内。
 //
+// periodSeconds 必须大于 0。当前实现若配置为 0，会在计算时间步长时因除零 panic。
+//
 // 参数：
-//   - secretKeyBase32：Base32 编码的密钥种子，用于生成一次性密码。
-//   - password：需要验证的密码。
-//   - options：可选的配置选项列表，用于自定义 OTP 行为。
+//   - password：需要验证的密码字符串。
 //
 // 返回：
 //   - bool：如果密码有效，则返回 true，否则返回 false。
@@ -320,9 +342,7 @@ func (o *oneTimePassword) VeryfyPassword(password string) bool {
 
 // GenerateURL 生成对应的 URL 表示形式的字符串。
 //
-// 参数：
-//   - secretKeyBase32：Base32 编码的密钥种子，用于生成一次性密码。
-//   - options：可选的配置选项列表，用于自定义 OTP 行为。
+// 该方法不会校验 periodSeconds；若配置为 0，返回结果会直接包含 period=0。
 //
 // 返回：
 //   - string：生成的 URL 字符串，可用于设置二维码等。
@@ -377,12 +397,14 @@ func (o *oneTimePassword) GenerateURL() string {
 
 // NewOneTimePassword 创建一个新的一次性密码实例。
 //
+// secretKeyBase32 解码失败时返回 error。当前实现不会校验 WithPeriodSeconds(0) 之类的非法时间步长；相关问题会在后续生成或校验口令时暴露。
+//
 // 参数：
 //   - secretKeyBase32：Base32 编码的密钥种子，用于生成一次性密码。
 //   - options：可选的配置选项列表，用于自定义 OTP 行为。
 //
 // 返回：
-//   - *oneTimePassword：创建的一次性密码实例。
+//   - *oneTimePassword：创建的一次性密码实例；即使密钥解码失败也会返回带默认配置的实例。
 //   - error：如果密钥解码失败，则返回相应的错误。
 func NewOneTimePassword(secretKeyBase32 string, options ...OneTimePasswordOption) (*oneTimePassword, error) {
 	// 创建一个具有默认值的 oneTimePassword 实例。
@@ -412,7 +434,9 @@ func NewOneTimePassword(secretKeyBase32 string, options ...OneTimePasswordOption
 	return newOneTimePassword, err
 }
 
-// VeryfyPassword 验证密码是否在指定时间窗口内。
+// VeryfyPassword 使用给定配置验证密码是否在指定时间窗口内。
+//
+// options 中的 periodSeconds 必须大于 0；当前实现若配置为 0，会在验证过程中因除零 panic。
 //
 // 参数：
 //   - secretKeyBase32：Base32 编码的密钥种子，用于生成一次性密码。
@@ -420,7 +444,7 @@ func NewOneTimePassword(secretKeyBase32 string, options ...OneTimePasswordOption
 //   - options：可选的配置选项列表，用于自定义 OTP 行为。
 //
 // 返回：
-//   - bool：如果密码有效，则返回 true，否则返回 false。
+//   - bool：如果密码有效，则返回 true；密钥解析失败时返回 false。
 func VeryfyPassword(secretKeyBase32, password string, options ...OneTimePasswordOption) bool {
 	// 定义返回值，默认为 false。
 	var resultValue bool
@@ -435,14 +459,16 @@ func VeryfyPassword(secretKeyBase32, password string, options ...OneTimePassword
 	return resultValue
 }
 
-// GenerateURL 生成对应的 URL 表示形式的字符串。
+// GenerateURL 使用给定配置生成对应的 URL 字符串。
+//
+// 该函数不会校验 periodSeconds；若配置为 0，返回结果会直接包含 period=0。
 //
 // 参数：
 //   - secretKeyBase32：Base32 编码的密钥种子，用于生成一次性密码。
 //   - options：可选的配置选项列表，用于自定义 OTP 行为。
 //
 // 返回：
-//   - string：生成的 URL 字符串，可用于设置二维码等。
+//   - string：生成的 URL 字符串；当 secretKeyBase32 解码失败时返回空字符串。
 func GenerateURL(secretKeyBase32 string, options ...OneTimePasswordOption) string {
 	// 定义返回值，默认为空字符串。
 	var resultValue string
@@ -459,10 +485,12 @@ func GenerateURL(secretKeyBase32 string, options ...OneTimePasswordOption) strin
 
 // timeBasedOneTimePassword 根据当前时间生成一次性密码。
 //
+// periodSeconds 必须大于 0。当前实现会直接用当前时间戳除以 periodSeconds；传入 0 会 panic。
+//
 // 参数：
 //   - hashFunc：用于生成 HMAC 的哈希函数。
 //   - key：密钥种子，用于生成一次性密码。
-//   - periodSeconds：密码的有效期（单位为秒）。
+//   - periodSeconds：密码的有效期，必须大于 0。
 //   - digits：密码的长度。
 //
 // 返回：

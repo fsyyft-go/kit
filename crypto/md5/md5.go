@@ -13,14 +13,15 @@ import (
 // writeString 是对 io.WriteString 的封装，便于测试时替换。
 var writeString = io.WriteString
 
-// HashStringWithoutError 计算字符串的 MD5 哈希值，忽略可能发生的错误。
-// 该函数是 HashString 的简化版本，适用于确定不会发生错误的场景。
+// HashStringWithoutError 返回 source 的 MD5 十六进制摘要，并忽略底层写入错误。
+//
+// 当前实现主要用于普通字符串场景。若底层 writeString 返回错误，本函数会返回空字符串。
 //
 // 参数：
-//   - source：需要计算哈希值的源字符串。
+//   - source：需要计算摘要的源字符串。
 //
 // 返回值：
-//   - string：计算得到的 MD5 哈希值的十六进制字符串表示。
+//   - string：source 的 MD5 小写十六进制摘要；若底层写入失败则返回空字符串。
 func HashStringWithoutError(source string) string {
 	result, _ := HashString(source)
 	return result

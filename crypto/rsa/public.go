@@ -50,14 +50,16 @@ func convertPublicKey(publicKey []byte) (*rsa.PublicKey, error) {
 	return pub, err
 }
 
-// ConvertPubKey 将 RSA 公钥对象转换为 PEM 格式的字节数据。
+// ConvertPubKey 将 *rsa.PublicKey 编码为 PKIX PUBLIC KEY PEM 数据。
+//
+// 返回的字节切片可供本包接受 PEM 公钥输入的解析与加密入口复用。
 //
 // 参数：
-//   - publicKey：RSA 公钥对象。
+//   - publicKey：待编码的 RSA 公钥对象。
 //
 // 返回值：
-//   - []byte：转换后的 PEM 格式公钥字节数据。
-//   - error：转换过程中可能发生的错误。
+//   - []byte：PKIX PUBLIC KEY 格式的 PEM 字节切片。
+//   - error：公钥编码失败时返回错误。
 func ConvertPubKey(publicKey *rsa.PublicKey) ([]byte, error) {
 	var pubKey []byte
 	var err error

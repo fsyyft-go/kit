@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package redis 提供了 Redis 客户端的基础类型和命令定义。
 package redis
 
 import (

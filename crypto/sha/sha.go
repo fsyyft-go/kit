@@ -1,7 +1,7 @@
 // Copyright 2025 fsyyft-go
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
-// 包 sha 提供 SHA256 哈希算法相关的工具函数。
+
 package sha
 
 import (

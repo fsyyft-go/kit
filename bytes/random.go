@@ -10,14 +10,17 @@ import (
 	"io"
 )
 
-// GenerateNonce 获取一次性随机字节数组。
+// GenerateNonce 返回指定长度的密码学安全随机字节切片。
+//
+// length 必须大于等于 0。返回值可用作 nonce、IV 或其他需要随机原始字节的场景；
+// 结果是否满足上层协议对唯一性、长度和编码的要求由调用方负责。
 //
 // 参数：
-//   - length：指定生成随机字节的长度。
+//   - length：指定生成随机字节的长度，必须大于等于 0。
 //
 // 返回：
 //   - []byte：生成的随机字节切片。
-//   - error：如果生成过程中出现错误，则返回相应的错误。
+//   - error：当 length 为负数或底层随机源读取失败时返回错误。
 func GenerateNonce(length int) ([]byte, error) {
 	// 检查长度参数是否合法。
 	if length < 0 {

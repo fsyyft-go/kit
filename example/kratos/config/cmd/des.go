@@ -15,15 +15,15 @@ import (
 
 // 定义命令行参数变量。
 var (
-	// key 用于存储用户提供的加密密钥。
+	// key 指定加密或解密使用的密钥；为空时使用内置默认 DES key。
 	key string
-	// data 用于存储待处理的数据。
+	// data 保存待处理数据；加密模式下为明文，解密模式下为十六进制密文。
 	data string
-	// encrypt 用于指示是执行加密还是解密操作。
+	// encrypt 指示运行模式；true 执行加密，false 执行解密。
 	encrypt bool
 )
 
-// desCmd 代表 des 加密解密命令。
+// desCmd 提供 DES 加密解密命令。
 var desCmd = &cobra.Command{
 	// 指定命令的名称。
 	Use: "des",

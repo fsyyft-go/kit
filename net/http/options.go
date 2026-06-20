@@ -87,14 +87,15 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithTraceEnable 设置 HTTP 客户端的追踪功能开关。
+// WithTraceEnable 控制是否为默认 HookManager 自动注入 traceHook。
+//
+// 仅在未通过 WithHook 提供自定义 Hook 时生效。
 //
 // 参数：
-//   - enable bool：是否启用追踪功能。
+//   - enable：是否启用默认 traceHook 注入。
 //
 // 返回值：
-//   - Option：用于设置追踪功能的配置项。
-
+//   - Option：用于设置 traceEnable 的配置项。
 func WithTraceEnable(enable bool) Option {
 	return func(c *client) {
 		c.traceEnable = enable
@@ -116,11 +117,13 @@ func WithProxy(proxy func(*http.Request) (*url.URL, error)) Option {
 
 // WithTransport 设置自定义的 http.Transport。
 //
+// 提供该选项后，NewClient 不再根据 proxy、TLS 和连接池默认参数构造内置 Transport。
+//
 // 参数：
-//   - transport *http.Transport：自定义的传输层配置。
+//   - transport：自定义的 HTTP 传输层配置。
 //
 // 返回值：
-//   - Option：用于设置传输层的配置项。
+//   - Option：用于设置 transport 的配置项。
 func WithTransport(transport *http.Transport) Option {
 	return func(c *client) {
 		c.transport = transport
@@ -166,10 +169,12 @@ func WithMaxIdleConns(maxIdleConns int) Option {
 	}
 }
 
-// WithLogSlow 设置 HTTP 客户端的慢请求阈值。
+// WithLogSlow 设置默认慢请求日志 Hook 的阈值。
+//
+// 仅在未通过 WithHook 提供自定义 Hook 时生效；当阈值小于等于 0 时，不会自动安装慢请求 Hook。
 //
 // 参数：
-//   - logSlow time.Duration：自定义的慢请求阈值。
+//   - logSlow：默认慢请求日志 Hook 的阈值。
 //
 // 返回值：
 //   - Option：用于设置慢请求阈值的配置项。
@@ -179,26 +184,30 @@ func WithLogSlow(logSlow time.Duration) Option {
 	}
 }
 
-// WithLogError 设置 HTTP 客户端的错误记录功能开关。
+// WithLogError 控制是否为默认 HookManager 自动注入错误日志 Hook。
+//
+// 仅在未通过 WithHook 提供自定义 Hook 时生效。
 //
 // 参数：
-//   - logError bool：是否启用错误记录功能。
+//   - logError：是否启用默认错误日志 Hook。
 //
 // 返回值：
-//   - Option：用于设置错误记录功能的配置项。
+//   - Option：用于设置错误日志 Hook 开关的配置项。
 func WithLogError(logError bool) Option {
 	return func(c *client) {
 		c.logError = logError
 	}
 }
 
-// WithHook 设置 HTTP 客户端的钩子函数。
+// WithHook 设置自定义 Hook。
+//
+// 提供该选项后，NewClient 不会再自动组装 logSlow、traceEnable 和 logError 对应的默认 HookManager。
 //
 // 参数：
-//   - hook Hook：自定义的 Hook 实现。
+//   - hook：自定义的 Hook 实现。
 //
 // 返回值：
-//   - Option：用于设置钩子的配置项。
+//   - Option：用于设置 Hook 的配置项。
 func WithHook(hook Hook) Option {
 	return func(c *client) {
 		c.hook = hook

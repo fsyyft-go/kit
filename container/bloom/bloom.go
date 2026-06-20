@@ -2,9 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package bloom 提供了布隆过滤器的接口定义和实现。
-// 布隆过滤器是一种空间效率很高的概率型数据结构，用于判断一个元素是否在集合中。
-// 它通过多个哈希函数将元素映射到位数组中的多个位置，从而实现高效的成员查询。
 package bloom
 
 import (
@@ -87,32 +84,33 @@ type (
 	}
 
 	// Store 定义了布隆过滤器底层数据存储的接口。
-	// 该接口负责实际的数据存储和查询操作。
-	// 不同的存储实现可以支持不同的后端存储系统，如内存、Redis 等。
+	//
+	// key 标识一个独立的位图命名空间；不同 Bloom name 或 group 会映射到不同 key，彼此互不影响。
+	// ctx 是否生效由具体实现决定，例如内存实现会忽略它，Redis 实现会将其传递给底层命令。
 	Store interface {
 		// Exist 判断指定 key 对应的所有 hash 值是否都已存在。
 		//
 		// 参数：
-		//   - ctx：上下文对象，用于控制请求的生命周期
-		//   - key：存储键名
-		//   - hash：要判断的哈希值列表
+		//   - ctx：上下文对象，是否生效由具体实现决定。
+		//   - key：位图命名空间标识；不同 key 之间互不影响。
+		//   - hash：要判断的哈希值列表。
 		//
 		// 返回值：
-		//   - bool：所有哈希值是否都已存在
-		//     - false：至少有一个哈希值不存在
-		//     - true：所有哈希值都存在
-		//   - error：查询过程中发生的错误
+		//   - bool：所有哈希值是否都已存在。
+		//     - false：至少有一个哈希值不存在。
+		//     - true：所有哈希值都存在。
+		//   - error：查询过程中发生的错误。
 		Exist(ctx context.Context, key string, hash []uint64) (bool, error)
 
 		// Add 将一组 hash 值添加到指定 key 对应的存储中。
 		//
 		// 参数：
-		//   - ctx：上下文对象，用于控制请求的生命周期
-		//   - key：存储键名
-		//   - hash：要添加的哈希值列表
+		//   - ctx：上下文对象，是否生效由具体实现决定。
+		//   - key：位图命名空间标识；不同 key 之间互不影响。
+		//   - hash：要添加的哈希值列表。
 		//
 		// 返回值：
-		//   - error：添加过程中发生的错误
+		//   - error：添加过程中发生的错误。
 		Add(ctx context.Context, key string, hash []uint64) error
 	}
 
@@ -258,13 +256,13 @@ func (b *bloom) multiHash(value string) []uint64 {
 	return hash
 }
 
-// buildGroupKey 构建分组键名，将布隆过滤器名称和分组名称组合成一个唯一的键名。
+// buildGroupKey 构建分组键名。
 //
 // 参数：
-//   - group：分组名称，用于区分不同的数据集合
+//   - group：分组名称，用于区分同一 Bloom 下的不同位图命名空间。
 //
 // 返回值：
-//   - string：组合后的键名，格式为 "name:group"
+//   - string：格式为 "name:group" 的存储 key，用于隔离不同 group。
 func (b *bloom) buildGroupKey(group string) string {
 	return fmt.Sprintf("%s:%s", b.name, group)
 }

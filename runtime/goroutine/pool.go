@@ -319,12 +319,16 @@ func (p *goroutinePool) IsClosed() bool {
 	return p.pool.IsClosed()
 }
 
-// Submit 提交一个任务到协程池中执行。
+// Submit 将 task 提交到包级默认协程池执行。
+//
+// 首次调用会惰性创建默认池。与显式 GoroutinePool.Submit 不同，包级包装层会 recover task panic 并记录日志，
+// 不会把 panic 继续向调用方传播，也不会通过返回值暴露该 panic。
+//
 // 参数：
-//   - task：要执行的任务函数。
+//   - task：要提交到包级默认协程池执行的任务函数。
 //
 // 返回值：
-//   - error：如果提交失败则返回错误。
+//   - error：默认池初始化失败或底层提交失败时返回错误。task panic 会被 recover 并记录日志，不通过返回值暴露。
 func Submit(task func()) error {
 	p, err := defaultPool()
 	if err != nil {

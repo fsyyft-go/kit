@@ -6,17 +6,18 @@
 
 package goroutine
 
-// getg 获取当前 G 结构体的指针。
-// 此函数通过汇编实现，直接访问 TLS 获取 G 指针。
+// getg 返回当前 goroutine 对应的 runtime.g 指针。
+//
+// SAFETY: 此声明与 goid_arm64.s 配套，依赖当前平台通过 TLS 保存 g 指针的 runtime 内部实现。
+// 升级 Go 版本或调整目标架构后需要重新验证汇编与 g 结构定义。
 func getg() *g
 
-// GetGoID 获取当前协程的 ID。
-// 此函数在非 Windows 的 arm64 架构下通过 G 结构体获取协程 ID。
+// GetGoID 返回当前 goroutine 的 ID。
 //
-// 已废弃：请考虑使用其他替代方法获取协程 ID。
+// 该快速路径直接读取 runtime.g.goid，依赖本包维护的 runtime 内部结构定义与汇编实现。
 //
 // 返回值：
-//   - int64：返回当前协程的 ID。
+//   - int64：当前 goroutine 的 ID。
 func GetGoID() int64 {
 	return getg().goid
 }

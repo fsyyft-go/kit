@@ -75,9 +75,8 @@ type Cache interface {
 	// 在清空后，所有之前的键都将返回不存在。
 	Clear()
 
-	// Close 关闭缓存，释放相关资源。
-	// 关闭后的缓存不应该再被使用。
-	// 重复调用 Close 是安全的。
+	// Close 关闭缓存并释放相关资源。
+	// 关闭后的缓存不应继续使用。
 	// 返回值：
 	//   - error：如果关闭过程中发生错误则返回错误。
 	Close() error
@@ -156,38 +155,17 @@ func WithBufferItems(bufferItems int64) Option {
 	}
 }
 
-// NewCache 创建一个新的缓存实例。
-// 使用 Option 模式配置缓存参数，如果没有提供任何选项，将使用默认配置：
-//   - NumCounters：1000 万（适合跟踪 100 万个不同的键）
-//   - MaxCost：1GB（适合存储较大的数据集）
-//   - BufferItems：64（提供良好的并发性能）
+// NewCache 使用当前内置的 Ristretto 后端创建独立缓存实例。
+//
+// 未提供 Option 时会使用包内默认的 NumCounters、MaxCost 和 BufferItems。
+// 无效配置会由底层 Ristretto 构造过程返回错误。
 //
 // 参数：
-//   - options：可选的配置选项，如果不提供则使用默认配置。
+//   - options：可选配置项；为空时使用默认的 NumCounters、MaxCost 和 BufferItems。
 //
 // 返回值：
-//   - Cache：缓存接口实现。
-//   - error：如果创建失败则返回错误。
-//
-// 示例：
-//
-//	// 使用默认配置
-//	cache, err := cache.NewCache()
-//	if err != nil {
-//	    panic(err)
-//	}
-//	defer cache.Close()
-//
-//	// 使用自定义配置
-//	cache, err := cache.NewCache(
-//	    cache.WithNumCounters(1e7),
-//	    cache.WithMaxCost(1<<30),
-//	    cache.WithBufferItems(64),
-//	)
-//	if err != nil {
-//	    panic(err)
-//	}
-//	defer cache.Close()
+//   - Cache：创建成功后的缓存实例。
+//   - error：底层 Ristretto 初始化失败时返回错误。
 func NewCache(options ...Option) (Cache, error) {
 	// 使用默认配置
 	opts := &CacheOptions{

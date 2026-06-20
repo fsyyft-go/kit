@@ -31,6 +31,9 @@ func (h *logErrorHook) After(ctx *HookContext) error {
 	return nil
 }
 
+// NewLogErrorHook 创建一个在请求返回原始错误时异步记录错误日志的 Hook。
+//
+// 日志任务通过 runtime/goroutine 包级默认协程池提交；若协程池提交失败，错误会被忽略。
 func NewLogErrorHook(logger kitlog.Logger) *logErrorHook {
 	h := &logErrorHook{
 		logger: logger.WithField("hook", "log_error"),

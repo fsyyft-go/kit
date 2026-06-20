@@ -29,15 +29,19 @@ var (
 	}
 )
 
-// publicDecrypt 使用 RSA 公钥对签名进行解密，通常用于验证签名。
+// publicDecrypt 执行与历史私钥原始操作配套的 RSA 公钥恢复流程。
+//
+// 当 hash 非零且输入满足本函数的前置约束时，返回值是恢复出的 DigestInfo；当 hash 为 0 时，返回值是恢复出的原始消息块。
+//
 // 参数：
-// - pub: RSA 公钥。
-// - hash: 使用的哈希算法。
-// - hashed: 已哈希的消息。
-// - sig: 签名数据。
+//   - pub：RSA 公钥。
+//   - hash：使用的摘要算法；为 0 时按原始消息块恢复。
+//   - hashed：待匹配的摘要数据；hash 非 0 时长度必须与摘要算法匹配。
+//   - sig：待恢复的签名数据。
+//
 // 返回值：
-// - out: 解密后的数据。
-// - err: 错误信息。
+//   - []byte：hash 非 0 时为恢复出的 DigestInfo；hash 为 0 时为恢复出的原始消息块。
+//   - error：输入摘要长度、哈希类型或密钥长度不满足要求时返回错误。
 func publicDecrypt(pub *rsa.PublicKey, hash crypto.Hash, hashed []byte, sig []byte) (out []byte, err error) {
 	// 获取哈希算法的相关信息，包括哈希长度和前缀。
 	hashLen, prefix, err := pkcs1v15HashInfo(hash, len(hashed))

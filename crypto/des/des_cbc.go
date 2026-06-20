@@ -56,30 +56,34 @@ func EncryptStringCBCPkCS7PaddingHex(keyHex, data string) (string, error) {
 	return result, err
 }
 
-// EncryptCBCPkCS7Padding 使用 CBC 模式、PKCS7 填充进行 DES 加密。
+// EncryptCBCPkCS7Padding 使用 key 兼作 DES 密钥和 IV 执行 CBC 加密。
+//
+// 该包装函数仅用于兼容历史调用方式。新代码应优先使用 EncryptCBCPkCS7PaddingAloneIV 并传入独立随机 IV。
 //
 // 参数：
-//   - key：密钥字节切片（同时用作 IV）。
-//   - data：待加密数据。
+//   - key：同时作为 DES 密钥和 IV 的字节切片，长度需满足 des.NewCipher 要求。
+//   - data：待加密的明文字节切片。
 //
 // 返回：
-//   - []byte：加密后的数据。
-//   - error：加密过程中可能发生的错误。
+//   - []byte：CBC 加密后的密文字节切片。
+//   - error：密钥长度非法时返回错误。
 func EncryptCBCPkCS7Padding(key, data []byte) ([]byte, error) {
 	// 使用相同的值作为密钥和 IV。
 	return EncryptCBCPkCS7PaddingAloneIV(key, key, data)
 }
 
-// EncryptCBCPkCS7PaddingAloneIV 使用 CBC 模式、PKCS7 填充进行 DES 加密。
+// EncryptCBCPkCS7PaddingAloneIV 使用独立 IV 执行 DES-CBC 加密并追加 PKCS7 padding。
+//
+// iv 长度必须等于 DES block size。该函数不会生成随机 IV，调用方需要自行提供与 key 独立的 IV。
 //
 // 参数：
-//   - key：密钥字节切片。
-//   - iv：初始化向量。
-//   - data：待加密数据。
+//   - key：DES 密钥字节切片。
+//   - iv：初始化向量，长度必须等于 DES block size。
+//   - data：待加密的明文字节切片。
 //
 // 返回：
-//   - []byte：加密后的数据。
-//   - error：加密过程中可能发生的错误。
+//   - []byte：CBC 加密后的密文字节切片，不包含 iv。
+//   - error：密钥非法或 iv 长度不是 DES block size 时返回错误。
 func EncryptCBCPkCS7PaddingAloneIV(key, iv, data []byte) ([]byte, error) {
 	var result []byte
 	var err error
@@ -150,30 +154,34 @@ func DecryptStringCBCPkCS7PaddingHex(keyHex, dataHex string) (string, error) {
 	return result, err
 }
 
-// DecryptCBCPkCS7Padding 使用 CBC 模式、PKCS7 填充进行 DES 解密。
+// DecryptCBCPkCS7Padding 使用 key 兼作 DES 密钥和 IV 执行 CBC 解密。
+//
+// 该包装函数仅用于兼容历史调用方式。密文长度不是块大小整数倍时返回 error，不会 panic；块对齐但 PKCS7 padding 非法时同样返回 error。
 //
 // 参数：
-//   - key：密钥字节切片（同时用作 IV）。
-//   - data：待解密数据。
+//   - key：同时作为 DES 密钥和 IV 的字节切片，长度需满足 des.NewCipher 要求。
+//   - data：待解密的密文字节切片。
 //
 // 返回：
-//   - []byte：解密后的数据。
-//   - error：解密过程中可能发生的错误。
+//   - []byte：去除 PKCS7 padding 后的明文字节切片。
+//   - error：密钥长度非法、密文长度不满足 CBC 分组要求或 padding 非法时返回错误。
 func DecryptCBCPkCS7Padding(key, data []byte) ([]byte, error) {
 	// 使用相同的值作为密钥和 IV。
 	return DecryptCBCPkCS7PaddingAloneIV(key, key, data)
 }
 
-// DecryptCBCPkCS7PaddingAloneIV 使用 CBC 模式、PKCS7 填充进行 DES 解密。
+// DecryptCBCPkCS7PaddingAloneIV 使用独立 IV 执行 DES-CBC 解密并移除 PKCS7 padding。
+//
+// iv 长度必须等于 DES block size。data 长度不是块大小整数倍时返回 error，不会调用到底层 CBC 解密器产生 panic；块对齐但 PKCS7 padding 非法时同样返回 error。
 //
 // 参数：
-//   - key：密钥字节切片。
-//   - iv：初始化向量。
-//   - data：待解密数据。
+//   - key：DES 密钥字节切片。
+//   - iv：初始化向量，长度必须等于 DES block size。
+//   - data：待解密密文，长度必须是块大小的整数倍。
 //
 // 返回：
-//   - []byte：解密后的数据。
-//   - error：解密过程中可能发生的错误。
+//   - []byte：解密并去除 PKCS7 padding 后的明文数据。
+//   - error：密钥或 IV 非法、密文长度不符合分组要求或 padding 非法时返回错误。
 func DecryptCBCPkCS7PaddingAloneIV(key, iv, data []byte) ([]byte, error) {
 	var result []byte
 	var err error

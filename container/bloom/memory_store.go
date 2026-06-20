@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package bloom 提供了布隆过滤器的接口定义和实现。
 package bloom
 
 import (
@@ -25,23 +24,12 @@ const (
 	defaultBlockSize = 128 * 1024 * 1024
 )
 
-// memoryStore 是基于内存块的布隆过滤器存储实现。
-// 该实现为每个 key 维护独立的固定大小内存块，每个 bit 表示一个 hash 值是否存在。
-// 设计原理：
-// 1. 数据结构：
-//   - 使用 map[string][]byte 按 key 保存底层位图。
-//   - 每个 key 的 []byte 是独立位图，避免不同 Bloom name 或 group 互相污染。
-//   - 使用读写锁保证并发安全。
+// memoryStore 是基于内存位图的 Store 实现。
 //
-// 2. 内存管理：
-//   - 每个 key 首次写入时分配固定大小的内存块。
-//   - 使用取模运算将 hash 值映射到对应 key 的内存块。
-//   - 支持自定义内存块大小。
-//
-// 3. 并发安全：
-//   - 使用读写锁（RWMutex）保护 map 和位图访问。
-//   - 读操作使用读锁，允许多个读操作并发。
-//   - 写操作使用写锁，保证写操作的原子性。
+// memoryStore 使用 map[string][]byte 为每个 key 维护一份独立位图，避免不同 Bloom name
+// 或 group 的数据互相污染。每个 key 首次写入时按固定 block size 分配位图，后续通过
+// hash % (size*8) 将位置映射到该位图。它使用 RWMutex 保护 map 和位图访问，读操作可并发，
+// 写操作串行化，并在 Exist 和 Add 中忽略 ctx。
 type memoryStore struct {
 	// mu 用于保护 data 的并发访问。
 	// 设计考虑：
@@ -146,18 +134,20 @@ func (s *memoryStore) getBit(data []byte, pos uint64) bool {
 	return (data[bytePos] & (1 << bitPos)) != 0
 }
 
-// Exist 实现了 Store 接口的 Exist 方法，判断指定 key 对应的所有 hash 值是否都已存在。
+// Exist 实现 Store 接口。
+//
+// memoryStore 会忽略 ctx，并使用 key 选择独立位图；不同 key 之间互不影响。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制请求的生命周期
-//   - key：存储键名
-//   - hash：要判断的哈希值列表
+//   - ctx：上下文对象；当前实现忽略该参数。
+//   - key：位图命名空间标识；不同 key 对应独立内存位图。
+//   - hash：要判断的哈希值列表。
 //
 // 返回值：
-//   - bool：所有哈希值是否都已存在
-//   - false：至少有一个哈希值不存在
-//   - true：所有哈希值都存在
-//   - error：查询过程中发生的错误
+//   - bool：所有哈希值是否都已存在。
+//   - false：至少有一个哈希值不存在。
+//   - true：所有哈希值都存在。
+//   - error：当前实现始终返回 nil。
 func (s *memoryStore) Exist(_ context.Context, key string, hash []uint64) (bool, error) {
 	// 设计原理：
 	// 1. 查询流程：
@@ -193,15 +183,17 @@ func (s *memoryStore) Exist(_ context.Context, key string, hash []uint64) (bool,
 	return true, nil
 }
 
-// Add 实现了 Store 接口的 Add 方法，将一组 hash 值添加到存储中。
+// Add 实现 Store 接口。
+//
+// memoryStore 会忽略 ctx，并按 key 把不同 Bloom name 或 group 的位图写入各自独立的内存命名空间。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制请求的生命周期
-//   - key：存储键名
-//   - hash：要添加的哈希值列表
+//   - ctx：上下文对象；当前实现忽略该参数。
+//   - key：位图命名空间标识；不同 key 对应独立内存位图。
+//   - hash：要写入的哈希值列表。
 //
 // 返回值：
-//   - error：添加过程中发生的错误
+//   - error：当前实现始终返回 nil。
 func (s *memoryStore) Add(_ context.Context, key string, hash []uint64) error {
 	// 设计原理：
 	// 1. 添加流程：

@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	// offsetDict 存储不同 Go 版本中 goid 在 G 结构体中的偏移量。
-	// 这些偏移量是固定的，不同的 Go 版本可能会有不同的偏移量。
+	// offsetDict 记录各 Go 版本下 runtime.g 中 goid 字段的字节偏移。
+	// 该表与本包维护的 runtime 内部结构定义和 amd64 汇编快速路径配套使用。
 	offsetDict = map[string]int64{
 		"go1.4":  128,
 		"go1.5":  184,
@@ -40,18 +40,20 @@ var (
 		"go1.26": 152,
 	}
 
-	// offset 存储当前 Go 运行时版本的 goid 偏移量。
-	// 在包初始化时计算一次，后续使用缓存值。
+	// offset 缓存当前 Go 运行时版本对应的 goid 偏移量。
+	// 若 runtime.Version() 未命中 offsetDict，结果会是 0；升级 Go 版本后必须先补齐偏移表并重新验证。
 	offset = func() int64 {
 		ver := strings.Join(strings.Split(runtime.Version(), ".")[:2], ".")
 		return offsetDict[ver]
 	}()
 )
 
-// Offset 获取当前 Go 运行时版本下 goid 在 G 结构体中的偏移量。
+// Offset 返回 amd64 快速路径当前使用的 runtime.g.goid 字段偏移量。
+//
+// 返回 0 通常表示当前 Go 版本尚未写入 offsetDict。
 //
 // 返回值：
-//   - int64：返回当前版本的 goid 偏移量。
+//   - int64：当前 Go 版本对应的 runtime.g.goid 字段偏移量；未命中 offsetDict 时返回 0。
 func Offset() int64 {
 	return offset
 }

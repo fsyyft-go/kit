@@ -1,22 +1,10 @@
 // Copyright 2025 fsyyft-go
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
-//
-// convert/convert_test.go
-//
-// 设计思路：
-// 本测试文件采用表格驱动法，针对 convert 包所有导出方法进行单元测试，涵盖常见类型、边界值、错误场景。
-// 断言使用 stretchr/testify，确保类型转换的正确性和健壮性。
-//
-// 使用方法：
-// go test ./convert -v -cover
-//
-// 依赖：
-//   - github.com/stretchr/testify/assert
-//
-// 每个测试用例均有详细注释，便于理解和维护。
 
 package convert
+
+// 本测试文件使用表格驱动用例覆盖 convert 包主要导出转换函数的常见输入、边界值和错误场景。
 
 import (
 	"testing"

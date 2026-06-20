@@ -41,25 +41,31 @@ func WithName(name string) Option {
 	}
 }
 
-// WithStore 设置布隆过滤器的存储接口。
+// WithStore 设置布隆过滤器的存储实现。
+//
+// store 会接收 Bloom 名称或 "name:group" 形式的派生 key，用于区分不同位图命名空间。
 //
 // 参数：
-//   - store：存储接口实现。
+//   - store：布隆过滤器底层存储实现。
 //
 // 返回值：
-//   - Option：配置选项函数。
+//   - Option：用于设置存储实现的配置选项。
 func WithStore(store Store) Option {
 	return func(b *bloom) {
 		b.store = store
 	}
 }
 
-// WithRedis 设置布隆过滤器的 Redis 客户端。
+// WithRedis 设置布隆过滤器使用基于 Redis 的存储实现。
+//
+// Redis 存储会把 Bloom 名称或分组派生 key 转换为实际 Redis key，并透传调用时的 ctx。
+// 初始化脚本加载失败时，当前实现会 panic。
 //
 // 参数：
 //   - redis：Redis 客户端实例。
 //
 // 返回值：
+//   - Option：用于设置 Redis 存储实现的配置选项。
 func WithRedis(redis kitredis.Redis) Option {
 	return func(b *bloom) {
 		store, err := NewRedisStore(redis)

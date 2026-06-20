@@ -54,12 +54,8 @@ var (
 	defaultLocale = "zh-CN"
 )
 
-// init 初始化包的默认配置。
-// 该函数会在包首次加载时自动执行，设置 carbon 库的默认参数，包括：
-// - 日期时间格式
-// - 时区
-// - 每周起始日
-// - 语言环境
+// init 在包加载时把当前默认变量写入 carbon 的全局默认配置。
+// 该初始化只会执行一次；若通过 -ldflags -X 覆盖默认变量，必须在程序启动前完成。
 func init() {
 	carbon.SetDefault(carbon.Default{
 		Layout:       defaultDateTimeLayout,

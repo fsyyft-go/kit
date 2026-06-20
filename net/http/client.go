@@ -110,11 +110,16 @@ type (
 
 // NewClient 创建一个新的 HTTP 客户端实例。
 //
+// 当未显式提供 Transport 时，NewClient 会构造默认 http.Transport，并将
+// TLSClientConfig.InsecureSkipVerify 设为 true，也就是默认跳过 TLS 证书校验；
+// 如需启用证书校验，调用方必须通过 WithTransport 显式提供自定义 Transport 并调整 TLS 配置。
+// 当未显式提供 Hook 时，会按 logSlow、traceEnable 和 logError 选项自动组装默认 HookManager。
+//
 // 参数：
-//   - opts ...Option：可选配置项。
+//   - opts：用于覆盖默认超时、连接池、Transport、Hook 和日志配置的可选项。
 //
 // 返回值：
-//   - Client：HTTP 客户端实例。
+//   - Client：按给定选项构造的 HTTP 客户端实例。
 func NewClient(opts ...Option) Client {
 	c := &client{
 		name:                nameDefault,
@@ -308,10 +313,12 @@ var (
 	clientDefaultLocker sync.Locker = &sync.Mutex{}
 )
 
-// clientDef 获取全局默认 HTTP 客户端实例。
+// clientDef 返回懒加载的包级默认 HTTP 客户端实例。
+//
+// 首次调用会使用 NewClient 的默认配置创建实例，后续包级 Do、Get、Post 等辅助函数都会复用该实例。
 //
 // 返回值：
-//   - Client：全局默认 HTTP 客户端。
+//   - Client：包级默认 HTTP 客户端实例。
 func clientDef() Client {
 	if nil != clientDefault {
 		return clientDefault

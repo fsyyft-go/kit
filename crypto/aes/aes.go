@@ -145,16 +145,19 @@ func EncryptGCMHex(keyHex string, nonceLength int, dataHex string) (string, erro
 	return result, err
 }
 
-// EncryptGCMNonceLength 已知混淆值字节数组长度，使用 GCM 模式加密。
+// EncryptGCMNonceLength 生成指定长度的随机 nonce，并返回 nonce || ciphertextAndTag。
+//
+// 本函数内部使用 crypto/rand 生成 nonce，并以 nil AAD 调用 GCM 加密。
+// nonceLength 必须与 cipher.NewGCM 要求的 nonce 长度一致，否则返回错误。
 //
 // 参数：
-//   - key：加密密钥字节数组。
-//   - nonceLength：混淆值（nonce）的字节长度。
-//   - data：待加密的数据字节数组。
+//   - key：AES 密钥字节切片，长度必须符合标准库 aes.NewCipher 要求。
+//   - nonceLength：待生成 nonce 的字节长度，必须与 GCM 要求的 nonce 长度一致。
+//   - data：待加密的明文字节切片。
 //
 // 返回值：
-//   - []byte：加密结果字节数组，包含 nonce 和加密数据。
-//   - error：加密过程中可能发生的错误，成功时为 nil。
+//   - []byte：按 nonce || ciphertextAndTag 组合后的加密结果。
+//   - error：nonce 生成失败、密钥非法或 nonceLength 不匹配时返回错误。
 func EncryptGCMNonceLength(key []byte, nonceLength int, data []byte) ([]byte, error) {
 	// 声明返回值变量。
 	var result []byte
@@ -173,16 +176,19 @@ func EncryptGCMNonceLength(key []byte, nonceLength int, data []byte) ([]byte, er
 	return result, err
 }
 
-// EncryptGCM 已知混淆值字节数组，使用 GCM 模式加密。
+// EncryptGCM 使用给定 key 和 nonce 执行 AES-GCM 加密，并返回 nonce || ciphertextAndTag。
+//
+// 本函数不使用附加认证数据（AAD）。调用方必须保证同一 key 下 nonce 不复用；
+// 否则会破坏 GCM 的安全性。nonce 长度不匹配或密钥长度非法时返回错误。
 //
 // 参数：
-//   - key：加密密钥字节数组。
-//   - nonce：混淆值字节数组。
-//   - data：待加密的数据字节数组。
+//   - key：AES 密钥字节切片，长度必须符合标准库 aes.NewCipher 要求。
+//   - nonce：本次加密使用的 nonce，长度必须与当前 GCM 实例要求一致。
+//   - data：待加密的明文字节切片。
 //
 // 返回值：
-//   - []byte：加密结果字节数组，包含 nonce 和加密数据。
-//   - error：加密过程中可能发生的错误，成功时为 nil。
+//   - []byte：按 nonce || ciphertextAndTag 组合后的加密结果。
+//   - error：密钥非法或 nonce 长度不匹配时返回错误。
 func EncryptGCM(key, nonce, data []byte) ([]byte, error) {
 	// 声明返回值变量。
 	var result []byte
@@ -361,17 +367,20 @@ func DecryptGCMHex(keyHex string, nonceLength int, dataHex string) (string, stri
 	return nonce, result, err
 }
 
-// DecryptGCMNonceLength 已知混淆值字节数组长度，使用 GCM 模式解密。
+// DecryptGCMNonceLength 按给定 nonceLength 解析 nonce || ciphertextAndTag，并执行 AES-GCM 解密。
+//
+// data 必须以前缀 nonce 开头，且总长度必须大于 nonceLength。
+// 返回值中的第一个切片是提取出的 nonce，第二个切片是认证通过后的明文。
 //
 // 参数：
-//   - key：解密密钥字节数组。
-//   - nonceLength：混淆值（nonce）的字节长度。
-//   - data：待解密的数据字节数组（包含 nonce 和加密数据）。
+//   - key：AES 密钥字节切片，长度必须符合标准库 aes.NewCipher 要求。
+//   - nonceLength：data 前缀中 nonce 的字节长度，必须与 GCM 要求一致。
+//   - data：按 nonce || ciphertextAndTag 组合的输入密文。
 //
 // 返回值：
-//   - []byte：解密过程中提取的 nonce 字节数组。
-//   - []byte：解密结果字节数组。
-//   - error：解密过程中可能发生的错误，成功时为 nil。
+//   - []byte：从 data 前缀提取出的 nonce。
+//   - []byte：认证通过后解出的明文字节切片。
+//   - error：nonceLength 非法、data 长度不足、密钥非法、nonce 长度不匹配或认证失败时返回错误。
 func DecryptGCMNonceLength(key []byte, nonceLength int, data []byte) ([]byte, []byte, error) {
 	// 声明返回值变量。
 	var nonce []byte
@@ -397,16 +406,19 @@ func DecryptGCMNonceLength(key []byte, nonceLength int, data []byte) ([]byte, []
 	return nonce, result, err
 }
 
-// DecryptGCM 已知混淆值字节数组，使用 GCM 模式解密。
+// DecryptGCM 使用给定 key、nonce 和 ciphertextAndTag 执行 AES-GCM 解密。
+//
+// data 参数不包含 nonce 前缀。本函数同样以 nil AAD 调用 GCM Open；
+// nonce 长度不匹配、密钥非法或认证失败时返回错误。
 //
 // 参数：
-//   - key：解密密钥字节数组。
-//   - nonce：混淆值字节数组。
-//   - data：待解密的数据字节数组。
+//   - key：AES 密钥字节切片，长度必须符合标准库 aes.NewCipher 要求。
+//   - nonce：与 data 对应的 GCM nonce，长度必须与当前 GCM 实例要求一致。
+//   - data：不含 nonce 前缀的 ciphertextAndTag 字节切片。
 //
 // 返回值：
-//   - []byte：解密结果字节数组。
-//   - error：解密过程中可能发生的错误，成功时为 nil。
+//   - []byte：认证通过后解出的明文字节切片。
+//   - error：密钥非法、nonce 长度不匹配或认证失败时返回错误。
 func DecryptGCM(key, nonce, data []byte) ([]byte, error) {
 	// 声明返回值变量。
 	var result []byte

@@ -59,8 +59,11 @@ const (
 	`
 )
 
-// redisStore 实现了 Store 接口，基于 Redis 实现布隆过滤器的底层存储。
-// 该结构体封装了 Redis 客户端及相关脚本哈希，用于高效地进行批量位操作。
+// redisStore 实现了 Store 接口，基于 Redis 保存布隆过滤器位图。
+//
+// redisStore 会同时使用 ctx 和 key：ctx 透传给底层 Redis 命令，key 经 redisKeyFormat
+// 转换后作为 Redis 中的位图命名空间。实例初始化时会预加载批量 getbit/setbit Lua 脚本并缓存
+// 对应 hash，后续优先通过 EvalSha 执行；若脚本缓存失效，会在收到 NOSCRIPT 后自动重新加载。
 type redisStore struct {
 	// redis 是 Redis 客户端实例，用于与 Redis 服务进行通信。
 	redis kitredis.Redis
@@ -72,18 +75,20 @@ type redisStore struct {
 	getScriptHash string
 }
 
-// Exist 判断指定 key 对应的所有 hash 值是否都已存在（即所有位都为 1）。
+// Exist 实现 Store 接口。
+//
+// redisStore 会将 ctx 传递给脚本执行，并把 key 转换为对应的 Redis 位图 key。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制请求的生命周期。
-//   - key：存储键名，对应 Redis 中的布隆过滤器键。
-//   - hash：要判断的哈希值列表，每个值对应位数组中的一个位置。
+//   - ctx：上下文对象，用于控制底层 Redis 命令的执行。
+//   - key：位图命名空间标识，会进一步转换为 Redis key。
+//   - hash：要判断的哈希值列表。
 //
 // 返回值：
 //   - bool：所有哈希值是否都已存在。
-//   - false：至少有一个哈希值不存在（对应位为 0）。
-//   - true：所有哈希值都存在（对应位均为 1）。
-//   - error：查询过程中发生的错误。
+//   - false：至少有一个哈希值不存在。
+//   - true：所有哈希值都存在。
+//   - error：脚本执行失败或返回值类型异常时返回错误。
 func (s *redisStore) Exist(ctx context.Context, key string, hash []uint64) (bool, error) {
 	// 生成 Redis 脚本所需的 KEYS 和 ARGS 参数。
 	keys, args := s.generateKeysAndArgs(key, hash)
@@ -106,15 +111,17 @@ func (s *redisStore) Exist(ctx context.Context, key string, hash []uint64) (bool
 	return true, nil
 }
 
-// Add 将一组 hash 值添加到指定 key 对应的存储中（即将对应位设置为 1）。
+// Add 实现 Store 接口。
+//
+// redisStore 会将 ctx 传递给脚本执行，并把 key 转换为对应的 Redis 位图 key。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制请求的生命周期。
-//   - key：存储键名，对应 Redis 中的布隆过滤器键。
-//   - hash：要添加的哈希值列表，每个值对应位数组中的一个位置。
+//   - ctx：上下文对象，用于控制底层 Redis 命令的执行。
+//   - key：位图命名空间标识，会进一步转换为 Redis key。
+//   - hash：要写入的哈希值列表。
 //
 // 返回值：
-//   - error：添加过程中发生的错误。
+//   - error：脚本执行失败时返回错误。
 func (s *redisStore) Add(ctx context.Context, key string, hash []uint64) error {
 	// 生成 Redis 脚本所需的 KEYS 和 ARGS 参数。
 	keys, args := s.generateKeysAndArgs(key, hash)
@@ -163,12 +170,14 @@ func (s *redisStore) evalScript(ctx context.Context, scriptHash string, script s
 
 // generateKeysAndArgs 生成 Redis 脚本调用所需的 KEYS 和 ARGS 参数列表。
 //
+// name 是 Store 层传入的位图命名空间 key；函数会将其转换为最终的 Redis key。
+//
 // 参数：
-//   - name：布隆过滤器名称，用于生成 Redis 键名。
+//   - name：Store 层传入的位图命名空间 key。
 //   - hash：哈希值列表，每个值对应位数组中的一个位置。
 //
 // 返回值：
-//   - []string：包含一个元素的 KEYS 切片（即 Redis 键名）。
+//   - []string：包含最终 Redis key 的 KEYS 切片。
 //   - []any：包含所有哈希值的 ARGS 切片。
 func (r *redisStore) generateKeysAndArgs(name string, hash []uint64) ([]string, []any) {
 	// 构造 Redis 键名。

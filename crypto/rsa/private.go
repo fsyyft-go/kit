@@ -21,14 +21,16 @@ var (
 	ErrDecodePrivateKey = errors.New("私钥不正确。")
 )
 
-// ConvertPrivateKey 将 PEM 格式的私钥数据转换为 RSA 私钥对象。
+// ConvertPrivateKey 将 PEM 编码的 PKCS#1 RSA 私钥解析为 *rsa.PrivateKey。
+//
+// 输入必须是类型为 RSA PRIVATE KEY 的 PEM block；其他 PEM 类型或解析失败时返回错误。
 //
 // 参数：
-//   - privateKey：PEM 格式的私钥字节数组。
+//   - privateKey：PEM 编码的私钥字节切片，且 PEM block 类型必须为 RSA PRIVATE KEY。
 //
 // 返回值：
-//   - *rsa.PrivateKey：转换后的 RSA 私钥对象。
-//   - error：转换过程中可能发生的错误。
+//   - *rsa.PrivateKey：解析成功后的 RSA 私钥对象。
+//   - error：PEM 解码失败、block 类型不匹配或 PKCS#1 私钥解析失败时返回错误。
 func ConvertPrivateKey(privateKey []byte) (*rsa.PrivateKey, error) {
 	// 声明私钥和错误变量。
 	var priv *rsa.PrivateKey

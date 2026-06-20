@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package redis 提供了 Redis 操作的扩展功能实现。
 package redis
 
 import (
@@ -58,22 +57,26 @@ type (
 		//   - *Cmd：命令执行结果
 		Expire(ctx context.Context, key string, expiration time.Duration) *Cmd
 
-		// ScriptFlush 清空脚本缓存。
+		// ScriptFlush 按底层客户端暴露的能力清空脚本缓存。
+		//
+		// 当底层 Redis 实现提供 ScriptFlush(context.Context) *StatusCmd 时委托调用；否则返回 nil，调用方应处理 nil 返回值。
 		//
 		// 参数：
-		//   - ctx：上下文对象，用于控制命令的执行
+		//   - ctx：上下文对象，用于控制命令的执行。
 		//
 		// 返回值：
-		//   - *StatusCmd：命令执行状态
+		//   - *StatusCmd：底层支持脚本缓存管理时返回对应命令；否则返回 nil。
 		ScriptFlush(ctx context.Context) *StatusCmd
 
-		// ScriptKill 终止当前正在执行的脚本。
+		// ScriptKill 按底层客户端暴露的能力终止当前正在执行的脚本。
+		//
+		// 当底层 Redis 实现提供 ScriptKill(context.Context) *StatusCmd 时委托调用；否则返回 nil，调用方应处理 nil 返回值。
 		//
 		// 参数：
-		//   - ctx：上下文对象，用于控制命令的执行
+		//   - ctx：上下文对象，用于控制命令的执行。
 		//
 		// 返回值：
-		//   - *StatusCmd：命令执行状态
+		//   - *StatusCmd：底层支持脚本终止能力时返回对应命令；否则返回 nil。
 		ScriptKill(ctx context.Context) *StatusCmd
 	}
 
@@ -355,13 +358,15 @@ func (r *redisExtension) Expire(ctx context.Context, key string, expiration time
 	return r.redis.Do(ctx, redisExpireArgs(key, expiration)...)
 }
 
-// ScriptFlush 清空脚本缓存。
+// ScriptFlush 按底层客户端暴露的能力清空脚本缓存。
+//
+// 当底层 Redis 实现提供 ScriptFlush(context.Context) *StatusCmd 时委托调用；否则返回 nil，调用方应处理 nil 返回值。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制命令的执行
+//   - ctx：上下文对象，用于控制命令的执行。
 //
 // 返回值：
-//   - *StatusCmd：命令执行状态
+//   - *StatusCmd：底层支持脚本缓存管理时返回对应命令；否则返回 nil。
 func (r *redisExtension) ScriptFlush(ctx context.Context) *StatusCmd {
 	if scriptFlusher, ok := r.redis.(interface {
 		ScriptFlush(context.Context) *StatusCmd
@@ -371,13 +376,15 @@ func (r *redisExtension) ScriptFlush(ctx context.Context) *StatusCmd {
 	return nil
 }
 
-// ScriptKill 终止当前正在执行的脚本。
+// ScriptKill 按底层客户端暴露的能力终止当前正在执行的脚本。
+//
+// 当底层 Redis 实现提供 ScriptKill(context.Context) *StatusCmd 时委托调用；否则返回 nil，调用方应处理 nil 返回值。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制命令的执行
+//   - ctx：上下文对象，用于控制命令的执行。
 //
 // 返回值：
-//   - *StatusCmd：命令执行状态
+//   - *StatusCmd：底层支持脚本终止能力时返回对应命令；否则返回 nil。
 func (r *redisExtension) ScriptKill(ctx context.Context) *StatusCmd {
 	if scriptKiller, ok := r.redis.(interface {
 		ScriptKill(context.Context) *StatusCmd
