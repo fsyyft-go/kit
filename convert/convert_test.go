@@ -13,7 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// 测试 ToInt, ToInt8, ToInt16, ToInt32, ToInt64
+// TestToIntFamily 验证带 error 的有符号整数转换函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToIntFamily(t *testing.T) {
 	type testCase struct {
 		name    string
@@ -94,7 +97,10 @@ func TestToIntFamily(t *testing.T) {
 	}
 }
 
-// 测试 ToUint, ToUint8, ToUint16, ToUint32, ToUint64
+// TestToUintFamily 验证带 error 的无符号整数转换函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToUintFamily(t *testing.T) {
 	type testCase struct {
 		name    string
@@ -163,7 +169,10 @@ func TestToUintFamily(t *testing.T) {
 	}
 }
 
-// 测试 ToFloat32, ToFloat64
+// TestToFloatFamily 验证带 error 的浮点数转换函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToFloatFamily(t *testing.T) {
 	type testCase struct {
 		name    string
@@ -214,7 +223,10 @@ func TestToFloatFamily(t *testing.T) {
 	}
 }
 
-// 测试 ToBool
+// TestToBool 验证带 error 的布尔转换函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToBool(t *testing.T) {
 	type testCase struct {
 		name   string
@@ -244,7 +256,10 @@ func TestToBool(t *testing.T) {
 	}
 }
 
-// 测试 ToString
+// TestToString 验证带 error 的字符串转换函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToString(t *testing.T) {
 	type testCase struct {
 		name   string
@@ -269,7 +284,10 @@ func TestToString(t *testing.T) {
 	}
 }
 
-// 测试 ToTime, ToDuration
+// TestToTimeAndDuration 验证带 error 的时间和时长转换函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToTimeAndDuration(t *testing.T) {
 	type testCase struct {
 		name      string
@@ -312,7 +330,10 @@ func TestToTimeAndDuration(t *testing.T) {
 	}
 }
 
-// 测试 ToBytes, ToRunes
+// TestToBytesAndRunes 验证带 error 的字节切片和 rune 切片转换函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToBytesAndRunes(t *testing.T) {
 	// 测试字符串转字节和 rune
 	b, err := ToBytes("abc")
@@ -324,7 +345,10 @@ func TestToBytesAndRunes(t *testing.T) {
 	assert.Equal(t, []rune{'a', 'b', 'c'}, r)
 }
 
-// 测试 ToSliceAny, ToSlice, ToSliceInt, ToSliceInt32, ToSliceInt64, ToSliceUint, ToSliceUint32, ToSliceUint64, ToSliceFloat32, ToSliceFloat64, ToSliceStr
+// TestToSliceFamily 验证带 error 的切片转换函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToSliceFamily(t *testing.T) {
 	input := []any{"1", 2, 3.0}
 
@@ -379,7 +403,10 @@ func TestToSliceFamily(t *testing.T) {
 	assert.Equal(t, []string{"1", "2", "3"}, vs)
 }
 
-// 测试 ToSliceMap, ToSliceAnyMap
+// TestToSliceMapFamily 验证带 error 的 map 切片转换函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToSliceMapFamily(t *testing.T) {
 	input := []map[string]any{
 		{"a": 1},
@@ -394,7 +421,10 @@ func TestToSliceMapFamily(t *testing.T) {
 	assert.Equal(t, input, v2)
 }
 
-// 测试 ToMap, ToMapStrAny, ToMapStrStr
+// TestToMapFamily 验证带 error 的 map 转换函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToMapFamily(t *testing.T) {
 	type User struct {
 		Name string `json:"name"`
@@ -415,7 +445,10 @@ func TestToMapFamily(t *testing.T) {
 	assert.Equal(t, map[string]string{"name": "John", "age": "28"}, m3)
 }
 
-// 测试 ToStruct, ToStructs
+// TestToStructFamily 验证结构体和结构体切片填充函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestToStructFamily(t *testing.T) {
 	type User struct {
 		Name string `json:"name"`
@@ -438,7 +471,10 @@ func TestToStructFamily(t *testing.T) {
 	assert.Equal(t, []User{{"Tom", 30}, {"Jerry", 25}}, users)
 }
 
-// Int/Int8/Int16/Int32/Int64 无 error 版本测试
+// TestIntFamily_NoError 验证无 error 的有符号整数包装函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestIntFamily_NoError(t *testing.T) {
 	type testCase struct {
 		name    string
@@ -480,7 +516,10 @@ func TestIntFamily_NoError(t *testing.T) {
 	}
 }
 
-// Uint/Uint8/Uint16/Uint32/Uint64 无 error 版本测试
+// TestUintFamily_NoError 验证无 error 的无符号整数包装函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestUintFamily_NoError(t *testing.T) {
 	type testCase struct {
 		name    string
@@ -517,7 +556,10 @@ func TestUintFamily_NoError(t *testing.T) {
 	}
 }
 
-// Float32/Float64 无 error 版本测试
+// TestFloatFamily_NoError 验证无 error 的浮点数包装函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestFloatFamily_NoError(t *testing.T) {
 	type testCase struct {
 		name    string
@@ -551,7 +593,10 @@ func TestFloatFamily_NoError(t *testing.T) {
 	}
 }
 
-// Bool 无 error 版本测试
+// TestBool_NoError 验证无 error 的布尔包装函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestBool_NoError(t *testing.T) {
 	type testCase struct {
 		name   string
@@ -574,7 +619,10 @@ func TestBool_NoError(t *testing.T) {
 	}
 }
 
-// String 无 error 版本测试
+// TestString_NoError 验证无 error 的字符串包装函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestString_NoError(t *testing.T) {
 	type testCase struct {
 		name   string
@@ -598,7 +646,10 @@ func TestString_NoError(t *testing.T) {
 	}
 }
 
-// Time/Duration 无 error 版本测试
+// TestTimeAndDuration_NoError 验证无 error 的时间和时长包装函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestTimeAndDuration_NoError(t *testing.T) {
 	tm := time.Now()
 	dur := 2 * time.Hour
@@ -616,7 +667,10 @@ func TestTimeAndDuration_NoError(t *testing.T) {
 	})
 }
 
-// Bytes/Runes 无 error 版本测试
+// TestBytesAndRunes_NoError 验证无 error 的字节切片和 rune 切片包装函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestBytesAndRunes_NoError(t *testing.T) {
 	// 正常输入
 	assert.Equal(t, []byte{'a', 'b', 'c'}, Bytes("abc"))
@@ -627,7 +681,10 @@ func TestBytesAndRunes_NoError(t *testing.T) {
 	assert.Equal(t, []rune{'1', '2', '3'}, Runes(123))
 }
 
-// SliceAny/Slice/SliceInt/SliceInt32/SliceInt64/SliceUint/SliceUint32/SliceUint64/SliceFloat32/SliceFloat64/SliceStr 无 error 版本测试
+// TestSliceFamily_NoError 验证无 error 的切片包装函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestSliceFamily_NoError(t *testing.T) {
 	input := []any{"1", 2, 3.0}
 	assert.Equal(t, input, SliceAny(input))
@@ -645,7 +702,10 @@ func TestSliceFamily_NoError(t *testing.T) {
 	assert.Nil(t, SliceInt([]any{"a", "b"}))
 }
 
-// SliceMap/SliceAnyMap 无 error 版本测试
+// TestSliceMapFamily_NoError 验证无 error 的 map 切片包装函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestSliceMapFamily_NoError(t *testing.T) {
 	input := []map[string]any{{"a": 1}, {"b": 2}}
 	assert.Equal(t, input, SliceMap(input))
@@ -654,7 +714,10 @@ func TestSliceMapFamily_NoError(t *testing.T) {
 	assert.Equal(t, []map[string]any{nil, nil}, SliceMap([]any{"a", "b"}))
 }
 
-// Map/MapStrAny/MapStrStr 无 error 版本测试
+// TestMapFamily_NoError 验证无 error 的 map 包装函数。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
 func TestMapFamily_NoError(t *testing.T) {
 	type User struct {
 		Name string `json:"name"`
