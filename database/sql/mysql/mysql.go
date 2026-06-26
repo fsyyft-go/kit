@@ -19,7 +19,9 @@ import (
 	kitlog "github.com/fsyyft-go/kit/log"
 )
 
-// 用于保护驱动注册过程的互斥锁。
+// driverLocker 保护 driver 注册流程，避免同一进程内并发注册相同名称的 MySQL driver。
+//
+// sqlOpen、closeDB 和 newLogger 保存构造流程中的可替换入口，测试可替换这些变量以避免真实打开数据库、观察 cleanup 行为或模拟 logger 构造失败。
 var (
 	driverLocker sync.Mutex
 	sqlOpen      = sql.Open
@@ -27,17 +29,16 @@ var (
 	newLogger    = func() (kitlog.Logger, error) { return kitlog.NewLogger() }
 )
 
-// MySQL 连接的默认配置值。
 var (
-	// 默认的数据源名称（DSN）。
+	// defaultDSN 是 NewMySQL 未显式配置 DSN 时使用的默认数据源名称。
 	defaultDSN = "test:test@tcp(localhost:3306)/test?parseTime=true&loc=Local&allowNativePasswords=true&interpolateParams=true"
-	// 默认的连接空闲超时时间。
+	// defaultPoolIdleTime 是连接可被复用的默认最大生命周期，最终传给 (*sql.DB).SetConnMaxLifetime。
 	defaultPoolIdleTime = 10 * time.Second
-	// 默认的连接最大空闲时间。
+	// defaultPoolMaxIdleTime 是空闲连接在连接池中保留的默认最长时间，最终传给 (*sql.DB).SetConnMaxIdleTime。
 	defaultPoolMaxIdleTime = 10 * time.Second
-	// 默认的最大打开连接数。
+	// defaultPoolMaxOpenConns 是连接池默认允许同时打开的最大连接数。
 	defaultPoolMaxOpenConns = 100
-	// 默认的最大空闲连接数。
+	// defaultPoolMaxIdleConns 是连接池默认保留的最大空闲连接数。
 	defaultPoolMaxIdleConns = 10
 )
 
@@ -47,31 +48,34 @@ type (
 	// MySQLOptions 通常通过 MySQLOption 函数组合填充，而不是由调用方直接操作
 	// 内部字段。NewMySQL 会先建立一份默认配置，再按传入顺序应用这些选项。
 	MySQLOptions struct {
-		// dns 定义数据库的连接字符串。
+		// dns 保存传递给 go-sql-driver/mysql 的 DSN 字符串。
 		dns string
-		// poolIdleTime 定义连接的最大生命周期。
+		// poolIdleTime 定义连接可被复用的最大生命周期。
 		poolIdleTime time.Duration
-		// poolMaxIdleTime 定义连接的最大空闲时长。
+		// poolMaxIdleTime 定义空闲连接在连接池中保留的最长时间。
 		poolMaxIdleTime time.Duration
 		// poolMaxOpenConns 定义连接池中允许的最大打开连接数。
 		poolMaxOpenConns int
 		// poolMaxIdleConns 定义连接池中允许的最大空闲连接数。
 		poolMaxIdleConns int
-		// hook 用于管理数据库操作的钩子函数。
+		// hook 用于管理数据库操作的 Hook 链。
 		hook *kitdriver.HookManager
-		// namespace 定义数据库连接的命名空间。
+		// namespace 定义当前配置对应的 driver 注册命名空间。
 		namespace string
-		// logger 用于记录数据库操作日志。
+		// logger 用于记录构造阶段错误以及自动日志 Hook 产生的日志。
 		logger kitlog.Logger
-		// logError 控制是否记录错误日志。
+		// logError 控制是否在自动 HookManager 中安装错误日志 Hook。
 		logError bool
-		// slowThreshold 定义慢查询的时间阈值。
+		// slowThreshold 定义自动慢操作日志 Hook 的耗时阈值。
 		slowThreshold time.Duration
 	}
 
 	// MySQLOption 定义按引用修改 MySQLOptions 的函数式选项。
 	//
 	// 多个选项按传入顺序应用，后面的设置会覆盖前面的同类配置。
+	//
+	// 参数：
+	//   - *MySQLOptions: 待修改的 MySQL 构造配置；调用方不应直接传入 nil。
 	MySQLOption func(*MySQLOptions)
 )
 
@@ -81,10 +85,10 @@ type (
 // 本选项本身不执行格式检查。
 //
 // 参数：
-//   - dsn：数据库连接字符串，例如 "user:password@tcp(host:port)/dbname?param=value"。
+//   - dsn: 数据库连接字符串，例如 "user:password@tcp(host:port)/dbname?param=value"。
 //
-// 返回值：
-//   - MySQLOption：设置 DSN 的配置函数。
+// 返回：
+//   - MySQLOption: 设置 DSN 的配置函数。
 func WithDSN(dsn string) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.dns = dsn
@@ -98,11 +102,11 @@ func WithDSN(dsn string) MySQLOption {
 // 为空时保持基础 DSN 原样不变。
 //
 // 参数：
-//   - baseDSN：基础 DSN；为空时使用包内默认 DSN。
-//   - params：要追加的 DSN 查询参数。
+//   - baseDSN: 基础 DSN；为空时使用包内默认 DSN。
+//   - params: 要追加的 DSN 查询参数；为空时不追加查询串。
 //
-// 返回值：
-//   - MySQLOption：设置 DSN 的配置函数。
+// 返回：
+//   - MySQLOption: 设置 DSN 的配置函数。
 func WithDSNParams(baseDSN string, params map[string]string) MySQLOption {
 	return func(o *MySQLOptions) {
 		if baseDSN == "" {
@@ -129,7 +133,13 @@ func WithDSNParams(baseDSN string, params map[string]string) MySQLOption {
 
 // WithPoolIdleTime 设置 NewMySQL 创建的 *sql.DB 的连接最大生命周期。
 //
-// 该选项最终映射到 (*sql.DB).SetConnMaxLifetime。
+// 该选项最终映射到 (*sql.DB).SetConnMaxLifetime。非正值的含义沿用标准库 database/sql。
+//
+// 参数：
+//   - idleTime: 连接可被复用的最长时间。
+//
+// 返回：
+//   - MySQLOption: 设置连接最大生命周期的配置函数。
 func WithPoolIdleTime(idleTime time.Duration) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.poolIdleTime = idleTime
@@ -138,7 +148,13 @@ func WithPoolIdleTime(idleTime time.Duration) MySQLOption {
 
 // WithPoolMaxIdleTime 设置 NewMySQL 创建的 *sql.DB 的连接最大空闲时长。
 //
-// 该选项最终映射到 (*sql.DB).SetConnMaxIdleTime。
+// 该选项最终映射到 (*sql.DB).SetConnMaxIdleTime。非正值的含义沿用标准库 database/sql。
+//
+// 参数：
+//   - maxIdleTime: 空闲连接在连接池中保留的最长时间。
+//
+// 返回：
+//   - MySQLOption: 设置连接最大空闲时长的配置函数。
 func WithPoolMaxIdleTime(maxIdleTime time.Duration) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.poolMaxIdleTime = maxIdleTime
@@ -146,6 +162,14 @@ func WithPoolMaxIdleTime(maxIdleTime time.Duration) MySQLOption {
 }
 
 // WithPoolMaxOpenConns 设置 NewMySQL 创建的 *sql.DB 的最大打开连接数。
+//
+// 该选项最终映射到 (*sql.DB).SetMaxOpenConns。非正值的含义沿用标准库 database/sql。
+//
+// 参数：
+//   - maxOpenConns: 连接池允许同时打开的最大连接数。
+//
+// 返回：
+//   - MySQLOption: 设置最大打开连接数的配置函数。
 func WithPoolMaxOpenConns(maxOpenConns int) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.poolMaxOpenConns = maxOpenConns
@@ -153,16 +177,30 @@ func WithPoolMaxOpenConns(maxOpenConns int) MySQLOption {
 }
 
 // WithPoolMaxIdleConns 设置 NewMySQL 创建的 *sql.DB 的最大空闲连接数。
+//
+// 该选项最终映射到 (*sql.DB).SetMaxIdleConns。非正值与超过最大打开连接数时的行为沿用标准库 database/sql。
+//
+// 参数：
+//   - maxIdleConns: 连接池允许保留的最大空闲连接数。
+//
+// 返回：
+//   - MySQLOption: 设置最大空闲连接数的配置函数。
 func WithPoolMaxIdleConns(maxIdleConns int) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.poolMaxIdleConns = maxIdleConns
 	}
 }
 
-// WithNamespace 设置当前配置对应的驱动注册命名空间。
+// WithNamespace 设置当前配置对应的 driver 注册命名空间。
 //
 // NewMySQL 会使用 "mysql-kit-<namespace>" 作为 driver 名称；同一 namespace
 // 的后续调用会复用已注册的 driver 与其初次注册时确定的 Hook 配置。
+//
+// 参数：
+//   - namespace: driver 注册命名空间；空字符串会生成 "mysql-kit-"。
+//
+// 返回：
+//   - MySQLOption: 设置命名空间的配置函数。
 func WithNamespace(namespace string) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.namespace = namespace
@@ -173,6 +211,12 @@ func WithNamespace(namespace string) MySQLOption {
 //
 // 该 logger 用于记录 DSN 校验失败、sql.Open 失败和 cleanup 关闭失败，
 // 也会在自动安装 HookLogError 或 HookLogSlow 时复用。
+//
+// 参数：
+//   - logger: 用于输出日志的 kit logger；传入 nil 时仅在需要自动日志 Hook 时尝试创建默认 logger。
+//
+// 返回：
+//   - MySQLOption: 设置 logger 的配置函数。
 func WithLogger(logger kitlog.Logger) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.logger = logger
@@ -183,6 +227,12 @@ func WithLogger(logger kitlog.Logger) MySQLOption {
 //
 // 该选项只在 NewMySQL 首次为某个 namespace 注册 driver 且未显式提供
 // WithHookManager 时生效。
+//
+// 参数：
+//   - logError: 为 true 时启用错误日志 Hook；为 false 时不自动安装。
+//
+// 返回：
+//   - MySQLOption: 设置错误日志 Hook 开关的配置函数。
 func WithLogError(logError bool) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.logError = logError
@@ -193,6 +243,13 @@ func WithLogError(logError bool) MySQLOption {
 //
 // 该选项只在 NewMySQL 首次为某个 namespace 注册 driver 且未显式提供
 // WithHookManager 时生效；当操作耗时大于等于该阈值时会记录 Warn 日志。
+// 非正值表示不自动安装慢操作日志 Hook。
+//
+// 参数：
+//   - slowThreshold: 慢操作耗时阈值。
+//
+// 返回：
+//   - MySQLOption: 设置慢操作阈值的配置函数。
 func WithSlowThreshold(slowThreshold time.Duration) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.slowThreshold = slowThreshold
@@ -201,8 +258,14 @@ func WithSlowThreshold(slowThreshold time.Duration) MySQLOption {
 
 // WithHookManager 指定一个自定义 HookManager 供驱动包装使用。
 //
-// 提供该选项后，NewMySQL 不会再为当前调用自动安装 HookLogError 或 HookLogSlow；
-// 调用方需要自行向该管理器注册所需 Hook。
+// 传入非 nil HookManager 后，NewMySQL 不会再为当前调用自动安装 HookLogError 或 HookLogSlow；
+// 调用方需要自行向该管理器注册所需 Hook。传入 nil 等价于未指定。
+//
+// 参数：
+//   - hook: 用于包装 driver 的 HookManager；调用方应传入非 nil 实例。
+//
+// 返回：
+//   - MySQLOption: 设置 HookManager 的配置函数。
 func WithHookManager(hook *kitdriver.HookManager) MySQLOption {
 	return func(o *MySQLOptions) {
 		o.hook = hook
@@ -221,12 +284,12 @@ func WithHookManager(hook *kitdriver.HookManager) MySQLOption {
 // WithSlowThreshold 不会重新装配已注册 driver。
 //
 // 参数：
-//   - opts：按顺序应用的 MySQL 构造选项。
+//   - opts: 按顺序应用的 MySQL 构造选项。
 //
-// 返回值：
-//   - *sql.DB：创建成功的数据库句柄。
-//   - func()：清理函数，内部调用 db.Close；调用方在不再使用时应负责调用 cleanup 或等价的 db.Close。
-//   - error：DSN 校验失败、自动创建 logger 失败、sql.Open 失败，或驱动注册前 Hook 配置失败时返回错误。
+// 返回：
+//   - *sql.DB: 创建成功的数据库句柄，由调用方负责在不再使用时关闭。
+//   - func(): 清理函数，内部调用 db.Close；关闭失败时吞掉错误，并在 logger 非 nil 时记录错误；需要感知关闭错误的调用方应直接调用 db.Close。
+//   - error: DSN 校验失败、自动创建 logger 失败、sql.Open 失败，或驱动注册前 Hook 配置失败时返回错误。
 func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 	// 加锁保护驱动注册过程。
 	driverLocker.Lock()
@@ -299,14 +362,14 @@ func NewMySQL(opts ...MySQLOption) (*sql.DB, func(), error) {
 	return db, cleanup, err
 }
 
-// configureHooks 根据 MySQL 选项配置钩子管理器。
+// configureHooks 根据 MySQL 选项配置 HookManager。
 //
 // 参数：
-//   - hook: 需要配置的钩子管理器。
-//   - opts: MySQL 配置选项。
+//   - hook: 需要配置的 HookManager。
+//   - opts: MySQL 构造配置；当需要自动日志 Hook 且 logger 为空时会写入新建的 logger。
 //
-// 返回值：
-//   - error: 如果配置过程中发生错误，返回相应的错误信息。
+// 返回：
+//   - error: 创建默认 logger 失败时返回错误；不需要默认 logger 或配置成功时返回 nil。
 func configureHooks(hook *kitdriver.HookManager, opts *MySQLOptions) error {
 	var err error
 	if opts.logError || opts.slowThreshold > 0 {

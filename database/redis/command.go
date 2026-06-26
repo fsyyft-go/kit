@@ -9,13 +9,20 @@ import (
 )
 
 var (
-	// ErrNil 当 Get、GetStruct 等方法期望返回非 nil 值但实际返回 nil 时返回此错误。
+	// ErrNil 表示 Redis 命令返回 nil 结果。
+	//
+	// 该错误是 go-redis/v9 的 redis.Nil 别名，常见于 GET 等命令访问不存在的键。
+	// 调用方可以使用 errors.Is 与 ErrNil 或 redis.Nil 判断该场景。
 	ErrNil = redis.Nil
 
-	// ErrClosed 当对已关闭的客户端执行操作时返回此错误。
+	// ErrClosed 表示对已关闭的 Redis 客户端执行操作。
+	//
+	// 该错误是 go-redis/v9 的 redis.ErrClosed 别名，调用方可以据此区分连接生命周期错误。
 	ErrClosed = redis.ErrClosed
 
-	// TxFailedErr 表示 Redis 事务执行失败的错误。
+	// TxFailedErr 表示 Redis 事务监视条件不满足导致事务执行失败。
+	//
+	// 该错误是 go-redis/v9 的 redis.TxFailedErr 别名，通常由 WATCH 相关事务在提交阶段返回。
 	TxFailedErr = redis.TxFailedErr //nolint:errname
 )
 
@@ -78,7 +85,7 @@ type (
 	// BoolSliceCmd 表示返回布尔切片类型的 Redis 命令。
 	BoolSliceCmd = redis.BoolSliceCmd
 
-	// MapStringStringCmd 表示返回字符串到字符串映射类型的 Redis 命令。
+	// MapStringStringCmd 表示返回字符串到字符串映射切片类型的 Redis 命令。
 	MapStringStringCmd = redis.MapStringStringSliceCmd
 
 	// MapStringIntCmd 表示返回字符串到整数映射类型的 Redis 命令。
