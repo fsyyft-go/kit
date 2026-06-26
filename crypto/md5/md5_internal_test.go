@@ -2,9 +2,9 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// 内部测试包，可以访问 md5 包的内部实现。
-// 该文件使用与被测试包相同的包名，可以直接访问未导出的函数和变量。
 package md5
+
+// 本文件使用与被测试包相同的包名，便于替换未导出的 writeString 并覆盖错误分支。
 
 import (
 	"errors"

@@ -12,23 +12,26 @@ import (
 )
 
 const (
-	// BlockTypePublicKey 定义了 PEM 编码中公钥块的类型标识。
+	// BlockTypePublicKey 是本包接受和输出的 PKIX 公钥 PEM block 类型。
 	BlockTypePublicKey = "PUBLIC KEY"
 )
 
 var (
-	// ErrDecodePublicKey 表示公钥解析失败时返回的错误。
+	// ErrDecodePublicKey 表示 PEM 公钥解码失败或解析结果不是 RSA 公钥。
+	//
+	// 当输入不是 PEM、PEM block type 不是 PUBLIC KEY，或 PKIX 公钥可解析但不是 *rsa.PublicKey 时返回该错误。
+	// PEM type 正确但 DER 内容非法时会透传 x509 解析错误。调用方可以使用 errors.Is 判断该错误。
 	ErrDecodePublicKey = errors.New("公钥不正确。")
 )
 
-// convertPublicKey 将 PEM 格式的公钥字节数据转换为 RSA 公钥对象。
+// convertPublicKey 将 PEM 编码的 PKIX PUBLIC KEY 数据解析为 *rsa.PublicKey。
 //
 // 参数：
-//   - publicKey：PEM 格式的公钥字节数据。
+//   - publicKey: PEM 编码的公钥字节切片，且 PEM block 类型必须为 PUBLIC KEY。
 //
-// 返回值：
-//   - *rsa.PublicKey：转换后的 RSA 公钥对象。
-//   - error：转换过程中可能发生的错误。
+// 返回：
+//   - *rsa.PublicKey: 解析成功后的 RSA 公钥对象。
+//   - error: PEM 解码失败、block 类型不匹配、PKIX 解析失败或解析结果不是 RSA 公钥时返回错误；非 RSA 公钥可使用 errors.Is 判断 ErrDecodePublicKey。
 func convertPublicKey(publicKey []byte) (*rsa.PublicKey, error) {
 	var pub *rsa.PublicKey
 	var err error
@@ -55,11 +58,11 @@ func convertPublicKey(publicKey []byte) (*rsa.PublicKey, error) {
 // 返回的字节切片可供本包接受 PEM 公钥输入的解析与加密入口复用。
 //
 // 参数：
-//   - publicKey：待编码的 RSA 公钥对象。
+//   - publicKey: 待编码的 RSA 公钥对象，必须包含有效模数和指数。
 //
-// 返回值：
-//   - []byte：PKIX PUBLIC KEY 格式的 PEM 字节切片。
-//   - error：公钥编码失败时返回错误。
+// 返回：
+//   - []byte: PKIX PUBLIC KEY 格式的 PEM 字节切片。
+//   - error: 公钥对象无效或 PKIX 编码失败时返回错误。
 func ConvertPubKey(publicKey *rsa.PublicKey) ([]byte, error) {
 	var pubKey []byte
 	var err error

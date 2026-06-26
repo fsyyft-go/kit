@@ -2,8 +2,9 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// md5_test 基准测试包，用于评估 md5 包中函数的性能。
 package md5_test
+
+// 本文件提供 md5 包公开函数在不同输入规模下的基准测试。
 
 import (
 	"testing"

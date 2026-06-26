@@ -2,8 +2,10 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+package rsa
+
 /*
-该测试文件用于测试RSA加密解密功能。
+该测试文件用于测试 RSA 加密解密功能。
 
 设计思路：
 1. 使用表格驱动测试方法，提高测试可维护性和可读性。
@@ -16,8 +18,6 @@
 2. 使用 `go test -v -cover ./crypto/rsa` 查看测试覆盖率。
 3. 针对特定测试使用 `go test -v -run TestFunctionName ./crypto/rsa`。
 */
-
-package rsa
 
 import (
 	"bytes"
