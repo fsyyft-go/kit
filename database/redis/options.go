@@ -5,40 +5,40 @@
 package redis
 
 type (
-	// Option 定义了 Redis 客户端的配置选项类型。
-	// 用于在创建 Redis 客户端时进行自定义配置。
+	// Option 定义 NewRedis 的函数式配置项。
+	//
+	// 参数：
+	//   - *redisClient: 待修改的 Redis 客户端配置实例，调用方不应直接传入 nil。
 	Option func(*redisClient)
 )
 
-// 以下为 Redis 客户端的默认参数配置。
-// 可通过 Option 机制覆盖。
 var (
-	// addrDefault 为 Redis 服务器默认地址。
+	// addrDefault 是 NewRedis 未显式配置地址时使用的 Redis 服务地址。
 	addrDefault = "127.0.0.1:6379"
-	// passwordDefault 为 Redis 服务器默认密码。
+	// passwordDefault 是 NewRedis 未显式配置密码时使用的 Redis 认证密码。
 	passwordDefault = "redis*2025"
 )
 
-// WithAddr 设置 Redis 服务器的地址。
+// WithAddr 设置 Redis 服务器地址。
 //
 // 参数：
-//   - addr：Redis 服务器的地址，格式为 "host:port"
+//   - addr: Redis 服务器地址，格式通常为 "host:port"。
 //
-// 返回值：
-//   - Option：配置选项函数
+// 返回：
+//   - Option: 应用于 NewRedis 的地址配置项。
 func WithAddr(addr string) Option {
 	return func(o *redisClient) {
 		o.addr = addr
 	}
 }
 
-// WithPassword 设置连接 Redis 服务器的密码。
+// WithPassword 设置 Redis 服务器认证密码。
 //
 // 参数：
-//   - password：Redis 服务器的认证密码
+//   - password: Redis 服务器认证密码；为空字符串表示不发送密码。
 //
-// 返回值：
-//   - Option：配置选项函数
+// 返回：
+//   - Option: 应用于 NewRedis 的密码配置项。
 func WithPassword(password string) Option {
 	return func(o *redisClient) {
 		o.password = password

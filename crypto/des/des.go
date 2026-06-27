@@ -14,22 +14,30 @@ var (
 	defaultDESKey = "go-kit-k"
 )
 
-// GetDefaultDESKey 返回默认的 DES 密钥。
+// GetDefaultDESKey 返回包内置的默认 DES 密钥。
+//
+// 该密钥仅供历史兼容包装函数复用，不应被视为新的安全默认配置。
+//
+// 参数：无。
 //
 // 返回：
-//   - string：默认的 DES 密钥。
+//   - string: 供历史兼容包装函数复用的默认 DES 密钥。
 func GetDefaultDESKey() string {
 	return defaultDESKey
 }
 
-// PKCS7Padding 使用 PKCS7 标准对数据进行填充。
+// PKCS7Padding 使用 PKCS7 标准对 data 进行填充。
+//
+// blockSize 必须大于 0，且填充长度需要能放入单字节；函数不会对该约束做显式校验，
+// 传入非法 blockSize 可能导致 panic 或产生不可逆的填充数据。返回切片通过 append 构造，
+// 在容量允许时可能与 data 共享底层数组。
 //
 // 参数：
-//   - data：需要填充的原始数据。
-//   - blockSize：加密块的大小（以字节为单位）。
+//   - data: 需要填充的原始数据，可为空。
+//   - blockSize: 加密块大小，单位为字节；用于计算需要追加的 PKCS7 填充长度。
 //
 // 返回：
-//   - []byte：完成填充后的数据。
+//   - []byte: 追加 PKCS7 padding 后的数据。
 func PKCS7Padding(data []byte, blockSize int) []byte {
 	// PKCS7 填充规则说明：
 	// 1. 如果数据长度小于块大小，填充的值为"缺少的字节数"。
@@ -52,14 +60,18 @@ func PKCS7Padding(data []byte, blockSize int) []byte {
 	return d
 }
 
-// PKCS7UnPadding 对使用 PKCS7 标准填充的数据进行去填充处理。
+// PKCS7UnPadding 对使用 PKCS7 标准填充的 data 进行去填充处理。
+//
+// 函数通过最后一个字节判断 padding 长度，并校验 padding 字节是否全部等于该长度。
+// 由于没有 blockSize 参数，函数不会校验 padding 长度是否不超过加密块大小。
+// 返回的切片是 data 的子切片，会与输入共享底层数组。
 //
 // 参数：
-//   - data：已经填充过的数据。
+//   - data: 已经填充过的数据，长度必须大于 0，最后一个字节用于表示待移除的 padding 长度。
 //
 // 返回：
-//   - []byte：去除填充后的原始数据。
-//   - error：去填充过程中可能发生的错误。
+//   - []byte: 去除 PKCS7 padding 后的原始数据。
+//   - error: data 为空、padding 长度为 0、padding 长度超过 data 长度或 padding 字节不一致时返回错误。
 func PKCS7UnPadding(data []byte) ([]byte, error) {
 	// 获取数据的总长度。
 	length := len(data)

@@ -6,11 +6,14 @@
 
 package goroutine
 
-// GetGoID 获取当前协程的 ID。
-// 此函数在 amd64 架构下使用汇编实现，以获取更高效的性能。
+// GetGoID 返回当前 goroutine 的 ID。
 //
-// 已废弃：请考虑使用其他替代方法获取协程 ID。
+// 该快速路径通过 goid_amd64.s 直接读取当前 runtime.g 的 goid 字段。
+// SAFETY: 此实现依赖 Offset 返回的偏移值与目标 Go 版本的 runtime.g 布局保持一致；
+// 升级 Go 版本后需要同步校验偏移表、汇编代码和配套结构定义。
 //
-// 返回值：
-//   - int64：返回当前协程的 ID。
+// 参数：无。
+//
+// 返回：
+//   - int64：当前 goroutine 的 ID。
 func GetGoID() int64

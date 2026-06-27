@@ -2,448 +2,1333 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-//
-// redis_test.go 设计说明：
-//
-// 本文件用于测试 database/redis 包的核心功能，覆盖 Redis 基础操作与扩展接口。
-// 测试用例采用表格驱动，断言使用 stretchr/testify，便于批量验证多种场景。
-// 所有测试均假定本地 Redis 服务可用，且使用默认配置。
-//
-// 使用方法：
-//   go test -v -cover ./database/redis
-//
-// 主要覆盖内容：
-//   - RedisExtension 基本命令（Get/Set/Del/Expire）
-//   - Redis 接口的 Do/Pipelined/TxPipelined/Subscribe/PSubscribe
-//   - Lua 脚本相关命令
-//   - 错误处理与边界场景
-//
-// 注意：如 Redis 未启动，部分测试会自动跳过。
-
 package redis
 
 import (
+	"bufio"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// testRedisConnected 测试 Redis 连接是否可用。
+type respCommand struct {
+	name string
+	args []string
+}
+
+type respReply struct {
+	kind  string
+	value interface{}
+}
+
+type memoryRedisServer struct {
+	mu      sync.Mutex
+	kv      map[string]string
+	scripts map[string]string
+	records []respCommand
+}
+
+// TestNewRedis_OptionsAndCloseBehavior 验证 Redis 客户端创建、Option 覆盖和关闭后的错误行为。
+//
+// 该测试覆盖默认配置、自定义配置、多次 Option 覆盖，以及关闭客户端后继续执行命令返回 ErrClosed 的行为契约。
 //
 // 参数：
-//   - redis：Redis 扩展实例
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestNewRedis_OptionsAndCloseBehavior(t *testing.T) {
+	tests := []struct {
+		name         string
+		description  string
+		giveOptions  []Option
+		wantAddr     string
+		wantPassword string
+	}{
+		{
+			name:         "success/default-options",
+			description:  "验证 NewRedis 在未传入 Option 时使用包内默认地址和密码。",
+			wantAddr:     addrDefault,
+			wantPassword: passwordDefault,
+		},
+		{
+			name:        "success/custom-address-and-password",
+			description: "验证 WithAddr 与 WithPassword 会覆盖 NewRedis 的默认配置。",
+			giveOptions: []Option{
+				WithAddr("redis.internal:6380"),
+				WithPassword("custom-password"),
+			},
+			wantAddr:     "redis.internal:6380",
+			wantPassword: "custom-password",
+		},
+		{
+			name:        "success/last-option-wins",
+			description: "验证相同 Option 多次传入时最后一次配置生效。",
+			giveOptions: []Option{
+				WithAddr("redis-1.internal:6379"),
+				WithAddr("redis-2.internal:6379"),
+				WithPassword("first-password"),
+				WithPassword("second-password"),
+			},
+			wantAddr:     "redis-2.internal:6379",
+			wantPassword: "second-password",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			client := NewRedis(tt.giveOptions...)
+			require.NotNil(t, client)
+			t.Cleanup(func() {
+				_ = client.Close()
+			})
+
+			redisClient, ok := client.(*redisClient)
+			require.True(t, ok, "NewRedis 应返回 *redisClient 实现")
+			assert.Equal(t, tt.wantAddr, redisClient.addr)
+			assert.Equal(t, tt.wantPassword, redisClient.password)
+
+			require.NoError(t, redisClient.Close())
+			err := redisClient.Do(context.Background(), "PING").Err()
+			assert.ErrorIs(t, err, ErrClosed)
+		})
+	}
+}
+
+// TestRedisClient_CommandDelegation 验证 redisClient 将基础命令委托给 go-redis 客户端。
+//
+// 该测试使用内存 RESP 服务覆盖 Do、Pipelined、TxPipelined、Subscribe、PSubscribe 与 Close，不依赖真实 Redis 服务。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestRedisClient_CommandDelegation(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		assert      func(t *testing.T, ctx context.Context, client *redisClient, server *memoryRedisServer)
+	}{
+		{
+			name:        "success/do",
+			description: "验证 Do 会将命令和参数发送给底层 go-redis 客户端并返回命令结果。",
+			assert: func(t *testing.T, ctx context.Context, client *redisClient, server *memoryRedisServer) {
+				got, err := client.Do(ctx, "SET", "client:do:key", "value").Result()
+				require.NoError(t, err)
+				assert.Equal(t, "OK", got)
+				assert.True(t, server.hasCommand("SET", "client:do:key", "value"))
+			},
+		},
+		{
+			name:        "success/pipelined",
+			description: "验证 Pipelined 会将闭包中的多个命令作为管道命令执行并返回对应结果。",
+			assert: func(t *testing.T, ctx context.Context, client *redisClient, server *memoryRedisServer) {
+				cmds, err := client.Pipelined(ctx, func(pipe Pipeliner) error {
+					pipe.Do(ctx, "SET", "client:pipeline:key", "pipeline-value")
+					pipe.Do(ctx, "GET", "client:pipeline:key")
+					return nil
+				})
+				require.NoError(t, err)
+				require.Len(t, cmds, 2)
+				got, err := cmds[1].(*Cmd).Result()
+				require.NoError(t, err)
+				assert.Equal(t, "pipeline-value", got)
+				assert.True(t, server.hasCommand("SET", "client:pipeline:key", "pipeline-value"))
+				assert.True(t, server.hasCommand("GET", "client:pipeline:key"))
+			},
+		},
+		{
+			name:        "success/tx-pipelined",
+			description: "验证 TxPipelined 会使用 MULTI/EXEC 事务管道包装闭包中的命令并解析 EXEC 结果。",
+			assert: func(t *testing.T, ctx context.Context, client *redisClient, server *memoryRedisServer) {
+				cmds, err := client.TxPipelined(ctx, func(pipe Pipeliner) error {
+					pipe.Do(ctx, "SET", "client:tx:key", "tx-value")
+					pipe.Do(ctx, "GET", "client:tx:key")
+					return nil
+				})
+				require.NoError(t, err)
+				require.Len(t, cmds, 2)
+				got, err := cmds[1].(*Cmd).Result()
+				require.NoError(t, err)
+				assert.Equal(t, "tx-value", got)
+				assert.True(t, server.hasCommand("MULTI"))
+				assert.True(t, server.hasCommand("EXEC"))
+			},
+		},
+		{
+			name:        "success/subscribe",
+			description: "验证 Subscribe 创建发布订阅连接并接收服务端订阅确认消息。",
+			assert: func(t *testing.T, ctx context.Context, client *redisClient, server *memoryRedisServer) {
+				pubSub := client.Subscribe(ctx, "client:channel")
+				require.NotNil(t, pubSub)
+				t.Cleanup(func() {
+					_ = pubSub.Close()
+				})
+
+				got, err := pubSub.ReceiveTimeout(ctx, time.Second)
+				require.NoError(t, err)
+				subscription, ok := got.(*Subscription)
+				require.True(t, ok, "Subscribe 应收到订阅确认")
+				assert.Equal(t, "subscribe", subscription.Kind)
+				assert.Equal(t, "client:channel", subscription.Channel)
+				assert.True(t, server.hasCommand("SUBSCRIBE", "client:channel"))
+			},
+		},
+		{
+			name:        "success/psubscribe",
+			description: "验证 PSubscribe 创建模式订阅连接并接收服务端模式订阅确认消息。",
+			assert: func(t *testing.T, ctx context.Context, client *redisClient, server *memoryRedisServer) {
+				pubSub := client.PSubscribe(ctx, "client:*:channel")
+				require.NotNil(t, pubSub)
+				t.Cleanup(func() {
+					_ = pubSub.Close()
+				})
+
+				got, err := pubSub.ReceiveTimeout(ctx, time.Second)
+				require.NoError(t, err)
+				subscription, ok := got.(*Subscription)
+				require.True(t, ok, "PSubscribe 应收到模式订阅确认")
+				assert.Equal(t, "psubscribe", subscription.Kind)
+				assert.Equal(t, "client:*:channel", subscription.Channel)
+				assert.True(t, server.hasCommand("PSUBSCRIBE", "client:*:channel"))
+			},
+		},
+		{
+			name:        "success/close",
+			description: "验证 Close 会关闭底层 go-redis 客户端，并使后续命令返回 ErrClosed。",
+			assert: func(t *testing.T, ctx context.Context, client *redisClient, _ *memoryRedisServer) {
+				require.NoError(t, client.Close())
+				err := client.Do(ctx, "PING").Err()
+				assert.ErrorIs(t, err, ErrClosed)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			t.Cleanup(cancel)
+			client, server := newMemoryRedisClient(t)
+
+			tt.assert(t, ctx, client, server)
+		})
+	}
+}
+
+// TestRedisClient_ScriptDelegation 验证 redisClient 将脚本相关命令委托给 go-redis 客户端。
+//
+// 该测试通过内存 RESP 服务覆盖 Eval、EvalRO、EvalSha、EvalShaRO、ScriptExists、ScriptLoad、ScriptFlush 与 ScriptKill 的结果解析。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestRedisClient_ScriptDelegation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	t.Cleanup(cancel)
+	client, server := newMemoryRedisClient(t)
+	script := "return ARGV[1]"
+
+	tests := []struct {
+		name        string
+		description string
+		assert      func(t *testing.T)
+	}{
+		{
+			name:        "success/eval",
+			description: "验证 Eval 会发送 EVAL 命令并返回脚本参数结果。",
+			assert: func(t *testing.T) {
+				got, err := client.Eval(ctx, script, []string{}, "eval-value").Result()
+				require.NoError(t, err)
+				assert.Equal(t, "eval-value", got)
+				assert.True(t, server.hasCommand("EVAL", script, "0", "eval-value"))
+			},
+		},
+		{
+			name:        "success/eval-ro",
+			description: "验证 EvalRO 会发送 EVAL_RO 命令并返回只读脚本结果。",
+			assert: func(t *testing.T) {
+				got, err := client.EvalRO(ctx, script, []string{}, "eval-ro-value").Result()
+				require.NoError(t, err)
+				assert.Equal(t, "eval-ro-value", got)
+				assert.True(t, server.hasCommand("EVAL_RO", script, "0", "eval-ro-value"))
+			},
+		},
+		{
+			name:        "success/script-load-and-eval-sha",
+			description: "验证 ScriptLoad 返回脚本 SHA，EvalSha 使用该 SHA 执行脚本并返回参数结果。",
+			assert: func(t *testing.T) {
+				sha, err := client.ScriptLoad(ctx, script).Result()
+				require.NoError(t, err)
+				assert.Equal(t, sha1Hex(script), sha)
+
+				got, err := client.EvalSha(ctx, sha, []string{}, "eval-sha-value").Result()
+				require.NoError(t, err)
+				assert.Equal(t, "eval-sha-value", got)
+				assert.True(t, server.hasCommand("SCRIPT", "load", script))
+				assert.True(t, server.hasCommand("EVALSHA", sha, "0", "eval-sha-value"))
+			},
+		},
+		{
+			name:        "success/eval-sha-ro",
+			description: "验证 EvalShaRO 使用脚本 SHA 发送只读脚本命令并返回参数结果。",
+			assert: func(t *testing.T) {
+				sha, err := client.ScriptLoad(ctx, script).Result()
+				require.NoError(t, err)
+
+				got, err := client.EvalShaRO(ctx, sha, []string{}, "eval-sha-ro-value").Result()
+				require.NoError(t, err)
+				assert.Equal(t, "eval-sha-ro-value", got)
+				assert.True(t, server.hasCommand("EVALSHA_RO", sha, "0", "eval-sha-ro-value"))
+			},
+		},
+		{
+			name:        "success/script-exists",
+			description: "验证 ScriptExists 会发送 SCRIPT EXISTS 并按脚本缓存状态返回布尔切片。",
+			assert: func(t *testing.T) {
+				sha, err := client.ScriptLoad(ctx, script).Result()
+				require.NoError(t, err)
+
+				got, err := client.ScriptExists(ctx, sha, "missing-sha").Result()
+				require.NoError(t, err)
+				assert.Equal(t, []bool{true, false}, got)
+				assert.True(t, server.hasCommand("SCRIPT", "exists", sha, "missing-sha"))
+			},
+		},
+		{
+			name:        "success/script-flush",
+			description: "验证 ScriptFlush 会发送 SCRIPT FLUSH 并返回 OK 状态。",
+			assert: func(t *testing.T) {
+				got, err := client.ScriptFlush(ctx).Result()
+				require.NoError(t, err)
+				assert.Equal(t, "OK", got)
+				assert.True(t, server.hasCommand("SCRIPT", "flush"))
+			},
+		},
+		{
+			name:        "success/script-kill",
+			description: "验证 ScriptKill 会发送 SCRIPT KILL 并返回 OK 状态。",
+			assert: func(t *testing.T) {
+				got, err := client.ScriptKill(ctx).Result()
+				require.NoError(t, err)
+				assert.Equal(t, "OK", got)
+				assert.True(t, server.hasCommand("SCRIPT", "kill"))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+			tt.assert(t)
+		})
+	}
+}
+
+// TestRedisExtension_CommandArguments 验证 RedisExtension 基础扩展命令的参数组合。
+//
+// 该测试通过 fake Redis 捕获 Do 参数，覆盖 Get、Set、Del、Expire 以及过期时间边界语义。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestRedisExtension_CommandArguments(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		act         func(ext RedisExtension, ctx context.Context)
+		wantArgs    []interface{}
+	}{
+		{
+			name:        "success/get",
+			description: "验证 Get 使用 GET 命令和目标 key 进行委托。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Get(ctx, "extension:get:key")
+			},
+			wantArgs: []interface{}{"GET", "extension:get:key"},
+		},
+		{
+			name:        "success/set-without-expiration",
+			description: "验证 Set 在过期时间为零时不发送 EX/PX 等过期参数。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Set(ctx, "extension:set:key", "value", 0)
+			},
+			wantArgs: []interface{}{"SET", "extension:set:key", "value"},
+		},
+		{
+			name:        "boundary/set-with-negative-expiration",
+			description: "验证 Set 在负过期时间下不发送无效 TTL 参数。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Set(ctx, "extension:set:key", "value", -time.Second)
+			},
+			wantArgs: []interface{}{"SET", "extension:set:key", "value"},
+		},
+		{
+			name:        "success/set-with-integer-seconds",
+			description: "验证 Set 对整秒过期时间使用 Redis EX 和整数秒参数。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Set(ctx, "extension:set:key", "value", 5*time.Second)
+			},
+			wantArgs: []interface{}{"SET", "extension:set:key", "value", "EX", int64(5)},
+		},
+		{
+			name:        "boundary/set-with-subsecond-expiration",
+			description: "验证 Set 对非整秒过期时间使用 PX 和整数毫秒参数，避免发送浮点秒。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Set(ctx, "extension:set:key", "value", 1500*time.Millisecond)
+			},
+			wantArgs: []interface{}{"SET", "extension:set:key", "value", "PX", int64(1500)},
+		},
+		{
+			name:        "boundary/set-with-submillisecond-expiration",
+			description: "验证 Set 对小于一毫秒的正过期时间向上取整为 1 毫秒。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Set(ctx, "extension:set:key", "value", time.Nanosecond)
+			},
+			wantArgs: []interface{}{"SET", "extension:set:key", "value", "PX", int64(1)},
+		},
+		{
+			name:        "success/del",
+			description: "验证 Del 使用 DEL 命令和目标 key 进行委托。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Del(ctx, "extension:del:key")
+			},
+			wantArgs: []interface{}{"DEL", "extension:del:key"},
+		},
+		{
+			name:        "success/expire-with-integer-seconds",
+			description: "验证 Expire 对整秒过期时间发送 EXPIRE 和整数秒参数。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Expire(ctx, "extension:expire:key", 7*time.Second)
+			},
+			wantArgs: []interface{}{"EXPIRE", "extension:expire:key", int64(7)},
+		},
+		{
+			name:        "boundary/expire-with-subsecond-expiration",
+			description: "验证 Expire 对非整秒过期时间发送 PEXPIRE 和整数毫秒参数。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Expire(ctx, "extension:expire:key", 2500*time.Millisecond)
+			},
+			wantArgs: []interface{}{"PEXPIRE", "extension:expire:key", int64(2500)},
+		},
+		{
+			name:        "boundary/expire-with-zero-expiration",
+			description: "验证 Expire 在零过期时间下发送 EXPIRE 0，保持 Redis 立即过期语义。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Expire(ctx, "extension:expire:key", 0)
+			},
+			wantArgs: []interface{}{"EXPIRE", "extension:expire:key", int64(0)},
+		},
+		{
+			name:        "boundary/expire-with-negative-expiration",
+			description: "验证 Expire 在负过期时间下发送 EXPIRE 0，避免错误地移除 key 的 TTL。",
+			act: func(ext RedisExtension, ctx context.Context) {
+				ext.Expire(ctx, "extension:expire:key", -time.Second)
+			},
+			wantArgs: []interface{}{"EXPIRE", "extension:expire:key", int64(0)},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+			ctx := context.Background()
+			fake := newFakeRedis()
+			ext := NewRedisExtension(fake)
+
+			tt.act(ext, ctx)
+
+			require.NotEmpty(t, fake.doCalls)
+			assert.Equal(t, tt.wantArgs, fake.doCalls[len(fake.doCalls)-1])
+		})
+	}
+}
+
+// TestRedisExtension_Delegation 验证 RedisExtension 对基础 Redis 接口和脚本接口的委托。
+//
+// 该测试通过 fake Redis 覆盖 Do、Pipelined、TxPipelined、Subscribe、PSubscribe、Eval 系列、Script 系列和 Close 的委托行为。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestRedisExtension_Delegation(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		assert      func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis)
+	}{
+		{
+			name:        "success/do",
+			description: "验证 Do 会原样委托到底层 Redis 实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				cmd := ext.Do(ctx, "PING")
+				require.NotNil(t, cmd)
+				assert.Equal(t, []interface{}{"PING"}, fake.doCalls[0])
+			},
+		},
+		{
+			name:        "success/pipelined",
+			description: "验证 Pipelined 会把闭包委托到底层 Redis 实现并返回底层结果。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				cmds, err := ext.Pipelined(ctx, func(Pipeliner) error { return nil })
+				require.NoError(t, err)
+				assert.Len(t, cmds, 1)
+				assert.Equal(t, 1, fake.pipelinedCalls)
+			},
+		},
+		{
+			name:        "success/tx-pipelined",
+			description: "验证 TxPipelined 会把事务管道闭包委托到底层 Redis 实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				cmds, err := ext.TxPipelined(ctx, func(Pipeliner) error { return nil })
+				require.NoError(t, err)
+				assert.Len(t, cmds, 1)
+				assert.Equal(t, 1, fake.txPipelinedCalls)
+			},
+		},
+		{
+			name:        "success/subscribe",
+			description: "验证 Subscribe 会将频道列表原样委托到底层 Redis 实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				assert.Same(t, fake.subscribeResult, ext.Subscribe(ctx, "channel-a", "channel-b"))
+				assert.Equal(t, []string{"channel-a", "channel-b"}, fake.subscribeCalls[0])
+			},
+		},
+		{
+			name:        "success/psubscribe",
+			description: "验证 PSubscribe 会将频道模式列表原样委托到底层 Redis 实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				assert.Same(t, fake.psubscribeResult, ext.PSubscribe(ctx, "channel-*"))
+				assert.Equal(t, []string{"channel-*"}, fake.psubscribeCalls[0])
+			},
+		},
+		{
+			name:        "success/eval",
+			description: "验证 Eval 会将脚本、keys 和 args 原样委托到底层 Redis 实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				ext.Eval(ctx, "return 1", []string{"k1"}, "a1")
+				assert.Equal(t, scriptCall{method: "Eval", scriptOrSHA: "return 1", keys: []string{"k1"}, args: []interface{}{"a1"}}, fake.scriptCalls[0])
+			},
+		},
+		{
+			name:        "success/eval-ro",
+			description: "验证 EvalRO 会将只读脚本参数原样委托到底层 Redis 实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				ext.EvalRO(ctx, "return 2", []string{"k2"}, "a2")
+				assert.Equal(t, scriptCall{method: "EvalRO", scriptOrSHA: "return 2", keys: []string{"k2"}, args: []interface{}{"a2"}}, fake.scriptCalls[0])
+			},
+		},
+		{
+			name:        "success/eval-sha",
+			description: "验证 EvalSha 会将 SHA、keys 和 args 原样委托到底层 Redis 实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				ext.EvalSha(ctx, "sha1", []string{"k3"}, "a3")
+				assert.Equal(t, scriptCall{method: "EvalSha", scriptOrSHA: "sha1", keys: []string{"k3"}, args: []interface{}{"a3"}}, fake.scriptCalls[0])
+			},
+		},
+		{
+			name:        "success/eval-sha-ro",
+			description: "验证 EvalShaRO 会将只读 SHA 脚本参数原样委托到底层 Redis 实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				ext.EvalShaRO(ctx, "sha2", []string{"k4"}, "a4")
+				assert.Equal(t, scriptCall{method: "EvalShaRO", scriptOrSHA: "sha2", keys: []string{"k4"}, args: []interface{}{"a4"}}, fake.scriptCalls[0])
+			},
+		},
+		{
+			name:        "success/script-exists",
+			description: "验证 ScriptExists 会将 hash 列表原样委托到底层 Redis 实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				ext.ScriptExists(ctx, "sha-a", "sha-b")
+				assert.Equal(t, []string{"sha-a", "sha-b"}, fake.scriptExistsCalls[0])
+			},
+		},
+		{
+			name:        "success/script-load",
+			description: "验证 ScriptLoad 会将脚本文本原样委托到底层 Redis 实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				ext.ScriptLoad(ctx, "return 'load'")
+				assert.Equal(t, []string{"return 'load'"}, fake.scriptLoadCalls)
+			},
+		},
+		{
+			name:        "success/script-flush-capability",
+			description: "验证 ScriptFlush 通过能力接口委托给非 redisClient 的底层实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				got := ext.ScriptFlush(ctx)
+				require.NotNil(t, got)
+				assert.Equal(t, 1, fake.scriptFlushCalls)
+				assert.Equal(t, "OK", got.Val())
+			},
+		},
+		{
+			name:        "success/script-kill-capability",
+			description: "验证 ScriptKill 通过能力接口委托给非 redisClient 的底层实现。",
+			assert: func(t *testing.T, ctx context.Context, ext RedisExtension, fake *fakeRedis) {
+				got := ext.ScriptKill(ctx)
+				require.NotNil(t, got)
+				assert.Equal(t, 1, fake.scriptKillCalls)
+				assert.Equal(t, "OK", got.Val())
+			},
+		},
+		{
+			name:        "success/close",
+			description: "验证 Close 会委托到底层 Redis 实现。",
+			assert: func(t *testing.T, _ context.Context, ext RedisExtension, fake *fakeRedis) {
+				require.NoError(t, ext.Close())
+				assert.True(t, fake.closed)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+			ctx := context.Background()
+			fake := newFakeRedis()
+			ext := NewRedisExtension(fake)
+
+			tt.assert(t, ctx, ext, fake)
+		})
+	}
+}
+
+// TestRedisExtension_UnsupportedScriptFlushAndKill 验证扩展层对不支持脚本管理能力的兼容行为。
+//
+// 该测试确保底层 Redis 实现未提供 ScriptFlush 或 ScriptKill 能力接口时，扩展层保持历史兼容并返回 nil。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestRedisExtension_UnsupportedScriptFlushAndKill(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		act         func(ext RedisExtension, ctx context.Context) *StatusCmd
+	}{
+		{
+			name:        "success/script-flush-unsupported",
+			description: "验证底层 Redis 不支持 ScriptFlush 能力接口时扩展层返回 nil。",
+			act: func(ext RedisExtension, ctx context.Context) *StatusCmd {
+				return ext.ScriptFlush(ctx)
+			},
+		},
+		{
+			name:        "success/script-kill-unsupported",
+			description: "验证底层 Redis 不支持 ScriptKill 能力接口时扩展层返回 nil。",
+			act: func(ext RedisExtension, ctx context.Context) *StatusCmd {
+				return ext.ScriptKill(ctx)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+			ext := NewRedisExtension(newBasicFakeRedis())
+			assert.Nil(t, tt.act(ext, context.Background()))
+		})
+	}
+}
+
+// newMemoryRedisClient 构造使用内存 RESP 服务的 redisClient。
+//
+// 该辅助函数通过 go-redis 的 Dialer 注入 net.Pipe 连接，使客户端方法在单元测试中无需访问真实 Redis 服务。
+//
+// 参数：
+//   - t: 测试上下文，用于注册清理逻辑并报告构造失败。
 //
 // 返回值：
-//   - bool：如果连接成功返回 true，否则返回 false
-func testRedisConnected(redis RedisExtension) bool {
-	// 设置一个较短的超时时间
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
+//   - *redisClient: 可直接执行 Redis 命令的被测客户端。
+//   - *memoryRedisServer: 捕获命令并返回稳定 RESP 响应的内存服务。
+func newMemoryRedisClient(t *testing.T) (*redisClient, *memoryRedisServer) {
+	t.Helper()
 
-	// 尝试执行一个简单的 PING 命令
-	_, err := redis.Do(ctx, "PING").Result()
-	return err == nil
-}
-
-func TestRedisExtension_Basic(t *testing.T) {
-	redis := NewRedis()
-	redisExtension := NewRedisExtension(redis)
-	if !testRedisConnected(redisExtension) {
-		t.Skip("Redis 连接失败，跳过测试")
+	server := &memoryRedisServer{
+		kv:      make(map[string]string),
+		scripts: make(map[string]string),
 	}
-	ctx := context.Background()
-	t.Run("Set/Get/Del/Expire", func(t *testing.T) {
-		testKey := "test:basic:key"
-		// 表格驱动测试用例
-		tests := []struct {
-			name       string
-			prepare    func()
-			action     func() (interface{}, error)
-			assertFunc func(t *testing.T, got interface{}, err error)
-		}{
-			{
-				name:    "Set",
-				prepare: func() {},
-				action: func() (interface{}, error) {
-					return redisExtension.Set(ctx, testKey, "v1", time.Second*5).Result()
-				},
-				assertFunc: func(t *testing.T, got interface{}, err error) {
-					assert.NoError(t, err, "Set 应无错误")
-					assert.Equal(t, "OK", got, "Set 返回应为 OK")
-				},
-			},
-			{
-				name: "Get",
-				prepare: func() {
-					redisExtension.Set(ctx, testKey, "v2", time.Second*5)
-				},
-				action: func() (interface{}, error) {
-					return redisExtension.Get(ctx, testKey).Result()
-				},
-				assertFunc: func(t *testing.T, got interface{}, err error) {
-					assert.NoError(t, err, "Get 应无错误")
-					assert.Equal(t, "v2", got, "Get 返回应为 v2")
-				},
-			},
-			{
-				name: "Expire",
-				prepare: func() {
-					redisExtension.Set(ctx, testKey, "v3", time.Second*5)
-				},
-				action: func() (interface{}, error) {
-					return redisExtension.Expire(ctx, testKey, 1*time.Second).Result()
-				},
-				assertFunc: func(t *testing.T, got interface{}, err error) {
-					assert.NoError(t, err, "Expire 应无错误")
-					assert.Equal(t, int64(1), got, "Expire 返回应为 1")
-				},
-			},
-			{
-				name: "Del",
-				prepare: func() {
-					redisExtension.Set(ctx, testKey, "v4", time.Second*5)
-				},
-				action: func() (interface{}, error) {
-					return redisExtension.Del(ctx, testKey).Result()
-				},
-				assertFunc: func(t *testing.T, got interface{}, err error) {
-					assert.NoError(t, err, "Del 应无错误")
-					assert.Equal(t, int64(1), got, "Del 返回应为 1")
-				},
-			},
-		}
-		for _, tc := range tests {
-			t.Run(tc.name, func(t *testing.T) {
-				if tc.prepare != nil {
-					tc.prepare()
-				}
-				got, err := tc.action()
-				tc.assertFunc(t, got, err)
-			})
-		}
+	client := goredis.NewClient(&goredis.Options{
+		Addr:     "memory.redis:6379",
+		Protocol: 2,
+		Dialer: func(_ context.Context, _, _ string) (net.Conn, error) {
+			clientConn, serverConn := net.Pipe()
+			go server.serve(serverConn)
+			return clientConn, nil
+		},
 	})
+	t.Cleanup(func() {
+		_ = client.Close()
+	})
+
+	return &redisClient{client: client, addr: "memory.redis:6379"}, server
 }
 
-func TestRedis(t *testing.T) {
-	redis := NewRedis()
-	redisExtension := NewRedisExtension(redis)
-
-	if !testRedisConnected(redisExtension) {
-		t.Skip("Redis 连接失败，跳过测试")
-	}
-
-	redisExtension.Set(context.Background(), "key", "value", time.Second*10)
-	val, err := redisExtension.Get(context.Background(), "key").Result()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(val)
-}
-
-func TestRedis_EvalSha(t *testing.T) {
-	// 创建 Redis 实例
-	redis := NewRedis()
-
-	redisExtension := NewRedisExtension(redis)
-
-	if !testRedisConnected(redisExtension) {
-		t.Skip("Redis 连接失败，跳过测试")
-	}
-
-	// 生成唯一的测试键名
-	testKey := "test:counter:" + time.Now().Format("20060102150405")
-
-	// 确保测试结束后清理环境
+// serve 处理单条内存连接上的 RESP 命令。
+//
+// 该辅助方法循环读取 go-redis 发送的 RESP 数组命令，并写回 Redis 协议兼容的稳定响应。
+//
+// 参数：
+//   - conn: net.Pipe 创建的服务端连接。
+func (s *memoryRedisServer) serve(conn net.Conn) {
 	defer func() {
-		_, err := redis.Do(context.Background(), "DEL", testKey).Result()
-		if err != nil {
-			t.Logf("清理测试环境失败: %v", err)
-		}
+		_ = conn.Close()
 	}()
 
-	// 定义一个简单的 Lua 脚本，实现计数器功能
-	script := `
-		local current = redis.call('GET', KEYS[1])
-		if current == false then
-			current = 0
-		end
-		local new = current + ARGV[1]
-		redis.call('SET', KEYS[1], new)
-		return new
-	`
-
-	// 加载脚本并获取 SHA1 值
-	sha1, err := redis.ScriptLoad(context.Background(), script).Result()
-	if err != nil {
-		t.Fatalf("加载脚本失败: %v", err)
-	}
-	t.Logf("脚本加载成功，SHA1: %s", sha1)
-
-	// 使用 EVALSHA 执行脚本
-	// KEYS[1] = testKey, ARGV[1] = 1
-	result, err := redis.EvalSha(context.Background(), sha1, []string{testKey}, 1).Result()
-	if err != nil {
-		t.Fatalf("执行脚本失败: %v", err)
-	}
-
-	// 将结果转换为数字
-	resultNum, ok := result.(int64)
-	if !ok {
-		t.Fatalf("结果类型转换失败: %v", result)
-	}
-
-	// 验证第一次执行结果
-	expected := int64(1)
-	if resultNum != expected {
-		t.Fatalf("第一次执行结果不符合预期: 期望 %v, 实际 %v", expected, resultNum)
-	}
-	t.Logf("第一次执行成功，计数器值: %v", resultNum)
-
-	// 再次执行脚本，验证计数器递增
-	result, err = redis.EvalSha(context.Background(), sha1, []string{testKey}, 1).Result()
-	if err != nil {
-		t.Fatalf("执行脚本失败: %v", err)
-	}
-
-	// 将结果转换为数字
-	resultNum, ok = result.(int64)
-	if !ok {
-		t.Fatalf("结果类型转换失败: %v", result)
-	}
-
-	// 验证第二次执行结果
-	expected = int64(2)
-	if resultNum != expected {
-		t.Fatalf("第二次执行结果不符合预期: 期望 %v, 实际 %v", expected, resultNum)
-	}
-	t.Logf("第二次执行成功，计数器值: %v", resultNum)
-}
-
-func TestRedis_InterfaceMethods(t *testing.T) {
-	redis := NewRedis()
-	redisExtension := NewRedisExtension(redis)
-	if !testRedisConnected(redisExtension) {
-		t.Skip("Redis 连接失败，跳过测试")
-	}
-	ctx := context.Background()
-
-	t.Run("Do", func(t *testing.T) {
-		// 测试 SET/GET/DEL 命令
-		testKey := "test:do:key"
-		_, err := redis.Do(ctx, "SET", testKey, "v1").Result()
-		assert.NoError(t, err, "Do SET 应无错误")
-		val, err := redis.Do(ctx, "GET", testKey).Result()
-		assert.NoError(t, err, "Do GET 应无错误")
-		assert.Equal(t, "v1", val, "Do GET 返回应为 v1")
-		cnt, err := redis.Do(ctx, "DEL", testKey).Result()
-		assert.NoError(t, err, "Do DEL 应无错误")
-		assert.Equal(t, int64(1), cnt, "Do DEL 返回应为 1")
-	})
-
-	t.Run("Pipelined", func(t *testing.T) {
-		testKey := "test:pipeline:key"
-		_, err := redis.Pipelined(ctx, func(pipe Pipeliner) error {
-			pipe.Do(ctx, "SET", testKey, "v2")
-			pipe.Do(ctx, "GET", testKey)
-			return nil
-		})
-		assert.NoError(t, err, "Pipelined 应无错误")
-		val, err := redis.Do(ctx, "GET", testKey).Result()
-		assert.NoError(t, err, "Pipelined GET 应无错误")
-		assert.Equal(t, "v2", val, "Pipelined GET 返回应为 v2")
-		redis.Do(ctx, "DEL", testKey)
-	})
-
-	t.Run("TxPipelined", func(t *testing.T) {
-		testKey := "test:txpipeline:key"
-		_, err := redis.TxPipelined(ctx, func(pipe Pipeliner) error {
-			pipe.Do(ctx, "SET", testKey, "v3")
-			pipe.Do(ctx, "GET", testKey)
-			return nil
-		})
-		assert.NoError(t, err, "TxPipelined 应无错误")
-		val, err := redis.Do(ctx, "GET", testKey).Result()
-		assert.NoError(t, err, "TxPipelined GET 应无错误")
-		assert.Equal(t, "v3", val, "TxPipelined GET 返回应为 v3")
-		redis.Do(ctx, "DEL", testKey)
-	})
-
-	t.Run("Subscribe/PSubscribe", func(t *testing.T) {
-		// 仅测试订阅对象创建，不做消息收发
-		ps := redis.Subscribe(ctx, "test:channel")
-		assert.NotNil(t, ps, "Subscribe 返回对象不应为 nil")
-		pps := redis.PSubscribe(ctx, "test:chan*")
-		assert.NotNil(t, pps, "PSubscribe 返回对象不应为 nil")
-	})
-}
-
-func TestRedis_ScriptCommands(t *testing.T) {
-	redis := NewRedis()
-	redisExtension := NewRedisExtension(redis)
-	if !testRedisConnected(redisExtension) {
-		t.Skip("Redis 连接失败，跳过测试")
-	}
-	ctx := context.Background()
-	script := `return ARGV[1]` // 简单返回参数
-
-	t.Run("Eval", func(t *testing.T) {
-		res, err := redis.Eval(ctx, script, []string{}, 123).Result()
-		assert.NoError(t, err, "Eval 应无错误")
-		assert.Equal(t, "123", res, "Eval 返回应为 123")
-	})
-
-	t.Run("EvalRO", func(t *testing.T) {
-		res, err := redis.EvalRO(ctx, script, []string{}, 456).Result()
-		assert.NoError(t, err, "EvalRO 应无错误")
-		assert.Equal(t, "456", res, "EvalRO 返回应为 456")
-	})
-
-	t.Run("ScriptLoad/EvalSha/EvalShaRO/ScriptExists", func(t *testing.T) {
-		sha, err := redis.ScriptLoad(ctx, script).Result()
-		assert.NoError(t, err, "ScriptLoad 应无错误")
-		assert.NotEmpty(t, sha, "ScriptLoad 返回 SHA1 不应为空")
-		// EvalSha
-		res, err := redis.EvalSha(ctx, sha, []string{}, 789).Result()
-		assert.NoError(t, err, "EvalSha 应无错误")
-		assert.Equal(t, "789", res, "EvalSha 返回应为 789")
-		// EvalShaRO
-		res, err = redis.EvalShaRO(ctx, sha, []string{}, 1011).Result()
-		assert.NoError(t, err, "EvalShaRO 应无错误")
-		assert.Equal(t, "1011", res, "EvalShaRO 返回应为 1011")
-		// ScriptExists
-		exists, err := redis.ScriptExists(ctx, sha).Result()
-		assert.NoError(t, err, "ScriptExists 应无错误")
-		assert.True(t, exists[0], "ScriptExists 应为 true")
-	})
-
-	t.Run("ScriptFlush", func(t *testing.T) {
-		res, err := redisExtension.ScriptFlush(ctx).Result()
-		assert.NoError(t, err, "ScriptFlush 应无错误")
-		assert.Equal(t, "OK", res, "ScriptFlush 返回应为 OK")
-	})
-
-	t.Run("ScriptKill", func(t *testing.T) {
-		// 一般情况下无正在运行脚本，ScriptKill 返回错误或 OK 都可接受
-		_, _ = redisExtension.ScriptKill(ctx).Result()
-	})
-}
-
-func TestRedis_Options(t *testing.T) {
-	// 测试默认参数
-	redis := NewRedis()
-	assert.NotNil(t, redis, "NewRedis 返回对象不应为 nil")
-
-	// 测试自定义地址和密码
-	customAddr := "localhost:6380"
-	customPwd := "testpwd"
-	redis2 := NewRedis(WithAddr(customAddr), WithPassword(customPwd))
-	assert.NotNil(t, redis2, "自定义参数 NewRedis 返回对象不应为 nil")
-
-	// 通过类型断言检查参数是否生效
-	if c, ok := redis2.(*redisClient); ok {
-		assert.Equal(t, customAddr, c.addr, "WithAddr 应设置 addr")
-		assert.Equal(t, customPwd, c.password, "WithPassword 应设置 password")
-	}
-}
-
-// TestRedis_BusinessCases
-//
-// 本测试函数补充有实际业务意义的边界场景和异常分支，采用表格驱动和详细注释，提升覆盖率。
-// 覆盖内容：
-//  1. 发布订阅消息收发与取消
-//  2. 管道/事务中包含错误命令
-//  3. EvalSha 脚本不存在
-//  4. Get/Del 不存在 key
-//  5. Set 过期后自动删除
-//  6. Option 多次叠加
-func TestRedis_BusinessCases(t *testing.T) {
-	redis := NewRedis()
-	redisExtension := NewRedisExtension(redis)
-	if !testRedisConnected(redisExtension) {
-		t.Skip("Redis 连接失败，跳过测试")
-	}
-	ctx := context.Background()
-
-	t.Run("Publish/Subscribe 消息收发与取消", func(t *testing.T) {
-		// 订阅频道
-		channel := "test:pubsub:channel"
-		pubsub := redis.Subscribe(ctx, channel)
-		defer func() {
-			if err := pubsub.Close(); err != nil {
-				t.Errorf("pubsub.Close() 应无错误: %v", err)
-			}
-		}()
-		// 发布消息
-		msg := "hello_pubsub"
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			redis.Do(ctx, "PUBLISH", channel, msg)
-		}()
-		// 接收消息
-		m, err := pubsub.ReceiveMessage(ctx)
-		assert.NoError(t, err, "应能收到消息")
-		assert.Equal(t, msg, m.Payload, "消息内容应一致")
-		// 取消订阅
-		err = pubsub.Unsubscribe(ctx, channel)
-		assert.NoError(t, err, "取消订阅应无错误")
-	})
-
-	t.Run("Pipelined/TxPipelined 包含错误命令", func(t *testing.T) {
-		testKey := "test:pipeline:error"
-		// 管道中包含错误命令
-		cmds, err := redis.Pipelined(ctx, func(pipe Pipeliner) error {
-			pipe.Do(ctx, "SET", testKey, "v1")
-			pipe.Do(ctx, "NOTACMD", testKey)
-			return nil
-		})
-		assert.Error(t, err, "管道包含错误命令应返回错误")
-		assert.Len(t, cmds, 2, "应有两个命令结果")
-		// 事务中包含错误命令
-		cmds, err = redis.TxPipelined(ctx, func(pipe Pipeliner) error {
-			pipe.Do(ctx, "SET", testKey, "v2")
-			pipe.Do(ctx, "NOTACMD", testKey)
-			return nil
-		})
-		assert.Error(t, err, "事务包含错误命令应返回错误")
-		assert.Len(t, cmds, 2, "应有两个命令结果")
-	})
-
-	t.Run("EvalSha 脚本不存在", func(t *testing.T) {
-		sha := "ffffffffffffffffffffffffffffffffffffffff"
-		_, err := redis.EvalSha(ctx, sha, []string{}, 1).Result()
-		assert.Error(t, err, "EvalSha 脚本不存在应报错")
-	})
-
-	t.Run("Get/Del 不存在 key", func(t *testing.T) {
-		nonExistKey := "test:nonexist:key"
-		val, err := redisExtension.Get(ctx, nonExistKey).Result()
-		assert.Error(t, err, "Get 不存在 key 应报错")
-		assert.Nil(t, val, "Get 不存在 key 返回应为 nil")
-		cnt, err := redisExtension.Del(ctx, nonExistKey).Result()
-		assert.NoError(t, err, "Del 不存在 key 应无错误")
-		assert.Equal(t, int64(0), cnt, "Del 不存在 key 返回应为 0")
-	})
-
-	t.Run("Set 过期后自动删除", func(t *testing.T) {
-		testKey := "test:expire:key"
-		redisExtension.Set(ctx, testKey, "v1", time.Millisecond*200)
-		time.Sleep(300 * time.Millisecond)
-		val, err := redisExtension.Get(ctx, testKey).Result()
-		assert.Error(t, err, "过期后 Get 应报错")
-		assert.Nil(t, val, "过期后 Get 返回应为 nil")
-	})
-
-	t.Run("Option 多次叠加", func(t *testing.T) {
-		addr1 := "127.0.0.1:6379"
-		addr2 := "127.0.0.1:6380"
-		pwd1 := "pwd1"
-		pwd2 := "pwd2"
-		redis3 := NewRedis(WithAddr(addr1), WithAddr(addr2), WithPassword(pwd1), WithPassword(pwd2))
-		if c, ok := redis3.(*redisClient); ok {
-			assert.Equal(t, addr2, c.addr, "后设置的 addr 应生效")
-			assert.Equal(t, pwd2, c.password, "后设置的 password 应生效")
+	reader := bufio.NewReader(conn)
+	var txActive bool
+	var txReplies []respReply
+	for {
+		args, err := readRESPArray(reader)
+		if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+			return
 		}
-	})
+		if err != nil {
+			return
+		}
+		if len(args) == 0 {
+			writeRESP(conn, respReply{kind: "error", value: "ERR empty command"})
+			continue
+		}
+
+		command := strings.ToUpper(args[0])
+		s.record(args)
+
+		switch command {
+		case "MULTI":
+			txActive = true
+			txReplies = nil
+			writeRESP(conn, respReply{kind: "simple", value: "OK"})
+		case "EXEC":
+			txActive = false
+			writeRESP(conn, respReply{kind: "array", value: txReplies})
+		case "DISCARD":
+			txActive = false
+			txReplies = nil
+			writeRESP(conn, respReply{kind: "simple", value: "OK"})
+		case "SUBSCRIBE":
+			for i, channel := range args[1:] {
+				writeRESP(conn, respReply{kind: "array", value: []respReply{
+					{kind: "bulk", value: "subscribe"},
+					{kind: "bulk", value: channel},
+					{kind: "int", value: int64(i + 1)},
+				}})
+			}
+		case "PSUBSCRIBE":
+			for i, channel := range args[1:] {
+				writeRESP(conn, respReply{kind: "array", value: []respReply{
+					{kind: "bulk", value: "psubscribe"},
+					{kind: "bulk", value: channel},
+					{kind: "int", value: int64(i + 1)},
+				}})
+			}
+		case "UNSUBSCRIBE", "PUNSUBSCRIBE":
+			kind := strings.ToLower(command)
+			for _, channel := range args[1:] {
+				writeRESP(conn, respReply{kind: "array", value: []respReply{
+					{kind: "bulk", value: kind},
+					{kind: "bulk", value: channel},
+					{kind: "int", value: int64(0)},
+				}})
+			}
+		default:
+			reply := s.handleCommand(args)
+			if txActive {
+				txReplies = append(txReplies, reply)
+				writeRESP(conn, respReply{kind: "simple", value: "QUEUED"})
+				continue
+			}
+			writeRESP(conn, reply)
+		}
+	}
+}
+
+// handleCommand 生成单条 Redis 命令的稳定响应。
+//
+// 该辅助方法实现测试所需的 GET、SET、脚本和生命周期命令，覆盖 go-redis 委托行为而不模拟完整 Redis。
+//
+// 参数：
+//   - args: RESP 命令参数列表，首项为命令名。
+//
+// 返回值：
+//   - respReply: 可序列化为 RESP 的命令响应。
+func (s *memoryRedisServer) handleCommand(args []string) respReply {
+	command := strings.ToUpper(args[0])
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	switch command {
+	case "HELLO":
+		return respReply{kind: "array", value: []respReply{
+			{kind: "bulk", value: "server"},
+			{kind: "bulk", value: "memory-redis"},
+			{kind: "bulk", value: "proto"},
+			{kind: "int", value: int64(2)},
+		}}
+	case "CLIENT", "AUTH", "SELECT", "PING":
+		return respReply{kind: "simple", value: "OK"}
+	case "SET":
+		if len(args) >= 3 {
+			s.kv[args[1]] = args[2]
+		}
+		return respReply{kind: "simple", value: "OK"}
+	case "GET":
+		if len(args) < 2 {
+			return respReply{kind: "error", value: "ERR wrong number of arguments"}
+		}
+		value, ok := s.kv[args[1]]
+		if !ok {
+			return respReply{kind: "nil"}
+		}
+		return respReply{kind: "bulk", value: value}
+	case "DEL":
+		var deleted int64
+		for _, key := range args[1:] {
+			if _, ok := s.kv[key]; ok {
+				delete(s.kv, key)
+				deleted++
+			}
+		}
+		return respReply{kind: "int", value: deleted}
+	case "EXPIRE", "PEXPIRE", "PERSIST":
+		return respReply{kind: "int", value: int64(1)}
+	case "EVAL", "EVAL_RO", "EVALSHA", "EVALSHA_RO":
+		return evalReply(args)
+	case "SCRIPT":
+		return s.handleScript(args)
+	default:
+		return respReply{kind: "error", value: fmt.Sprintf("ERR unknown command %s", command)}
+	}
+}
+
+// handleScript 生成 SCRIPT 子命令的稳定响应。
+//
+// 该辅助方法覆盖测试涉及的 LOAD、EXISTS、FLUSH 和 KILL 子命令。
+//
+// 参数：
+//   - args: SCRIPT 命令参数列表。
+//
+// 返回值：
+//   - respReply: 可序列化为 RESP 的脚本命令响应。
+func (s *memoryRedisServer) handleScript(args []string) respReply {
+	if len(args) < 2 {
+		return respReply{kind: "error", value: "ERR missing SCRIPT subcommand"}
+	}
+
+	switch strings.ToUpper(args[1]) {
+	case "LOAD":
+		if len(args) < 3 {
+			return respReply{kind: "error", value: "ERR missing script"}
+		}
+		sha := sha1Hex(args[2])
+		s.scripts[sha] = args[2]
+		return respReply{kind: "bulk", value: sha}
+	case "EXISTS":
+		replies := make([]respReply, 0, len(args)-2)
+		for _, hash := range args[2:] {
+			var exists int64
+			if _, ok := s.scripts[hash]; ok {
+				exists = 1
+			}
+			replies = append(replies, respReply{kind: "int", value: exists})
+		}
+		return respReply{kind: "array", value: replies}
+	case "FLUSH":
+		s.scripts = make(map[string]string)
+		return respReply{kind: "simple", value: "OK"}
+	case "KILL":
+		return respReply{kind: "simple", value: "OK"}
+	default:
+		return respReply{kind: "error", value: "ERR unsupported SCRIPT subcommand"}
+	}
+}
+
+// record 保存收到的命令参数。
+//
+// 该辅助方法用于测试断言客户端是否将命令委托到内存 RESP 服务。
+//
+// 参数：
+//   - args: RESP 命令参数列表。
+func (s *memoryRedisServer) record(args []string) {
+	record := respCommand{name: strings.ToUpper(args[0]), args: append([]string(nil), args[1:]...)}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.records = append(s.records, record)
+}
+
+// hasCommand 判断内存 RESP 服务是否收到指定命令。
+//
+// 该辅助方法按命令名和参数进行精确匹配，用于验证委托命令的稳定性。
+//
+// 参数：
+//   - name: 期望的 Redis 命令名。
+//   - args: 期望的 Redis 命令参数。
+//
+// 返回值：
+//   - bool: 收到完全匹配的命令时返回 true。
+func (s *memoryRedisServer) hasCommand(name string, args ...string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	name = strings.ToUpper(name)
+	for _, record := range s.records {
+		if record.name == name && equalStrings(record.args, args) {
+			return true
+		}
+	}
+	return false
+}
+
+// readRESPArray 读取一条 RESP 数组命令。
+//
+// 该辅助函数仅实现 go-redis 测试命令所需的 RESP 数组、Bulk String、Simple String 和 Integer 解析。
+//
+// 参数：
+//   - reader: RESP 输入流。
+//
+// 返回值：
+//   - []string: 解析后的命令参数。
+//   - error: 读取或协议解析失败时返回错误。
+func readRESPArray(reader *bufio.Reader) ([]string, error) {
+	line, err := readRESPLine(reader)
+	if err != nil {
+		return nil, err
+	}
+	if len(line) == 0 || line[0] != '*' {
+		return nil, fmt.Errorf("expected RESP array, got %q", line)
+	}
+
+	count, err := strconv.Atoi(line[1:])
+	if err != nil {
+		return nil, err
+	}
+	values := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		value, err := readRESPValue(reader)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, nil
+}
+
+// readRESPValue 读取 RESP 数组内的一个标量值。
+//
+// 该辅助函数支持 Bulk String、Simple String 与 Integer，满足 go-redis 命令编码的测试需求。
+//
+// 参数：
+//   - reader: RESP 输入流。
+//
+// 返回值：
+//   - string: 解析后的标量值。
+//   - error: 读取或协议解析失败时返回错误。
+func readRESPValue(reader *bufio.Reader) (string, error) {
+	line, err := readRESPLine(reader)
+	if err != nil {
+		return "", err
+	}
+	if len(line) == 0 {
+		return "", fmt.Errorf("empty RESP value header")
+	}
+
+	switch line[0] {
+	case '$':
+		length, err := strconv.Atoi(line[1:])
+		if err != nil {
+			return "", err
+		}
+		if length < 0 {
+			return "", nil
+		}
+		buf := make([]byte, length+2)
+		if _, err := io.ReadFull(reader, buf); err != nil {
+			return "", err
+		}
+		return string(buf[:length]), nil
+	case '+', ':':
+		return line[1:], nil
+	default:
+		return "", fmt.Errorf("unsupported RESP value %q", line)
+	}
+}
+
+// readRESPLine 读取去除 CRLF 的 RESP 行。
+//
+// 该辅助函数集中处理 RESP 行结尾，避免协议解析逻辑重复。
+//
+// 参数：
+//   - reader: RESP 输入流。
+//
+// 返回值：
+//   - string: 去除 CRLF 后的行内容。
+//   - error: 读取失败时返回错误。
+func readRESPLine(reader *bufio.Reader) (string, error) {
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), nil
+}
+
+// writeRESP 将响应写入 RESP 输出流。
+//
+// 该辅助函数支持测试所需的 Simple String、Bulk String、Integer、Array、Nil 和 Error 响应类型。
+//
+// 参数：
+//   - writer: RESP 输出流。
+//   - reply: 待写入的响应对象。
+func writeRESP(writer io.Writer, reply respReply) {
+	switch reply.kind {
+	case "simple":
+		_, _ = fmt.Fprintf(writer, "+%s\r\n", reply.value)
+	case "bulk":
+		value := fmt.Sprint(reply.value)
+		_, _ = fmt.Fprintf(writer, "$%d\r\n%s\r\n", len(value), value)
+	case "int":
+		_, _ = fmt.Fprintf(writer, ":%d\r\n", reply.value)
+	case "array":
+		replies := reply.value.([]respReply)
+		_, _ = fmt.Fprintf(writer, "*%d\r\n", len(replies))
+		for _, item := range replies {
+			writeRESP(writer, item)
+		}
+	case "nil":
+		_, _ = io.WriteString(writer, "$-1\r\n")
+	case "error":
+		_, _ = fmt.Fprintf(writer, "-%s\r\n", reply.value)
+	}
+}
+
+// evalReply 生成 Eval 系列命令的响应。
+//
+// 该辅助函数返回第一个 ARGV 参数，模拟测试脚本 return ARGV[1] 的稳定行为。
+//
+// 参数：
+//   - args: Eval 系列命令参数。
+//
+// 返回值：
+//   - respReply: Eval 系列命令的响应。
+func evalReply(args []string) respReply {
+	if len(args) < 3 {
+		return respReply{kind: "error", value: "ERR wrong number of arguments"}
+	}
+
+	keyCount, err := strconv.Atoi(args[2])
+	if err != nil {
+		return respReply{kind: "error", value: "ERR invalid key count"}
+	}
+	argIndex := 3 + keyCount
+	if len(args) <= argIndex {
+		return respReply{kind: "bulk", value: ""}
+	}
+	return respReply{kind: "bulk", value: args[argIndex]}
+}
+
+// sha1Hex 计算脚本文本的 SHA1 十六进制摘要。
+//
+// 该辅助函数用于模拟 Redis SCRIPT LOAD 返回的脚本摘要。
+//
+// 参数：
+//   - script: Lua 脚本文本。
+//
+// 返回值：
+//   - string: SHA1 十六进制摘要。
+func sha1Hex(script string) string {
+	sum := sha1.Sum([]byte(script))
+	return hex.EncodeToString(sum[:])
+}
+
+// equalStrings 判断两个字符串切片是否完全一致。
+//
+// 该辅助函数用于命令记录断言，避免引入与业务无关的切片比较细节。
+//
+// 参数：
+//   - left: 左侧字符串切片。
+//   - right: 右侧字符串切片。
+//
+// 返回值：
+//   - bool: 两个切片长度和元素均一致时返回 true。
+func equalStrings(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
+type scriptCall struct {
+	method      string
+	scriptOrSHA string
+	keys        []string
+	args        []interface{}
+}
+
+type basicFakeRedis struct {
+	doCalls           [][]interface{}
+	pipelinedCalls    int
+	txPipelinedCalls  int
+	subscribeCalls    [][]string
+	psubscribeCalls   [][]string
+	scriptCalls       []scriptCall
+	scriptExistsCalls [][]string
+	scriptLoadCalls   []string
+	closed            bool
+	subscribeResult   *PubSub
+	psubscribeResult  *PubSub
+}
+
+type fakeRedis struct {
+	basicFakeRedis
+	scriptFlushCalls int
+	scriptKillCalls  int
+}
+
+// newBasicFakeRedis 构造不支持 ScriptFlush 和 ScriptKill 能力接口的 fake Redis。
+//
+// 该辅助函数用于验证 RedisExtension 对底层能力缺失的兼容行为。
+//
+// 返回值：
+//   - *basicFakeRedis: 可记录基础 Redis 委托调用的 fake 实现。
+func newBasicFakeRedis() *basicFakeRedis {
+	return &basicFakeRedis{
+		subscribeResult:  &PubSub{},
+		psubscribeResult: &PubSub{},
+	}
+}
+
+// newFakeRedis 构造支持脚本管理能力接口的 fake Redis。
+//
+// 该辅助函数用于验证 RedisExtension 对 ScriptFlush 和 ScriptKill 的能力接口委托。
+//
+// 返回值：
+//   - *fakeRedis: 可记录完整 Redis 委托调用的 fake 实现。
+func newFakeRedis() *fakeRedis {
+	return &fakeRedis{basicFakeRedis: *newBasicFakeRedis()}
+}
+
+// Do 记录任意 Redis 命令调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - args: Redis 命令参数列表。
+//
+// 返回值：
+//   - *Cmd: 已设置 OK 结果的命令对象。
+func (f *basicFakeRedis) Do(ctx context.Context, args ...interface{}) *Cmd {
+	f.doCalls = append(f.doCalls, append([]interface{}(nil), args...))
+	cmd := goredis.NewCmd(ctx, args...)
+	cmd.SetVal("OK")
+	return cmd
+}
+
+// Pipelined 记录管道委托调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - fn: 调用方提供的管道闭包。
+//
+// 返回值：
+//   - []Cmder: fake 管道命令结果。
+//   - error: 闭包返回的错误。
+func (f *basicFakeRedis) Pipelined(ctx context.Context, fn func(Pipeliner) error) ([]Cmder, error) {
+	f.pipelinedCalls++
+	if err := fn(nil); err != nil {
+		return nil, err
+	}
+	return []Cmder{goredis.NewCmd(ctx, "PIPELINED")}, nil
+}
+
+// TxPipelined 记录事务管道委托调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - fn: 调用方提供的事务管道闭包。
+//
+// 返回值：
+//   - []Cmder: fake 事务管道命令结果。
+//   - error: 闭包返回的错误。
+func (f *basicFakeRedis) TxPipelined(ctx context.Context, fn func(Pipeliner) error) ([]Cmder, error) {
+	f.txPipelinedCalls++
+	if err := fn(nil); err != nil {
+		return nil, err
+	}
+	return []Cmder{goredis.NewCmd(ctx, "TXPIPELINED")}, nil
+}
+
+// Subscribe 记录频道订阅委托调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - channels: 待订阅频道列表。
+//
+// 返回值：
+//   - *PubSub: fake 订阅对象。
+func (f *basicFakeRedis) Subscribe(_ context.Context, channels ...string) *PubSub {
+	f.subscribeCalls = append(f.subscribeCalls, append([]string(nil), channels...))
+	return f.subscribeResult
+}
+
+// PSubscribe 记录模式订阅委托调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - channels: 待订阅频道模式列表。
+//
+// 返回值：
+//   - *PubSub: fake 模式订阅对象。
+func (f *basicFakeRedis) PSubscribe(_ context.Context, channels ...string) *PubSub {
+	f.psubscribeCalls = append(f.psubscribeCalls, append([]string(nil), channels...))
+	return f.psubscribeResult
+}
+
+// Eval 记录 Lua 脚本执行委托调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - script: Lua 脚本文本。
+//   - keys: 脚本 key 列表。
+//   - args: 脚本参数列表。
+//
+// 返回值：
+//   - *Cmd: 已设置 OK 结果的命令对象。
+func (f *basicFakeRedis) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *Cmd {
+	f.scriptCalls = append(f.scriptCalls, scriptCall{method: "Eval", scriptOrSHA: script, keys: append([]string(nil), keys...), args: append([]interface{}(nil), args...)})
+	cmd := goredis.NewCmd(ctx, "EVAL")
+	cmd.SetVal("OK")
+	return cmd
+}
+
+// EvalRO 记录只读 Lua 脚本执行委托调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - script: Lua 脚本文本。
+//   - keys: 脚本 key 列表。
+//   - args: 脚本参数列表。
+//
+// 返回值：
+//   - *Cmd: 已设置 OK 结果的命令对象。
+func (f *basicFakeRedis) EvalRO(ctx context.Context, script string, keys []string, args ...interface{}) *Cmd {
+	f.scriptCalls = append(f.scriptCalls, scriptCall{method: "EvalRO", scriptOrSHA: script, keys: append([]string(nil), keys...), args: append([]interface{}(nil), args...)})
+	cmd := goredis.NewCmd(ctx, "EVAL_RO")
+	cmd.SetVal("OK")
+	return cmd
+}
+
+// EvalSha 记录 SHA 脚本执行委托调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - sha1: Lua 脚本 SHA1 摘要。
+//   - keys: 脚本 key 列表。
+//   - args: 脚本参数列表。
+//
+// 返回值：
+//   - *Cmd: 已设置 OK 结果的命令对象。
+func (f *basicFakeRedis) EvalSha(ctx context.Context, sha1 string, keys []string, args ...interface{}) *Cmd {
+	f.scriptCalls = append(f.scriptCalls, scriptCall{method: "EvalSha", scriptOrSHA: sha1, keys: append([]string(nil), keys...), args: append([]interface{}(nil), args...)})
+	cmd := goredis.NewCmd(ctx, "EVALSHA")
+	cmd.SetVal("OK")
+	return cmd
+}
+
+// EvalShaRO 记录只读 SHA 脚本执行委托调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - sha1: Lua 脚本 SHA1 摘要。
+//   - keys: 脚本 key 列表。
+//   - args: 脚本参数列表。
+//
+// 返回值：
+//   - *Cmd: 已设置 OK 结果的命令对象。
+func (f *basicFakeRedis) EvalShaRO(ctx context.Context, sha1 string, keys []string, args ...interface{}) *Cmd {
+	f.scriptCalls = append(f.scriptCalls, scriptCall{method: "EvalShaRO", scriptOrSHA: sha1, keys: append([]string(nil), keys...), args: append([]interface{}(nil), args...)})
+	cmd := goredis.NewCmd(ctx, "EVALSHA_RO")
+	cmd.SetVal("OK")
+	return cmd
+}
+
+// ScriptExists 记录脚本存在性检查委托调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - hashes: 脚本 SHA1 摘要列表。
+//
+// 返回值：
+//   - *BoolSliceCmd: 已设置 true 结果的命令对象。
+func (f *basicFakeRedis) ScriptExists(ctx context.Context, hashes ...string) *BoolSliceCmd {
+	f.scriptExistsCalls = append(f.scriptExistsCalls, append([]string(nil), hashes...))
+	cmd := goredis.NewBoolSliceCmd(ctx, "SCRIPT", "EXISTS")
+	cmd.SetVal([]bool{true})
+	return cmd
+}
+
+// ScriptLoad 记录脚本加载委托调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与 Redis 接口一致。
+//   - script: Lua 脚本文本。
+//
+// 返回值：
+//   - *StringCmd: 已设置 SHA 结果的命令对象。
+func (f *basicFakeRedis) ScriptLoad(ctx context.Context, script string) *StringCmd {
+	f.scriptLoadCalls = append(f.scriptLoadCalls, script)
+	cmd := goredis.NewStringCmd(ctx, "SCRIPT", "LOAD")
+	cmd.SetVal(sha1Hex(script))
+	return cmd
+}
+
+// Close 记录客户端关闭委托调用。
+//
+// 返回值：
+//   - error: fake 实现始终返回 nil。
+func (f *basicFakeRedis) Close() error {
+	f.closed = true
+	return nil
+}
+
+// ScriptFlush 记录脚本缓存清理能力调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与能力接口一致。
+//
+// 返回值：
+//   - *StatusCmd: 已设置 OK 结果的状态命令对象。
+func (f *fakeRedis) ScriptFlush(ctx context.Context) *StatusCmd {
+	f.scriptFlushCalls++
+	cmd := goredis.NewStatusCmd(ctx, "SCRIPT", "FLUSH")
+	cmd.SetVal("OK")
+	return cmd
+}
+
+// ScriptKill 记录脚本终止能力调用。
+//
+// 参数：
+//   - ctx: 上下文对象，用于保持签名与能力接口一致。
+//
+// 返回值：
+//   - *StatusCmd: 已设置 OK 结果的状态命令对象。
+func (f *fakeRedis) ScriptKill(ctx context.Context) *StatusCmd {
+	f.scriptKillCalls++
+	cmd := goredis.NewStatusCmd(ctx, "SCRIPT", "KILL")
+	cmd.SetVal("OK")
+	return cmd
 }

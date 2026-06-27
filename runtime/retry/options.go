@@ -21,52 +21,68 @@ var (
 	jitterDefault = false
 )
 
-// BackoffOption 类型用于配置 Backoff 实例的参数。
-// 每个选项函数会修改 Backoff 的一个或多个字段。
+// BackoffOption 配置 [Backoff] 的等待参数。
+//
+// 多个选项按传入顺序依次应用；同一字段以后传入的值为准。
+//
+// 参数：
+//   - *Backoff: 待修改的退避配置实例；选项通常由 [NewBackoff]、[Retry] 或 [RetryWithContext] 在初始化时应用。
 type BackoffOption func(*Backoff)
 
-// WithMin 设置 Backoff 的最小等待时间。
-// 参数：
-//   - min time.Duration：最小等待时间。
+// WithMin 设置 [Backoff] 的最小等待时间。
 //
-// 返回值：
-//   - BackoffOption：用于设置 min 字段的选项函数。
+// min 小于等于 0 时不会在构造阶段报错；实际计算等待时间时会回退到默认最小值。
+//
+// 参数：
+//   - min: 期望设置的最小等待时间。
+//
+// 返回：
+//   - BackoffOption: 写入最小等待时间配置的选项函数。
 func WithMin(min time.Duration) BackoffOption {
 	return func(b *Backoff) {
 		b.min = min
 	}
 }
 
-// WithMax 设置 Backoff 的最大等待时间。
-// 参数：
-//   - max time.Duration：最大等待时间。
+// WithMax 设置 [Backoff] 的最大等待时间。
 //
-// 返回值：
-//   - BackoffOption：用于设置 max 字段的选项函数。
+// max 小于等于 0 时不会在构造阶段报错；实际计算等待时间时会回退到默认最大值。
+//
+// 参数：
+//   - max: 期望设置的最大等待时间。
+//
+// 返回：
+//   - BackoffOption: 写入最大等待时间配置的选项函数。
 func WithMax(max time.Duration) BackoffOption {
 	return func(b *Backoff) {
 		b.max = max
 	}
 }
 
-// WithFactor 设置 Backoff 的增长因子。
-// 参数：
-//   - factor float64：每次递增时的乘数因子。
+// WithFactor 设置 [Backoff] 的增长因子。
 //
-// 返回值：
-//   - BackoffOption：用于设置 factor 字段的选项函数。
+// factor 小于等于 0 时不会在构造阶段报错；实际计算等待时间时会回退到默认增长因子。
+//
+// 参数：
+//   - factor: 期望设置的退避增长因子。
+//
+// 返回：
+//   - BackoffOption: 写入增长因子配置的选项函数。
 func WithFactor(factor float64) BackoffOption {
 	return func(b *Backoff) {
 		b.factor = factor
 	}
 }
 
-// WithJitter 设置 Backoff 是否启用抖动机制。
-// 参数：
-//   - jitter bool：是否启用抖动。
+// WithJitter 设置 [Backoff] 是否在退避结果中加入抖动。
 //
-// 返回值：
-//   - BackoffOption：用于设置 jitter 字段的选项函数。
+// 启用后，[Backoff.ForAttempt] 会在最小值和理论退避值之间取随机值，再按最大值上限截断。
+//
+// 参数：
+//   - jitter: 是否启用抖动。
+//
+// 返回：
+//   - BackoffOption: 写入抖动配置的选项函数。
 func WithJitter(jitter bool) BackoffOption {
 	return func(b *Backoff) {
 		b.jitter = jitter

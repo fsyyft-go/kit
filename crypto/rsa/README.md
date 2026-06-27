@@ -2,14 +2,15 @@
 
 ## 简介
 
-`rsa` 包提供了 RSA 加密算法的实现，支持公钥加密、私钥解密以及 PKCS#1 v1.5 签名验证功能。该包封装了 Go 标准库中的 crypto/rsa 包，提供更简便的 API 接口，适用于需要非对称加密的各种应用场景。
+`rsa` 包提供了 RSA 加密算法的实现，支持新代码推荐使用的 RSA-OAEP 公钥加密/私钥解密，并保留 PKCS#1 v1.5 加解密 API 用于兼容历史密文格式或既有协议。该包封装了 Go 标准库中的 crypto/rsa 包，提供更简便的 API 接口，适用于需要非对称加密的各种应用场景；其中私钥加密/公钥解密能力仅用于兼容历史数字签名场景。
 
 ### 主要特性
 
-- 支持 RSA 公钥加密与私钥解密
-- 支持 PKCS#1 v1.5 格式的密钥处理
-- 提供 PEM 格式密钥的编解码功能
-- 适用于多种数据格式
+- 支持 RSA-OAEP 公钥加密与私钥解密，新代码优先使用
+- 默认 OAEP 使用 SHA-256 + nil label，可通过 `*OAEPWithHash` 函数指定 hash 和 label
+- 保留 PKCS#1 v1.5 公钥加密/私钥解密 API，仅用于兼容历史密文格式或既有协议
+- 支持历史私钥加密/公钥解密场景，用于兼容旧数字签名协议
+- 提供 PEM 格式 RSA 私钥解析和公钥导出功能
 - 完整的错误处理
 - 简洁易用的 API
 
@@ -21,7 +22,7 @@
 
 ### 前置条件
 
-- Go 版本要求：Go 1.18 或更高版本
+- Go 版本要求：Go 1.26 或更高版本
 - 依赖要求：
   - Go 标准库的 crypto/rsa
   - Go 标准库的 crypto/x509
@@ -36,6 +37,8 @@ go get -u github.com/fsyyft-go/kit/crypto/rsa
 ## 快速开始
 
 ### 基础用法
+
+PKCS#1 v1.5 API 仅用于兼容历史密文格式或既有协议，新代码应优先使用 OAEP。
 
 ```go
 package main
@@ -88,15 +91,15 @@ SxkMa7QWMOLxGLDFNdrMiGKBe+Hy5CgRvU9QHdmJIJFYnRjz/8dkJA==
     // 要加密的数据
     plaintext := []byte("Hello, RSA encryption!")
     
-    // 使用公钥加密
-    ciphertext, err := rsa.EncryptPubKey(pubKeyPEM, plaintext)
+    // 使用 RSA-OAEP 公钥加密；默认使用 SHA-256 + nil label
+    ciphertext, err := rsa.EncryptPubKeyOAEP(pubKeyPEM, plaintext)
     if err != nil {
         panic(err)
     }
     fmt.Printf("加密后的数据长度: %d 字节\n", len(ciphertext))
     
-    // 使用私钥解密
-    decrypted, err := rsa.DecryptPrivate(privKeyPEM, ciphertext)
+    // 使用 RSA-OAEP 私钥解密；hash 和 label 必须与加密时一致
+    decrypted, err := rsa.DecryptPrivKeyOAEP(privKeyPEM, ciphertext)
     if err != nil {
         panic(err)
     }
@@ -110,26 +113,30 @@ SxkMa7QWMOLxGLDFNdrMiGKBe+Hy5CgRvU9QHdmJIJFYnRjz/8dkJA==
 // RSA 包设计简单，大部分功能通过直接调用函数实现
 // 以下示例展示如何手动处理密钥对象
 
-// 将 PEM 格式的公钥转换为 RSA 公钥对象
-pubKey, err := rsa.ConvertPublicKey(pubKeyPEM)
-if err != nil {
-    panic(err)
-}
-
 // 将 PEM 格式的私钥转换为 RSA 私钥对象
 privKey, err := rsa.ConvertPrivateKey(privKeyPEM)
 if err != nil {
     panic(err)
 }
 
-// 使用公钥对象直接加密
-encrypted, err := rsa.EncryptPublicKey(pubKey, data)
+// 结构体 API 适用于已经取得 *rsa.PublicKey 的场景；
+// 例如可以从已解析的私钥中取得对应公钥。
+pubKey := &privKey.PublicKey
+
+// 使用公钥对象按 RSA-OAEP 直接加密
+encrypted, err := rsa.EncryptPublicKeyOAEP(pubKey, data)
 if err != nil {
     panic(err)
 }
 
-// 使用私钥对象直接解密
-decrypted, err := rsa.DecryptKey(privKey, encrypted)
+// 使用私钥对象按 RSA-OAEP 直接解密
+decrypted, err := rsa.DecryptPrivateKeyOAEP(privKey, encrypted)
+if err != nil {
+    panic(err)
+}
+
+// 如需导出 PEM 格式公钥，可使用 ConvertPubKey
+pubKeyPEM, err := rsa.ConvertPubKey(pubKey)
 if err != nil {
     panic(err)
 }
@@ -142,7 +149,7 @@ if err != nil {
 RSA 是一种非对称加密算法，使用一对密钥：公钥和私钥。公钥可以公开，用于加密数据；
 私钥保密，用于解密数据。这种非对称性使得 RSA 适用于需要安全通信但无法预先共享密钥的场景。
 
-本包实现了标准的 RSA 加密和解密功能，支持 PKCS#1 v1.5 填充方式，并提供了密钥编码和解码的工具函数。
+本包实现了标准的 RSA 加密和解密功能，支持推荐用于新代码的 RSA-OAEP 填充方式，并保留 PKCS#1 v1.5 填充 API 用于兼容历史密文格式或既有协议。
 通过封装底层的复杂操作，使开发者能够简单地集成 RSA 加密功能。
 
 ### 常见用例
@@ -156,9 +163,9 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvxqfCMefeTjArTX338LJ
 ...省略部分内容...
 -----END PUBLIC KEY-----`)
 
-// 发送方使用公钥加密敏感数据
+// 发送方使用 RSA-OAEP 公钥加密敏感数据，默认使用 SHA-256 + nil label
 sensitiveData := []byte("密码: 123456")
-encrypted, err := rsa.EncryptPubKey(publicKeyPEM, sensitiveData)
+encrypted, err := rsa.EncryptPubKeyOAEP(publicKeyPEM, sensitiveData)
 if err != nil {
     panic(err)
 }
@@ -166,8 +173,8 @@ if err != nil {
 // 将加密后的数据发送给接收方
 // ...传输过程...
 
-// 接收方使用私钥解密
-decrypted, err := rsa.DecryptPrivate(privateKeyPEM, encrypted)
+// 接收方使用 RSA-OAEP 私钥解密
+decrypted, err := rsa.DecryptPrivKeyOAEP(privateKeyPEM, encrypted)
 if err != nil {
     panic(err)
 }
@@ -177,21 +184,23 @@ fmt.Printf("解密后的敏感数据: %s\n", string(decrypted))
 #### 2. 使用经过转换的密钥对象
 
 ```go
-// 转换密钥为对象，可以重复使用
-pubKey, err := rsa.ConvertPublicKey(publicKeyPEM)
+// 转换私钥为对象，可以重复使用；如果已有 *rsa.PublicKey，
+// 也可以直接使用 EncryptPublicKeyOAEP。
+privKey, err := rsa.ConvertPrivateKey(privateKeyPEM)
 if err != nil {
     panic(err)
 }
+pubKey := &privKey.PublicKey
 
-// 多次使用同一密钥对象加密不同数据
+// 多次使用同一密钥对象按 RSA-OAEP 加密不同数据
 message1 := []byte("第一条消息")
-encrypted1, err := rsa.EncryptPublicKey(pubKey, message1)
+encrypted1, err := rsa.EncryptPublicKeyOAEP(pubKey, message1)
 if err != nil {
     panic(err)
 }
 
 message2 := []byte("第二条消息")
-encrypted2, err := rsa.EncryptPublicKey(pubKey, message2)
+encrypted2, err := rsa.EncryptPublicKeyOAEP(pubKey, message2)
 if err != nil {
     panic(err)
 }
@@ -199,14 +208,20 @@ if err != nil {
 
 ### 最佳实践
 
+- 算法选择
+  - 新代码优先使用 `EncryptPubKeyOAEP` / `DecryptPrivKeyOAEP`，默认参数为 SHA-256 + nil label
+  - 需要指定 OAEP hash 或 label 时，使用 `EncryptPubKeyOAEPWithHash` / `DecryptPrivKeyOAEPWithHash`，并确保加密和解密参数完全一致
+  - 旧 `EncryptPubKey` / `DecryptPrivKey` 使用 PKCS#1 v1.5，仅用于兼容历史密文格式或既有协议
+  - 私钥加密/公钥解密仅用于兼容历史数字签名场景，新签名逻辑建议使用标准签名 API
+
 - 密钥管理
   - 安全地存储私钥，避免泄露
   - 使用至少 2048 位的密钥长度以确保安全性
   - 考虑定期轮换密钥对
 
 - 加密限制
-  - RSA 加密的明文长度有限制，通常小于密钥长度减去一些填充字节
-  - 对于大型数据，考虑使用混合加密方案：使用 AES 加密数据，再用 RSA 加密 AES 密钥
+  - RSA 加密的明文长度有限制，取决于密钥长度和填充方式
+  - 对于大型数据，使用混合加密方案：使用 AES 等对称算法加密数据，再用 RSA-OAEP 加密对称密钥
 
 - 性能考虑
   - RSA 操作计算密集，不适合频繁加密大量数据
@@ -228,51 +243,69 @@ if err != nil {
 
 ### 关键函数
 
-#### EncryptPubKey
+#### EncryptPubKeyOAEP
 
-使用 PEM 格式的公钥加密数据
+使用 PEM 格式的公钥按 RSA-OAEP 加密数据。默认使用 SHA-256 + nil label。
+
+```go
+func EncryptPubKeyOAEP(publicKey, dataClear []byte) ([]byte, error)
+```
+
+示例：
+```go
+encrypted, err := rsa.EncryptPubKeyOAEP(publicKeyPEM, []byte("加密数据"))
+if err != nil {
+    panic(err)
+}
+```
+
+#### DecryptPrivKeyOAEP
+
+使用 PEM 格式的私钥按 RSA-OAEP 解密数据。默认使用 SHA-256 + nil label。
+
+```go
+func DecryptPrivKeyOAEP(privateKey, dataCipher []byte) ([]byte, error)
+```
+
+示例：
+```go
+decrypted, err := rsa.DecryptPrivKeyOAEP(privateKeyPEM, encrypted)
+if err != nil {
+    panic(err)
+}
+```
+
+#### EncryptPubKey / DecryptPrivKey
+
+使用 PKCS#1 v1.5 加解密数据，仅用于兼容历史密文格式或既有协议；新代码优先使用 OAEP API。
 
 ```go
 func EncryptPubKey(publicKey, dataClear []byte) ([]byte, error)
+func DecryptPrivKey(privateKey, dataCipher []byte) ([]byte, error)
 ```
 
-示例：
+#### EncryptPubKeyOAEPWithHash / DecryptPrivKeyOAEPWithHash
+
+使用指定 hash 和 label 的 RSA-OAEP 加解密。加密和解密必须使用完全一致的 hash 与 label。
+
 ```go
-encrypted, err := rsa.EncryptPubKey(publicKeyPEM, []byte("加密数据"))
-if err != nil {
-    panic(err)
-}
+func EncryptPubKeyOAEPWithHash(publicKey, dataClear []byte, hash hash.Hash, label []byte) ([]byte, error)
+func DecryptPrivKeyOAEPWithHash(privateKey, dataCipher []byte, hash hash.Hash, label []byte) ([]byte, error)
 ```
 
-#### DecryptPrivate
+#### ConvertPubKey / ConvertPrivateKey
 
-使用 PEM 格式的私钥解密数据
-
-```go
-func DecryptPrivate(privateKey, dataCipher []byte) ([]byte, error)
-```
-
-示例：
-```go
-decrypted, err := rsa.DecryptPrivate(privateKeyPEM, encrypted)
-if err != nil {
-    panic(err)
-}
-```
-
-#### ConvertPublicKey / ConvertPrivateKey
-
-转换 PEM 格式的密钥为密钥对象
+`ConvertPrivateKey` 将 PEM 格式私钥转换为私钥对象；`ConvertPubKey` 将公钥对象导出为 PEM。若已有 PEM 公钥并只需加密，直接使用 `EncryptPubKeyOAEP` 即可。
 
 ```go
-func ConvertPublicKey(publicKey []byte) (*rsa.PublicKey, error)
+func ConvertPubKey(publicKey *rsa.PublicKey) ([]byte, error)
 func ConvertPrivateKey(privateKey []byte) (*rsa.PrivateKey, error)
 ```
 
 示例：
 ```go
-pubKey, err := rsa.ConvertPublicKey(publicKeyPEM)
 privKey, err := rsa.ConvertPrivateKey(privateKeyPEM)
+publicKeyPEM, err := rsa.ConvertPubKey(&privKey.PublicKey)
 ```
 
 ### 错误处理
@@ -296,7 +329,7 @@ privKey, err := rsa.ConvertPrivateKey(privateKeyPEM)
 
 | 包 | 覆盖率 |
 |------|--------|
-| rsa | 90% |
+| rsa | 不低于 95% |
 
 ## 调试指南
 
@@ -307,7 +340,7 @@ privKey, err := rsa.ConvertPrivateKey(privateKeyPEM)
 - 确认 PEM 格式的密钥格式正确
 - 检查公钥和私钥是否匹配
 - 验证明文数据长度是否超过 RSA 加密的限制
-- 对于 2048 位密钥，明文数据通常应小于 245 字节
+- 对于 2048 位密钥，默认 RSA-OAEP（SHA-256）明文通常应不超过 190 字节；PKCS#1 v1.5 兼容 API 应不超过 245 字节
 
 #### 密钥解析错误
 

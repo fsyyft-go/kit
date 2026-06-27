@@ -2,7 +2,7 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package main 演示了如何使用 fsyyft-go/kit 包中的 MySQL 数据库连接功能。
+// mysql 演示如何使用 kit 的 MySQL 连接完成建表、查询、更新、事务和删除操作。
 package main
 
 import (

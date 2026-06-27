@@ -9,7 +9,9 @@ import (
 	"os"
 	"testing"
 
+	kitcryptodes "github.com/fsyyft-go/kit/crypto/des"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewResolve 测试 newResolve 函数是否正确初始化解析器实例
@@ -75,6 +77,7 @@ func TestRegisterResolveBase64(t *testing.T) {
 	// 定义测试用例。
 	tests := []struct {
 		name           string                 // 测试用例名称。
+		description    string                 // 用例语义说明。
 		target         map[string]interface{} // 目标映射。
 		key            string                 // 键名。
 		val            string                 // 值。
@@ -82,7 +85,8 @@ func TestRegisterResolveBase64(t *testing.T) {
 		expectedError  error                  // 期望的错误。
 	}{
 		{
-			name:           "非 base64 后缀的键",
+			name:           "success/non-base64-suffix",
+			description:    "验证非 base64 后缀的键不会被改写。",
 			target:         map[string]interface{}{"key": "value"},
 			key:            "key",
 			val:            "value",
@@ -90,7 +94,8 @@ func TestRegisterResolveBase64(t *testing.T) {
 			expectedError:  nil,
 		},
 		{
-			name:           "有效的 base64 编码值",
+			name:           "success/valid-base64-value",
+			description:    "验证有效 base64 编码会写入去后缀键并保留原键。",
 			target:         map[string]interface{}{"key.b64": "SGVsbG8gV29ybGQ="},
 			key:            "key.b64",
 			val:            "SGVsbG8gV29ybGQ=",
@@ -98,7 +103,8 @@ func TestRegisterResolveBase64(t *testing.T) {
 			expectedError:  nil,
 		},
 		{
-			name:           "无效的 base64 编码值",
+			name:           "error/invalid-base64-value",
+			description:    "验证无效 base64 编码会返回解码错误并把错误字符串写入去后缀键。",
 			target:         map[string]interface{}{"key.b64": "invalid-base64"},
 			key:            "key.b64",
 			val:            "invalid-base64",
@@ -110,6 +116,8 @@ func TestRegisterResolveBase64(t *testing.T) {
 	// 遍历测试用例。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 调用 registerResolveBase64 函数。
 			err := registerResolveBase64(tt.target, tt.key, tt.val)
 
@@ -131,11 +139,92 @@ func TestRegisterResolveBase64(t *testing.T) {
 	}
 }
 
+// TestRegisterResolveDES 验证 registerResolveDES 对 DES 后缀配置项的解析行为。
+//
+// 该测试通过表驱动用例覆盖非 .des 后缀不改写、有效 DES 密文成功解密以及无效 DES 密文返回错误并写入错误字符串。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestRegisterResolveDES(t *testing.T) {
+	validCiphertext, err := kitcryptodes.EncryptStringCBCPkCS7PaddingStringHex(defaultDESKey, "decrypted-secret")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name            string
+		description     string
+		giveTarget      map[string]interface{}
+		giveKey         string
+		giveValue       string
+		wantTarget      map[string]interface{}
+		wantErr         bool
+		wantErrContains string
+	}{
+		{
+			name:        "success/non-des-suffix",
+			description: "验证非 .des 后缀键不会触发 DES 解密，也不会新增去后缀键。",
+			giveTarget: map[string]interface{}{
+				"password": "plain-text",
+			},
+			giveKey:   "password",
+			giveValue: "plain-text",
+			wantTarget: map[string]interface{}{
+				"password": "plain-text",
+			},
+		},
+		{
+			name:        "success/valid-des-ciphertext",
+			description: "验证有效 DES 密文会解密为明文并写入去后缀键，同时保留原始密文键。",
+			giveTarget: map[string]interface{}{
+				"password.des": validCiphertext,
+			},
+			giveKey:   "password.des",
+			giveValue: validCiphertext,
+			wantTarget: map[string]interface{}{
+				"password.des": validCiphertext,
+				"password":     "decrypted-secret",
+			},
+		},
+		{
+			name:        "error/invalid-des-ciphertext",
+			description: "验证无效 DES 密文会返回解密错误，并把错误字符串写入去后缀键以便诊断。",
+			giveTarget: map[string]interface{}{
+				"password.des": "invalid-ciphertext",
+			},
+			giveKey:   "password.des",
+			giveValue: "invalid-ciphertext",
+			wantTarget: map[string]interface{}{
+				"password.des": "invalid-ciphertext",
+				"password":     "encoding/hex: invalid byte: U+0069 'i'",
+			},
+			wantErr:         true,
+			wantErrContains: "invalid byte",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			err := registerResolveDES(tt.giveTarget, tt.giveKey, tt.giveValue)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErrContains)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantTarget, tt.giveTarget)
+		})
+	}
+}
+
 // TestResolve 测试 Resolve 方法是否正确处理各种类型的配置值。
 func TestResolve(t *testing.T) {
 	// 定义测试用例。
 	tests := []struct {
 		name           string                 // 测试用例名称。
+		description    string                 // 用例语义说明。
 		target         map[string]interface{} // 目标映射。
 		resolvers      map[string]ResolveItem // 解析处理函数映射。
 		expectedTarget map[string]interface{} // 期望的目标映射。
@@ -143,13 +232,15 @@ func TestResolve(t *testing.T) {
 	}{
 		{
 			name:           "空映射",
+			description:    "验证空配置映射在无解析器时保持为空且不返回错误。",
 			target:         map[string]interface{}{},
 			resolvers:      nil,
 			expectedTarget: map[string]interface{}{},
 			expectedError:  nil,
 		},
 		{
-			name: "无字符串值的映射",
+			name:        "无字符串值的映射",
+			description: "验证非字符串类型配置值不会触发解析器处理并保持原值。",
 			target: map[string]interface{}{
 				"int":  123,
 				"bool": true,
@@ -162,7 +253,20 @@ func TestResolve(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "嵌套映射",
+			name:        "字符串值无解析器",
+			description: "验证存在字符串值但未注册解析器时 Resolve 不改写目标映射且不返回错误。",
+			target: map[string]interface{}{
+				"plain": "value",
+			},
+			resolvers: nil,
+			expectedTarget: map[string]interface{}{
+				"plain": "value",
+			},
+			expectedError: nil,
+		},
+		{
+			name:        "嵌套映射",
+			description: "验证嵌套映射中的字符串配置项会递归应用注册解析器。",
 			target: map[string]interface{}{
 				"nested": map[string]interface{}{
 					"key.b64": "SGVsbG8gV29ybGQ=",
@@ -180,7 +284,28 @@ func TestResolve(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "包含数组的映射",
+			name:        "嵌套映射解析器返回错误",
+			description: "验证嵌套映射中的解析器错误会被外层 Resolve 透传。",
+			target: map[string]interface{}{
+				"nested": map[string]interface{}{
+					"key": "value",
+				},
+			},
+			resolvers: map[string]ResolveItem{
+				"error": func(target map[string]interface{}, key, val string) error {
+					return errors.New("嵌套错误")
+				},
+			},
+			expectedTarget: map[string]interface{}{
+				"nested": map[string]interface{}{
+					"key": "value",
+				},
+			},
+			expectedError: errors.New("嵌套错误"),
+		},
+		{
+			name:        "包含数组的映射",
+			description: "验证数组中的映射元素会递归解析，普通数组元素保持不变。",
 			target: map[string]interface{}{
 				"array": []interface{}{
 					map[string]interface{}{
@@ -206,7 +331,32 @@ func TestResolve(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "解析器返回错误",
+			name:        "数组映射解析器返回错误",
+			description: "验证数组中映射元素的解析器错误会被 Resolve 立即透传。",
+			target: map[string]interface{}{
+				"array": []interface{}{
+					map[string]interface{}{
+						"key": "value",
+					},
+				},
+			},
+			resolvers: map[string]ResolveItem{
+				"error": func(target map[string]interface{}, key, val string) error {
+					return errors.New("数组错误")
+				},
+			},
+			expectedTarget: map[string]interface{}{
+				"array": []interface{}{
+					map[string]interface{}{
+						"key": "value",
+					},
+				},
+			},
+			expectedError: errors.New("数组错误"),
+		},
+		{
+			name:        "解析器返回错误",
+			description: "验证任一注册解析器返回错误时 Resolve 会立即透传该错误。",
 			target: map[string]interface{}{
 				"key": "value",
 			},
@@ -225,6 +375,8 @@ func TestResolve(t *testing.T) {
 	// 遍历测试用例。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 创建一个新的解析器实例。
 			r := newResolve()
 
@@ -327,6 +479,7 @@ func TestRegisterResolveEnv(t *testing.T) {
 	// 定义测试用例。
 	tests := []struct {
 		name           string                 // 测试用例名称。
+		description    string                 // 用例语义说明。
 		envKey         string                 // 环境变量名。
 		envVal         string                 // 环境变量值。
 		target         map[string]interface{} // 目标映射。
@@ -336,12 +489,13 @@ func TestRegisterResolveEnv(t *testing.T) {
 		setEnv         bool                   // 是否设置环境变量。
 	}{
 		{
-			name:   "环境变量存在",
-			envKey: "TEST_ENV_KEY",
-			envVal: "test_env_value",
-			target: map[string]interface{}{"key.env": "TEST_ENV_KEY"},
-			key:    "key.env",
-			val:    "TEST_ENV_KEY",
+			name:        "环境变量存在",
+			description: "验证 .env 后缀键在环境变量存在时写入去后缀键对应的环境变量值。",
+			envKey:      "TEST_ENV_KEY",
+			envVal:      "test_env_value",
+			target:      map[string]interface{}{"key.env": "TEST_ENV_KEY"},
+			key:         "key.env",
+			val:         "TEST_ENV_KEY",
 			expectedTarget: map[string]interface{}{
 				"key.env": "TEST_ENV_KEY",
 				"key":     "test_env_value",
@@ -349,12 +503,13 @@ func TestRegisterResolveEnv(t *testing.T) {
 			setEnv: true,
 		},
 		{
-			name:   "环境变量不存在",
-			envKey: "NOT_EXIST_ENV_KEY",
-			envVal: "",
-			target: map[string]interface{}{"key.env": "NOT_EXIST_ENV_KEY"},
-			key:    "key.env",
-			val:    "NOT_EXIST_ENV_KEY",
+			name:        "环境变量不存在",
+			description: "验证 .env 后缀键在环境变量不存在时不会新增去后缀键。",
+			envKey:      "NOT_EXIST_ENV_KEY",
+			envVal:      "",
+			target:      map[string]interface{}{"key.env": "NOT_EXIST_ENV_KEY"},
+			key:         "key.env",
+			val:         "NOT_EXIST_ENV_KEY",
 			expectedTarget: map[string]interface{}{
 				"key.env": "NOT_EXIST_ENV_KEY",
 			},
@@ -364,13 +519,21 @@ func TestRegisterResolveEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			originalValue, originalExists := os.LookupEnv(tt.envKey)
+			t.Cleanup(func() {
+				if originalExists {
+					_ = os.Setenv(tt.envKey, originalValue)
+				} else {
+					_ = os.Unsetenv(tt.envKey)
+				}
+			})
+
 			if tt.setEnv {
 				// 设置环境变量。
 				err := os.Setenv(tt.envKey, tt.envVal)
 				assert.NoError(t, err, "设置环境变量失败")
-				defer func() {
-					_ = os.Unsetenv(tt.envKey)
-				}()
 			} else {
 				_ = os.Unsetenv(tt.envKey)
 			}

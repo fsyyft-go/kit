@@ -53,16 +53,20 @@ type (
 	// Level 定义了日志的级别类型，用于控制日志的输出粒度。
 	Level int
 
-	// LoggerFormatType 定义了日志输出格式的类型。
+	// LoggerFormatType 定义 Logrus 日志输出格式。
+	//
+	// 可选值包括：
+	//   - TextFormat：使用 logrus.TextFormatter 输出文本日志。
+	//   - JSONFormat：使用 logrus.JSONFormatter 输出 JSON 日志。
 	LoggerFormatType string
 
 	// Logger 定义了统一的日志接口。
 	// 该接口提供了以下功能：
-	// - 支持多个日志级别（Debug、Info、Warn、Error、Fatal）。
-	// - 提供格式化和非格式化的日志记录方法。
-	// - 支持结构化日志记录。
-	// - 支持日志级别的动态调整。
-	// - 提供上下文信息的添加和管理。
+	//   - 支持多个日志级别（Debug、Info、Warn、Error、Fatal）。
+	//   - 提供格式化和非格式化的日志记录方法。
+	//   - 支持结构化日志记录。
+	//   - 支持日志级别的动态调整。
+	//   - 提供上下文信息的添加和管理。
 	Logger interface {
 		// SetLevel 设置日志级别。
 		// 只有大于或等于设置级别的日志才会被记录。
@@ -73,7 +77,7 @@ type (
 
 		// GetLevel 获取当前的日志级别。
 		//
-		// 返回值：
+		// 返回：
 		//   - Level：当前的日志级别。
 		GetLevel() Level
 
@@ -173,7 +177,7 @@ type (
 		//   - key：字段名。
 		//   - value：字段值。
 		//
-		// 返回值：
+		// 返回：
 		//   - Logger：新的日志实例。
 		WithField(key string, value interface{}) Logger
 
@@ -185,39 +189,57 @@ type (
 		// 参数：
 		//   - fields：字段映射。
 		//
-		// 返回值：
+		// 返回：
 		//   - Logger：新的日志实例。
 		WithFields(fields map[string]interface{}) Logger
 	}
 
-	// LoggerOptions 定义了日志配置选项。
-	// 该结构体提供了以下功能：
-	// - 配置日志的基本行为。
-	// - 控制日志的输出目标。
-	// - 管理日志的滚动策略。
-	// - 设置日志的格式类型。
+	// LoggerOptions 定义 NewLogger 使用的日志配置。
+	//
+	// 零值会在 NewLogger 中与默认配置合并使用。Output 为空时输出到标准输出；
+	// EnableRotate、RotateTime、MaxAge 和 FormatType 主要影响 Logrus 实现。
 	LoggerOptions struct {
-		// Type 指定日志实现类型。
+		// Type 指定日志实现类型。可选值包括：
+		//   - LogTypeConsole：使用标准库日志并输出到标准输出。
+		//   - LogTypeStd：使用标准库日志，可写入标准输出或指定文件。
+		//   - LogTypeLogrus：使用 Logrus 日志实现，支持格式化和文件轮转配置。
 		Type LogType
-		// Level 指定日志级别。
+		// Level 指定日志过滤级别。可选值包括：
+		//   - DebugLevel：输出调试及以上级别日志。
+		//   - InfoLevel：输出信息及以上级别日志。
+		//   - WarnLevel：输出警告及以上级别日志。
+		//   - ErrorLevel：输出错误及以上级别日志。
+		//   - FatalLevel：输出致命错误日志。
 		Level Level
-		// Output 指定日志输出路径。
+		// Output 指定日志文件路径。空字符串表示写入标准输出。
 		Output string
-		// EnableRotate 是否启用日志滚动。
+		// EnableRotate 控制 Logrus 文件输出是否启用日志轮转。
 		EnableRotate bool
-		// RotateTime 日志滚动时间间隔。
+		// RotateTime 指定 Logrus 日志轮转周期。零值会传递给底层轮转实现。
 		RotateTime time.Duration
-		// MaxAge 日志保留时间。
+		// MaxAge 指定 Logrus 轮转日志的最大保留时间。零值表示由底层实现处理。
 		MaxAge time.Duration
-		// FormatType 指定日志输出格式类型。
+		// FormatType 指定 Logrus 输出格式。
+		//
+		// 可选值包括：
+		//   - TextFormat：使用文本格式输出。
+		//   - JSONFormat：使用 JSON 格式输出。
 		FormatType LoggerFormatType
 	}
 
-	// Option 定义了日志配置的函数选项。
+	// Option 定义日志配置修改函数。
+	//
+	// 参数：
+	//   - *LoggerOptions：待修改的日志配置，调用方应保证其非 nil。
 	Option func(*LoggerOptions)
 )
 
 // String 返回日志级别的字符串表示。
+//
+// 参数：无。
+//
+// 返回：
+//   - string：已定义级别返回 debug、info、warn、error 或 fatal；未知级别返回 unknown。
 func (l Level) String() string {
 	switch l {
 	case DebugLevel:
@@ -236,6 +258,13 @@ func (l Level) String() string {
 }
 
 // ParseLevel 从字符串解析日志级别。
+//
+// 参数：
+//   - level：日志级别字符串，支持 debug、info、warn、error 和 fatal。
+//
+// 返回：
+//   - Level：解析成功时返回对应日志级别；解析失败时返回 InfoLevel 作为回退值。
+//   - error：level 不属于支持值时返回错误，错误消息包含未知级别字符串。
 func ParseLevel(level string) (Level, error) {
 	switch level {
 	case "debug":
@@ -253,39 +282,49 @@ func ParseLevel(level string) (Level, error) {
 	}
 }
 
-// WithLogType 设置日志类型。
+// WithLogType 设置 NewLogger 使用的日志实现类型。
 //
 // 参数：
-//   - logType：要设置的日志类型。
+//   - logType：日志实现类型，可选值包括：
+//   - LogTypeConsole：使用标准库日志并强制输出到标准输出。
+//   - LogTypeStd：使用标准库日志，可按 Output 写入文件或标准输出。
+//   - LogTypeLogrus：使用 Logrus 日志实现，支持格式化和文件轮转配置。
 //
-// 返回值：
-//   - 返回一个配置选项函数，可用于配置日志实例。
+// 返回：
+//   - Option：应用于 LoggerOptions 的配置选项。
 func WithLogType(logType LogType) Option {
 	return func(opts *LoggerOptions) {
 		opts.Type = logType
 	}
 }
 
-// WithFormatType 设置日志输出格式类型。
+// WithFormatType 设置 Logrus 日志输出格式类型。
 //
 // 参数：
-//   - formatType：日志输出格式类型，可选值包括 TextFormat、JSONFormat。
+//   - formatType：日志输出格式类型，可选值包括：
+//   - TextFormat：使用文本格式输出日志。
+//   - JSONFormat：使用 JSON 格式输出日志。
 //
-// 返回值：
-//   - 返回一个配置选项函数，可用于配置日志实例。
+// 返回：
+//   - Option：应用于 LoggerOptions 的配置选项。
 func WithFormatType(formatType LoggerFormatType) Option {
 	return func(opts *LoggerOptions) {
 		opts.FormatType = formatType
 	}
 }
 
-// WithLevel 设置日志级别。
+// WithLevel 设置日志过滤级别。
 //
 // 参数：
-//   - level：要设置的日志级别。
+//   - level：日志过滤级别，可选值包括：
+//   - DebugLevel：输出调试及以上级别日志。
+//   - InfoLevel：输出信息及以上级别日志。
+//   - WarnLevel：输出警告及以上级别日志。
+//   - ErrorLevel：输出错误及以上级别日志。
+//   - FatalLevel：输出致命错误日志。
 //
-// 返回值：
-//   - 返回一个配置选项函数，可用于配置日志实例。
+// 返回：
+//   - Option：应用于 LoggerOptions 的配置选项。
 func WithLevel(level Level) Option {
 	return func(opts *LoggerOptions) {
 		opts.Level = level
@@ -295,49 +334,49 @@ func WithLevel(level Level) Option {
 // WithOutput 设置日志输出路径。
 //
 // 参数：
-//   - output：日志文件的输出路径，空字符串表示输出到标准输出。
+//   - output：日志文件路径；空字符串表示输出到标准输出。
 //
-// 返回值：
-//   - 返回一个配置选项函数，可用于配置日志实例。
+// 返回：
+//   - Option：应用于 LoggerOptions 的配置选项。
 func WithOutput(output string) Option {
 	return func(opts *LoggerOptions) {
 		opts.Output = output
 	}
 }
 
-// WithEnableRotate 设置是否启用日志滚动。
+// WithEnableRotate 设置 Logrus 文件输出是否启用日志轮转。
 //
 // 参数：
-//   - enable：是否启用日志滚动，true 表示启用，false 表示禁用。
+//   - enable：是否启用日志轮转；true 表示启用，false 表示禁用。
 //
-// 返回值：
-//   - 返回一个配置选项函数，可用于配置日志实例。
+// 返回：
+//   - Option：应用于 LoggerOptions 的配置选项。
 func WithEnableRotate(enable bool) Option {
 	return func(opts *LoggerOptions) {
 		opts.EnableRotate = enable
 	}
 }
 
-// WithRotateTime 设置日志滚动时间间隔。
+// WithRotateTime 设置 Logrus 文件输出的日志轮转周期。
 //
 // 参数：
-//   - duration：日志滚动的时间间隔。
+//   - duration：日志轮转周期，传递给底层 rotatelogs 实现。
 //
-// 返回值：
-//   - 返回一个配置选项函数，可用于配置日志实例。
+// 返回：
+//   - Option：应用于 LoggerOptions 的配置选项。
 func WithRotateTime(duration time.Duration) Option {
 	return func(opts *LoggerOptions) {
 		opts.RotateTime = duration
 	}
 }
 
-// WithMaxAge 设置日志保留时间。
+// WithMaxAge 设置 Logrus 轮转日志文件的最大保留时间。
 //
 // 参数：
-//   - duration：日志文件的最大保留时间。
+//   - duration：轮转日志文件的最大保留时间，传递给底层 rotatelogs 实现。
 //
-// 返回值：
-//   - 返回一个配置选项函数，可用于配置日志实例。
+// 返回：
+//   - Option：应用于 LoggerOptions 的配置选项。
 func WithMaxAge(duration time.Duration) Option {
 	return func(opts *LoggerOptions) {
 		opts.MaxAge = duration
@@ -346,12 +385,15 @@ func WithMaxAge(duration time.Duration) Option {
 
 // NewLogger 创建一个新的日志实例。
 //
-// 参数：
-//   - options：可选的配置选项列表，用于自定义日志记录器的行为。
+// 未传入 options 时使用标准库日志实现、InfoLevel、标准输出、JSONFormat 以及
+// Logrus 轮转默认值。LogTypeConsole 会忽略 Output 并写入标准输出。
 //
-// 返回值：
-//   - Logger：返回创建的日志实例。
-//   - error：返回创建过程中可能发生的错误。
+// 参数：
+//   - options：可选配置项，按传入顺序应用；未传入时使用默认配置。
+//
+// 返回：
+//   - Logger：初始化完成的日志实例。
+//   - error：日志类型不受支持、文件输出路径创建失败、文件打开失败或 Logrus 轮转 writer 创建失败时返回错误。
 func NewLogger(options ...Option) (Logger, error) {
 	// 默认配置。
 	opts := &LoggerOptions{

@@ -109,10 +109,13 @@ func (r *resolve) register(key string, item ResolveItem) {
 	r.resolvers[key] = item
 }
 
-// RegisterResolve 向默认解析器注册一个解析处理函数。
+// RegisterResolve 向包级默认解析器注册一个后缀处理函数。
+//
+// 该函数会直接修改默认解析器的 resolver map；调用方应在程序初始化阶段或并发解码开始前完成注册。
+//
 // 参数：
-//   - key: 处理函数的标识。
-//   - item: 要注册的解析处理函数。
+//   - key：resolver 的键，通常使用配置后缀作为标识。
+//   - item：与 key 关联的解析处理函数。
 func RegisterResolve(key string, item ResolveItem) {
 	defaultResolve.register(key, item)
 }

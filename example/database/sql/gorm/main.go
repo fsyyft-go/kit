@@ -2,7 +2,7 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package main 演示了如何使用 gorm 进行基本的数据库操作，包括连接配置、表结构定义和基本的 CRUD 操作。
+// gorm 演示如何使用 kit 的 MySQL 连接和 GORM 适配器对 example_user 表执行基础 CRUD 操作。
 package main
 
 import (

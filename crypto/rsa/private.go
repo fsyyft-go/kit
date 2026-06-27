@@ -12,23 +12,28 @@ import (
 )
 
 const (
-	// BlockTypePrivateKey 定义 PEM 块中 RSA 私钥的类型标识符。
+	// BlockTypePrivateKey 是本包接受的 PKCS#1 RSA 私钥 PEM block 类型。
 	BlockTypePrivateKey = "RSA PRIVATE KEY"
 )
 
 var (
-	// ErrDecodePrivateKey 表示私钥解码过程中出现错误的错误信息。
+	// ErrDecodePrivateKey 表示 PEM 私钥解码失败或 block 类型不是 RSA 私钥。
+	//
+	// 当输入不是 PEM，或 PEM block type 不是 RSA PRIVATE KEY 时返回该错误。
+	// PEM type 正确但 DER 内容非法时会透传 x509 解析错误。调用方可以使用 errors.Is 判断该错误。
 	ErrDecodePrivateKey = errors.New("私钥不正确。")
 )
 
-// ConvertPrivateKey 将 PEM 格式的私钥数据转换为 RSA 私钥对象。
+// ConvertPrivateKey 将 PEM 编码的 PKCS#1 RSA 私钥解析为 *rsa.PrivateKey。
+//
+// 输入必须是类型为 RSA PRIVATE KEY 的 PEM block；其他 PEM 类型或解析失败时返回错误。
 //
 // 参数：
-//   - privateKey：PEM 格式的私钥字节数组。
+//   - privateKey: PEM 编码的私钥字节切片，且 PEM block 类型必须为 RSA PRIVATE KEY。
 //
-// 返回值：
-//   - *rsa.PrivateKey：转换后的 RSA 私钥对象。
-//   - error：转换过程中可能发生的错误。
+// 返回：
+//   - *rsa.PrivateKey: 解析成功后的 RSA 私钥对象。
+//   - error: PEM 解码失败、block 类型不匹配或 PKCS#1 私钥解析失败时返回错误；解码或类型错误可使用 errors.Is 判断 ErrDecodePrivateKey。
 func ConvertPrivateKey(privateKey []byte) (*rsa.PrivateKey, error) {
 	// 声明私钥和错误变量。
 	var priv *rsa.PrivateKey

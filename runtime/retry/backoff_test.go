@@ -2,18 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-//
-// Backoff 单元测试
-//
-// 设计思路：
-//   - 所有测试用例均采用表格驱动，便于批量验证多种参数组合和边界场景。
-//   - 断言全部使用 stretchr/testify/assert，提升可读性和一致性。
-//   - 每个测试函数前均有详细注释，说明测试目标和覆盖点。
-//   - 涵盖 Backoff 的所有公开方法，包括 Copy、Reset、Duration、ForAttempt、Attempt。
-//   - 针对极端参数、默认值、抖动、并发等场景均有覆盖。
-//   - 使用方法：直接 go test 运行本文件即可。
-//
-
 package retry
 
 import (
@@ -23,188 +11,374 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// 测试 Backoff.Duration、Reset、factor、min/max 逻辑。
-func TestBackoff_DurationAndReset(t *testing.T) {
-	// 定义测试用例，覆盖不同 factor、min、max 组合及重置场景。
+// TestNewBackoff_DefaultsAndOptions 验证 NewBackoff 的默认配置和选项覆盖行为。
+//
+// 该测试通过表驱动用例覆盖默认值、自定义选项和重复选项覆盖语义，确保 Backoff 构造契约稳定。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestNewBackoff_DefaultsAndOptions(t *testing.T) {
 	tests := []struct {
-		name        string          // 用例名称。
-		b           Backoff         // 待测试的 Backoff 实例。
-		calls       []time.Duration // 期望每次 Duration 的返回值。
-		reset       int             // 第几次调用后重置。
-		resetExpect time.Duration   // 重置后第一次期望值。
+		name        string
+		description string
+		giveOptions []BackoffOption
+		wantMin     time.Duration
+		wantMax     time.Duration
+		wantFactor  float64
+		wantJitter  bool
 	}{
 		{
-			name:        "factor=2, min=100ms, max=10s",
-			b:           Backoff{min: 100 * time.Millisecond, max: 10 * time.Second, factor: 2},
-			calls:       []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond},
-			reset:       3,
-			resetExpect: 100 * time.Millisecond,
+			name:        "success/defaults",
+			description: "验证 NewBackoff 在未传入选项时使用稳定的默认退避参数。",
+			wantMin:     100 * time.Millisecond,
+			wantMax:     10 * time.Second,
+			wantFactor:  2,
+			wantJitter:  false,
 		},
 		{
-			name:        "factor=1.5, min=100ms, max=10s",
-			b:           Backoff{min: 100 * time.Millisecond, max: 10 * time.Second, factor: 1.5},
-			calls:       []time.Duration{100 * time.Millisecond, 150 * time.Millisecond, 225 * time.Millisecond},
-			reset:       3,
-			resetExpect: 100 * time.Millisecond,
+			name:        "success/custom-options",
+			description: "验证 WithMin、WithMax、WithFactor 和 WithJitter 能完整覆盖默认退避参数。",
+			giveOptions: []BackoffOption{
+				WithMin(25 * time.Millisecond),
+				WithMax(750 * time.Millisecond),
+				WithFactor(3.5),
+				WithJitter(true),
+			},
+			wantMin:    25 * time.Millisecond,
+			wantMax:    750 * time.Millisecond,
+			wantFactor: 3.5,
+			wantJitter: true,
 		},
 		{
-			name:        "factor=1.75, min=100ns, max=10s",
-			b:           Backoff{min: 100 * time.Nanosecond, max: 10 * time.Second, factor: 1.75},
-			calls:       []time.Duration{100 * time.Nanosecond, 175 * time.Nanosecond, 306 * time.Nanosecond},
-			reset:       3,
-			resetExpect: 100 * time.Nanosecond,
-		},
-		{
-			name:        "min>=max, 直接返回max",
-			b:           Backoff{min: 500 * time.Second, max: 100 * time.Second, factor: 1},
-			calls:       []time.Duration{100 * time.Second},
-			reset:       1,
-			resetExpect: 100 * time.Second,
+			name:        "success/last-option-wins",
+			description: "验证同一字段被多个选项设置时，后传入的选项具有最终生效语义。",
+			giveOptions: []BackoffOption{
+				WithMin(10 * time.Millisecond),
+				WithMin(20 * time.Millisecond),
+				WithMax(100 * time.Millisecond),
+				WithMax(200 * time.Millisecond),
+				WithFactor(1.25),
+				WithFactor(1.5),
+				WithJitter(false),
+				WithJitter(true),
+			},
+			wantMin:    20 * time.Millisecond,
+			wantMax:    200 * time.Millisecond,
+			wantFactor: 1.5,
+			wantJitter: true,
 		},
 	}
+
 	for _, tt := range tests {
-		// 使用 t.Run 子测试，便于并行和单独调试。
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			b := tt.b
-			for i, expect := range tt.calls {
-				// 依次调用 Duration 并断言返回值。
-				actual := b.Duration()
-				assert.Equal(t, expect, actual, "第 %d 次 Duration 期望值不符", i+1)
+			t.Log(tt.description)
+
+			got := NewBackoff(tt.giveOptions...)
+
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantMin, got.min)
+			assert.Equal(t, tt.wantMax, got.max)
+			assert.Equal(t, tt.wantFactor, got.factor)
+			assert.Equal(t, tt.wantJitter, got.jitter)
+		})
+	}
+}
+
+// TestBackoff_ForAttemptBoundaries 验证 ForAttempt 在增长、默认值和边界输入下的退避计算。
+//
+// 该测试覆盖指数增长、最大值截断、min >= max、非正因子、负 attempt 和溢出保护等公共行为。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestBackoff_ForAttemptBoundaries(t *testing.T) {
+	tests := []struct {
+		name         string
+		description  string
+		giveBackoff  *Backoff
+		giveAttempt  float64
+		wantDuration time.Duration
+	}{
+		{
+			name:         "success/exponential-growth",
+			description:  "验证 ForAttempt 按 min * factor^attempt 计算未触顶的指数退避时间。",
+			giveBackoff:  NewBackoff(WithMin(10*time.Millisecond), WithMax(time.Second), WithFactor(2)),
+			giveAttempt:  3,
+			wantDuration: 80 * time.Millisecond,
+		},
+		{
+			name:         "boundary/caps-at-max",
+			description:  "验证指数退避结果超过 max 时返回 max 以保持上界约束。",
+			giveBackoff:  NewBackoff(WithMin(10*time.Millisecond), WithMax(25*time.Millisecond), WithFactor(2)),
+			giveAttempt:  2,
+			wantDuration: 25 * time.Millisecond,
+		},
+		{
+			name:         "boundary/min-greater-than-max",
+			description:  "验证 min 大于 max 时 ForAttempt 直接返回 max，避免产生无效区间。",
+			giveBackoff:  NewBackoff(WithMin(5*time.Second), WithMax(time.Second), WithFactor(2)),
+			giveAttempt:  0,
+			wantDuration: time.Second,
+		},
+		{
+			name:         "boundary/min-equals-max",
+			description:  "验证 min 等于 max 时退避时间保持为 max，不受 attempt 和 factor 影响。",
+			giveBackoff:  NewBackoff(WithMin(17*time.Millisecond), WithMax(17*time.Millisecond), WithFactor(8)),
+			giveAttempt:  4,
+			wantDuration: 17 * time.Millisecond,
+		},
+		{
+			name:         "boundary/zero-value-uses-defaults",
+			description:  "验证 Backoff 零值通过 ForAttempt 使用默认 min、max 和 factor 参数。",
+			giveBackoff:  &Backoff{},
+			giveAttempt:  2,
+			wantDuration: 400 * time.Millisecond,
+		},
+		{
+			name:         "boundary/negative-factor-uses-default",
+			description:  "验证 factor 小于零时使用默认增长因子并保留有效的自定义边界。",
+			giveBackoff:  NewBackoff(WithMin(5*time.Millisecond), WithMax(100*time.Millisecond), WithFactor(-3)),
+			giveAttempt:  2,
+			wantDuration: 20 * time.Millisecond,
+		},
+		{
+			name:         "boundary/zero-factor-uses-default",
+			description:  "验证 factor 等于零时使用默认增长因子并保留有效的自定义边界。",
+			giveBackoff:  NewBackoff(WithMin(5*time.Millisecond), WithMax(100*time.Millisecond), WithFactor(0)),
+			giveAttempt:  2,
+			wantDuration: 20 * time.Millisecond,
+		},
+		{
+			name:         "boundary/factor-below-one-clamps-to-min",
+			description:  "验证正因子小于一导致计算值低于 min 时，ForAttempt 返回 min。",
+			giveBackoff:  NewBackoff(WithMin(100*time.Millisecond), WithMax(time.Second), WithFactor(0.5)),
+			giveAttempt:  3,
+			wantDuration: 100 * time.Millisecond,
+		},
+		{
+			name:         "boundary/negative-attempt-clamps-to-min",
+			description:  "验证负 attempt 导致计算值低于 min 时，ForAttempt 返回 min。",
+			giveBackoff:  NewBackoff(WithMin(100*time.Millisecond), WithMax(time.Second), WithFactor(2)),
+			giveAttempt:  -1,
+			wantDuration: 100 * time.Millisecond,
+		},
+		{
+			name:         "boundary/overflow-returns-max",
+			description:  "验证指数计算超过可安全转换的整数范围时，ForAttempt 返回 max 作为溢出保护。",
+			giveBackoff:  NewBackoff(WithMin(time.Nanosecond), WithMax(2*time.Nanosecond), WithFactor(1e18)),
+			giveAttempt:  1000,
+			wantDuration: 2 * time.Nanosecond,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			got := tt.giveBackoff.ForAttempt(tt.giveAttempt)
+
+			assert.Equal(t, tt.wantDuration, got)
+		})
+	}
+}
+
+// TestBackoff_DurationAttemptAndReset 验证 Duration、Attempt 和 Reset 的状态协作语义。
+//
+// 该测试覆盖连续 Duration 调用时的 attempt 自增、退避序列计算、最大值截断和 Reset 后重新开始计数的行为。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestBackoff_DurationAttemptAndReset(t *testing.T) {
+	tests := []struct {
+		name           string
+		description    string
+		setup          func() *Backoff
+		wantDurations  []time.Duration
+		wantAfterReset time.Duration
+	}{
+		{
+			name:        "success/growing-sequence",
+			description: "验证 Duration 按当前 attempt 返回指数增长序列，并在每次调用后递增计数。",
+			setup: func() *Backoff {
+				return NewBackoff(WithMin(10*time.Millisecond), WithMax(time.Second), WithFactor(2))
+			},
+			wantDurations:  []time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 40 * time.Millisecond},
+			wantAfterReset: 10 * time.Millisecond,
+		},
+		{
+			name:        "boundary/capped-sequence",
+			description: "验证 Duration 序列触达 max 后保持在上界，同时 attempt 仍继续递增。",
+			setup: func() *Backoff {
+				return NewBackoff(WithMin(10*time.Millisecond), WithMax(25*time.Millisecond), WithFactor(2))
+			},
+			wantDurations:  []time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 25 * time.Millisecond, 25 * time.Millisecond},
+			wantAfterReset: 10 * time.Millisecond,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			b := tt.setup()
+			require.NotNil(t, b)
+			assert.Equal(t, float64(0), b.Attempt())
+
+			for i, want := range tt.wantDurations {
+				assert.Equal(t, float64(i), b.Attempt())
+				got := b.Duration()
+				assert.Equal(t, want, got)
+				assert.Equal(t, float64(i+1), b.Attempt())
 			}
-			// 调用 Reset 后再次断言。
+
 			b.Reset()
-			actual := b.Duration()
-			assert.Equal(t, tt.resetExpect, actual, "Reset 后第一次 Duration 期望值不符")
+			assert.Equal(t, float64(0), b.Attempt())
+			assert.Equal(t, tt.wantAfterReset, b.Duration())
+			assert.Equal(t, float64(1), b.Attempt())
 		})
 	}
 }
 
-// 测试 ForAttempt 方法，覆盖不同 attempt 值和参数边界。
-func TestBackoff_ForAttempt(t *testing.T) {
-	// 定义测试用例，覆盖不同 factor、min、max 组合及边界。
+// TestBackoff_Copy 验证 Copy 复制参数但不复制运行时 attempt 状态。
+//
+// 该测试确认 Copy 返回独立实例，复制 min、max、factor 和 jitter 配置，并从零 attempt 开始独立计数。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestBackoff_Copy(t *testing.T) {
+	// 先推进原始实例的 attempt，以验证 Copy 不复制运行时计数器。
+	original := NewBackoff(
+		WithMin(25*time.Millisecond),
+		WithMax(500*time.Millisecond),
+		WithFactor(3),
+		WithJitter(true),
+	)
+	assert.Equal(t, 25*time.Millisecond, original.Duration())
+	assert.Equal(t, float64(1), original.Attempt())
+
+	copied := original.Copy()
+
+	require.NotNil(t, copied)
+	assert.NotSame(t, original, copied)
+	assert.Equal(t, original.min, copied.min)
+	assert.Equal(t, original.max, copied.max)
+	assert.Equal(t, original.factor, copied.factor)
+	assert.Equal(t, original.jitter, copied.jitter)
+	assert.Equal(t, float64(1), original.Attempt())
+	assert.Equal(t, float64(0), copied.Attempt())
+
+	// 分别推进原始实例和副本，验证两个实例的 attempt 彼此独立。
+	_ = original.Duration()
+	assert.Equal(t, float64(2), original.Attempt())
+	assert.Equal(t, float64(0), copied.Attempt())
+	assert.Equal(t, 25*time.Millisecond, copied.Duration())
+	assert.Equal(t, float64(1), copied.Attempt())
+	assert.Equal(t, float64(2), original.Attempt())
+}
+
+// TestBackoff_JitterRange 验证启用 jitter 后返回值始终落在稳定边界内。
+//
+// 该测试不依赖随机值的具体分布，只断言 jitter 结果满足 min、理论退避值和 max 共同形成的范围约束。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestBackoff_JitterRange(t *testing.T) {
 	tests := []struct {
-		name    string          // 用例名称。
-		b       Backoff         // 待测试的 Backoff 实例。
-		inputs  []float64       // 输入的 attempt 值。
-		expects []time.Duration // 期望的返回值。
+		name        string
+		description string
+		giveBackoff *Backoff
+		giveAttempt float64
+		wantMin     time.Duration
+		wantMax     time.Duration
+		repeat      int
 	}{
 		{
-			name:    "factor=2, min=100ms, max=10s",
-			b:       Backoff{min: 100 * time.Millisecond, max: 10 * time.Second, factor: 2},
-			inputs:  []float64{0, 1, 2},
-			expects: []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond},
+			name:        "boundary/first-attempt-is-min",
+			description: "验证 attempt 为零时 jitter 区间退化为 min，返回值稳定等于 min。",
+			giveBackoff: NewBackoff(WithMin(10*time.Millisecond), WithMax(time.Second), WithFactor(4), WithJitter(true)),
+			giveAttempt: 0,
+			wantMin:     10 * time.Millisecond,
+			wantMax:     10 * time.Millisecond,
+			repeat:      5,
 		},
 		{
-			name:    "factor=1.5, min=100ms, max=10s",
-			b:       Backoff{min: 100 * time.Millisecond, max: 10 * time.Second, factor: 1.5},
-			inputs:  []float64{0, 1, 2},
-			expects: []time.Duration{100 * time.Millisecond, 150 * time.Millisecond, 225 * time.Millisecond},
+			name:        "success/within-theoretical-range",
+			description: "验证未触达 max 的 jitter 结果位于 min 与理论指数退避值之间。",
+			giveBackoff: NewBackoff(WithMin(10*time.Millisecond), WithMax(time.Second), WithFactor(4), WithJitter(true)),
+			giveAttempt: 1,
+			wantMin:     10 * time.Millisecond,
+			wantMax:     40 * time.Millisecond,
+			repeat:      20,
 		},
 		{
-			name:    "min>=max, 直接返回max",
-			b:       Backoff{min: 500 * time.Second, max: 100 * time.Second, factor: 1},
-			inputs:  []float64{0, 1},
-			expects: []time.Duration{100 * time.Second, 100 * time.Second},
-		},
-		{
-			name:    "factor<=0, min/max<=0, 走默认值",
-			b:       Backoff{factor: 0, min: 0, max: 0},
-			inputs:  []float64{0, 1, 2},
-			expects: []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond},
+			name:        "boundary/clamped-by-max",
+			description: "验证 jitter 结果超过 max 时会被上界截断，最终返回值不超过 max。",
+			giveBackoff: NewBackoff(WithMin(10*time.Millisecond), WithMax(25*time.Millisecond), WithFactor(4), WithJitter(true)),
+			giveAttempt: 2,
+			wantMin:     10 * time.Millisecond,
+			wantMax:     25 * time.Millisecond,
+			repeat:      20,
 		},
 	}
+
 	for _, tt := range tests {
-		// 使用 t.Run 子测试，便于并行和单独调试。
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			for i, in := range tt.inputs {
-				// 调用 ForAttempt 并断言返回值。
-				actual := tt.b.ForAttempt(in)
-				assert.Equal(t, tt.expects[i], actual, "ForAttempt(%v) 期望值不符", in)
+			t.Log(tt.description)
+
+			for i := 0; i < tt.repeat; i++ {
+				got := tt.giveBackoff.ForAttempt(tt.giveAttempt)
+				assert.GreaterOrEqual(t, got, tt.wantMin)
+				assert.LessOrEqual(t, got, tt.wantMax)
 			}
 		})
 	}
 }
 
-// 测试 Attempt 方法和 Duration 计数器自增。
-func TestBackoff_Attempt(t *testing.T) {
-	// 构造 Backoff 并逐步调用 Duration，检查 Attempt 是否同步递增。
-	b := &Backoff{min: 100 * time.Millisecond, max: 10 * time.Second, factor: 2}
-	// 检查初始 Attempt。
-	assert.Equal(t, float64(0), b.Attempt(), "初始 Attempt 应为 0")
-	b.Duration()
-	// 检查第一次 Duration 后 Attempt。
-	assert.Equal(t, float64(1), b.Attempt(), "第一次 Duration 后 Attempt 应为 1")
-	b.Duration()
-	// 检查第二次 Duration 后 Attempt。
-	assert.Equal(t, float64(2), b.Attempt(), "第二次 Duration 后 Attempt 应为 2")
-	b.Duration()
-	// 检查第三次 Duration 后 Attempt。
-	assert.Equal(t, float64(3), b.Attempt(), "第三次 Duration 后 Attempt 应为 3")
-	b.Reset()
-	// 检查 Reset 后 Attempt。
-	assert.Equal(t, float64(0), b.Attempt(), "Reset 后 Attempt 应为 0")
-}
+// TestBackoff_ForAttemptConcurrent 验证 ForAttempt 可在并发调用场景下稳定计算退避值。
+//
+// 该测试使用多个 goroutine 并发读取同一 Backoff 参数，并通过超时保护避免并发回归导致测试挂起。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestBackoff_ForAttemptConcurrent(t *testing.T) {
+	const workers = 16
 
-// 测试 Copy 方法，确保参数复制但计数器不共享。
-func TestBackoff_Copy(t *testing.T) {
-	b := &Backoff{min: 100 * time.Millisecond, max: 10 * time.Second, factor: 2, jitter: true}
-	b2 := b.Copy()
-	// 检查 factor 是否一致。
-	assert.Equal(t, b.factor, b2.factor, "factor 应一致")
-	// 检查 jitter 是否一致。
-	assert.Equal(t, b.jitter, b2.jitter, "jitter 应一致")
-	// 检查 min 是否一致。
-	assert.Equal(t, b.min, b2.min, "min 应一致")
-	// 检查 max 是否一致。
-	assert.Equal(t, b.max, b2.max, "max 应一致")
-	// 检查实例地址是否不同。
-	assert.NotSame(t, b, b2, "Copy 返回的新实例地址应不同")
-	b.Duration()
-	// 检查原实例计数器递增。
-	assert.Equal(t, float64(1), b.Attempt(), "原实例计数器应递增")
-	// 检查新实例计数器为 0。
-	assert.Equal(t, float64(0), b2.Attempt(), "新实例计数器应为 0")
-}
+	b := NewBackoff(WithMin(time.Millisecond), WithMax(512*time.Millisecond), WithFactor(2))
+	results := make([]time.Duration, workers)
+	var wg sync.WaitGroup
 
-// 测试 jitter 场景，确保返回值在合理区间。
-func TestBackoff_Jitter(t *testing.T) {
-	b := &Backoff{min: 100 * time.Millisecond, max: 10 * time.Second, factor: 2, jitter: true}
-	// 第一次必定为 min。
-	assert.Equal(t, 100*time.Millisecond, b.Duration(), "第一次 Duration 应为 min")
-	// 后续带抖动，区间断言。
-	v := b.Duration()
-	assert.GreaterOrEqual(t, v, 100*time.Millisecond, "带 jitter 的 Duration 不应小于 min")
-	assert.LessOrEqual(t, v, 200*time.Millisecond, "带 jitter 的 Duration 不应大于理论最大")
-	v2 := b.Duration()
-	assert.GreaterOrEqual(t, v2, 100*time.Millisecond, "带 jitter 的 Duration 不应小于 min")
-	assert.LessOrEqual(t, v2, 400*time.Millisecond, "带 jitter 的 Duration 不应大于理论最大")
-	b.Reset()
-	// Reset 后第一次必定为 min。
-	assert.Equal(t, 100*time.Millisecond, b.Duration(), "Reset 后第一次 Duration 应为 min")
-}
-
-// 并发场景测试，确保 ForAttempt 并发安全。
-func TestBackoff_Concurrent(t *testing.T) {
-	b := &Backoff{min: 100 * time.Millisecond, max: 10 * time.Second, factor: 2}
-	wg := &sync.WaitGroup{}
-	results := make([]time.Duration, 10)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < workers; i++ {
+		attempt := i
 		wg.Add(1)
-		// 启动 10 个 goroutine 并发调用 ForAttempt。
-		go func(idx int) {
+		go func() {
 			defer wg.Done()
-			results[idx] = b.ForAttempt(float64(idx))
-		}(i)
+			results[attempt] = b.ForAttempt(float64(attempt))
+		}()
 	}
-	wg.Wait()
-	for i := 0; i < 10; i++ {
-		// 期望值为 min * factor^i。
-		expect := time.Duration(float64(100*time.Millisecond) * math.Pow(2, float64(i)))
-		if expect > 10*time.Second {
-			expect = 10 * time.Second
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		require.FailNow(t, "ForAttempt 并发调用未在预期时间内完成")
+	}
+
+	for attempt, got := range results {
+		want := time.Duration(float64(time.Millisecond) * math.Pow(2, float64(attempt)))
+		if want > 512*time.Millisecond {
+			want = 512 * time.Millisecond
 		}
-		assert.Equal(t, expect, results[i], "并发 ForAttempt(%d) 期望值不符", i)
+		assert.Equal(t, want, got)
 	}
 }
