@@ -2,6 +2,9 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+// goroutine 示例比较当前 goroutine 在快速路径和慢速路径下的 ID 获取结果。
+//
+// 该命令会打印主 goroutine 和新建 goroutine 的标识，并并排展示 GetGoID 与 GetGoIDSlow 的返回值。
 package main
 
 import (

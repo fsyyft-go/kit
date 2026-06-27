@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kratos/kratos/v2/config"
 	"github.com/go-kratos/kratos/v2/config/file"
+	_ "github.com/go-kratos/kratos/v2/encoding/yaml"
 
 	kitkratosconfig "github.com/fsyyft-go/kit/kratos/config"
 )

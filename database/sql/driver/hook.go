@@ -11,38 +11,53 @@ import (
 	"time"
 )
 
-// OpType 表示数据库操作类型。
+// OpType 表示 database/sql/driver 包装层观察到的数据库操作类型。
+//
+// 可选值包括：
+//   - OpConnect: 打开底层连接。
+//   - OpBegin: 开始事务。
+//   - OpCommit: 提交事务。
+//   - OpRollback: 回滚事务。
+//   - OpPrepare: 创建预处理语句。
+//   - OpStmtExec: 执行预处理语句。
+//   - OpStmtQuery: 查询预处理语句。
+//   - OpStmtClose: 关闭预处理语句。
+//   - OpExec: 执行普通 SQL。
+//   - OpQuery: 查询普通 SQL。
+//   - OpPing: 检测连接可用性。
 type OpType int
 
 const (
-	// OpConnect 表示连接操作。
+	// OpConnect 表示打开底层连接。
 	OpConnect OpType = iota
-	// OpBegin 表示开始事务操作。
+	// OpBegin 表示开始事务。
 	OpBegin
-	// OpCommit 表示提交事务操作。
+	// OpCommit 表示提交事务。
 	OpCommit
-	// OpRollback 表示回滚事务操作。
+	// OpRollback 表示回滚事务。
 	OpRollback
-	// OpPrepare 表示预处理语句操作。
+	// OpPrepare 表示创建预处理语句。
 	OpPrepare
-	// OpStmtExec 表示执行预处理语句操作。
+	// OpStmtExec 表示执行预处理语句。
 	OpStmtExec
-	// OpStmtQuery 表示查询预处理语句操作。
+	// OpStmtQuery 表示查询预处理语句。
 	OpStmtQuery
-	// OpStmtClose 表示关闭预处理语句操作。
+	// OpStmtClose 表示关闭预处理语句。
 	OpStmtClose
-	// OpExec 表示执行操作。
+	// OpExec 表示执行普通 SQL。
 	OpExec
-	// OpQuery 表示查询操作。
+	// OpQuery 表示查询普通 SQL。
 	OpQuery
-	// OpPing 表示 ping 操作。
+	// OpPing 表示检测连接可用性。
 	OpPing
 )
 
 // String 返回操作类型的字符串表示。
 //
-// 返回值：
-//   - string：返回操作类型对应的字符串描述。
+// 参数：无。
+//
+// 返回：
+//   - string: 已知操作类型返回固定英文名称；未知值返回 "Unknown"。
 func (o OpType) String() string {
 	switch o {
 	case OpConnect:
@@ -72,12 +87,13 @@ func (o OpType) String() string {
 	}
 }
 
-// HookContext 包含数据库操作的上下文信息。
-// 该结构体提供了以下功能：
-// - 记录数据库操作的详细信息，包括操作类型、SQL 语句和参数。
-// - 跟踪操作的执行时间和结果。
-// - 提供自定义数据的存储和访问。
-// - 支持上下文传递和取消。
+// HookContext 描述一次数据库驱动操作在 Hook 链中的共享上下文。
+//
+// HookContext 记录操作类型、SQL、参数、开始与结束时间、底层操作的原始结果
+// 和原始错误，并实现 context.Context 以透传取消信号、截止时间和上下文值。
+// NewHookContext 创建后会立即记录开始时间；调用 SetResult 后，Duration 才表示
+// 本次操作的实际耗时。Hook 之间还可以通过 SetHookValue 和 GetHookValue 在当前
+// 操作内共享数据。
 type HookContext struct {
 	// 原始上下文对象。
 	originContext context.Context
@@ -99,16 +115,16 @@ type HookContext struct {
 	hookMap sync.Map
 }
 
-// NewHookContext 创建一个新的 HookContext 实例。
+// NewHookContext 创建一次数据库操作对应的 HookContext。
 //
 // 参数：
-//   - ctx：原始上下文对象，用于控制操作的生命周期。
-//   - opType：操作类型，表示当前执行的数据库操作。
-//   - query：SQL 查询语句，可以为空。
-//   - args：SQL 语句的参数列表，可以为 nil。
+//   - ctx: 底层操作使用的原始上下文；调用方应传入非 nil 上下文。
+//   - opType: 当前数据库操作的类型。
+//   - query: 当前操作关联的 SQL；对连接、事务或 Ping 等无 SQL 的操作通常为空字符串。
+//   - args: 当前操作的命名参数列表；没有参数时可为 nil。
 //
-// 返回值：
-//   - *HookContext：返回一个新创建的 HookContext 实例。
+// 返回：
+//   - *HookContext: 已记录开始时间的 HookContext。
 func NewHookContext(ctx context.Context, opType OpType, query string, args []driver.NamedValue) *HookContext {
 	return &HookContext{
 		originContext: ctx,
@@ -119,200 +135,240 @@ func NewHookContext(ctx context.Context, opType OpType, query string, args []dri
 	}
 }
 
-// SetResult 设置操作结果和结束时间。
+// SetResult 记录底层操作的原始结果、原始错误和结束时间。
+//
+// SetResult 通常在底层 driver 调用返回后由包装器调用一次；调用后 Duration
+// 才表示本次操作的实际耗时。
 //
 // 参数：
-//   - result：操作的结果，可以是任意类型。
-//   - err：操作过程中产生的错误，如果没有错误则为 nil。
+//   - result: 底层操作返回的原始结果；类型随操作而变化。
+//   - err: 底层操作返回的原始错误；成功时为 nil。
 func (h *HookContext) SetResult(result interface{}, err error) {
 	h.originResult = result
 	h.originError = err
 	h.endTime = time.Now()
 }
 
-// StartTime 返回操作开始时间。
+// StartTime 返回当前操作开始执行的时间戳。
 //
-// 返回值：
-//   - time.Time：返回操作的开始时间。
+// 参数：无。
+//
+// 返回：
+//   - time.Time: 记录 HookContext 创建时的开始时间。
 func (h *HookContext) StartTime() time.Time {
 	return h.startTime
 }
 
-// EndTime 返回操作结束时间。
+// EndTime 返回当前操作记录结束结果的时间戳。
 //
-// 返回值：
-//   - time.Time：返回操作的结束时间。
+// 在 SetResult 调用前，EndTime 返回零值。
+//
+// 参数：无。
+//
+// 返回：
+//   - time.Time: 记录底层操作结果写入 HookContext 的时间。
 func (h *HookContext) EndTime() time.Time {
 	return h.endTime
 }
 
-// Duration 返回操作持续时间。
+// Duration 返回当前操作从开始到记录结果之间的耗时。
 //
-// 返回值：
-//   - time.Duration：返回操作的持续时间。
+// 在 SetResult 调用前，Duration 的返回值不表示有效耗时。
+//
+// 参数：无。
+//
+// 返回：
+//   - time.Duration: 当前操作的记录耗时。
 func (h *HookContext) Duration() time.Duration {
 	return h.endTime.Sub(h.startTime)
 }
 
-// OpType 返回操作类型。
+// OpType 返回当前操作的类型。
 //
-// 返回值：
-//   - OpType：返回当前操作的类型。
+// 参数：无。
+//
+// 返回：
+//   - OpType: 当前 HookContext 记录的数据库操作类型。
 func (h *HookContext) OpType() OpType {
 	return h.opType
 }
 
-// Query 返回操作语句。
+// Query 返回当前操作关联的 SQL 语句。
 //
-// 返回值：
-//   - string：返回 SQL 查询语句。
+// 对连接、Ping、事务提交和回滚等无 SQL 的操作，Query 可能为空字符串。
+//
+// 参数：无。
+//
+// 返回：
+//   - string: 当前操作关联的 SQL 文本。
 func (h *HookContext) Query() string {
 	return h.query
 }
 
-// Args 返回操作参数。
+// Args 返回当前操作携带的命名参数列表。
 //
-// 返回值：
-//   - []driver.NamedValue：返回 SQL 语句的参数列表。
+// 返回的切片应视为只读，供 Hook 观察参数内容使用。
+//
+// 参数：无。
+//
+// 返回：
+//   - []driver.NamedValue: 当前操作的参数列表；没有参数时可能为 nil。
 func (h *HookContext) Args() []driver.NamedValue {
 	return h.args
 }
 
-// OriginError 返回原始操作错误。
+// OriginError 返回底层操作产生的原始错误。
 //
-// 返回值：
-//   - error：返回操作过程中产生的原始错误。
+// 如果底层操作成功，OriginError 返回 nil。
+//
+// 参数：无。
+//
+// 返回：
+//   - error: 底层操作返回的原始错误。
 func (h *HookContext) OriginError() error {
 	return h.originError
 }
 
-// OriginResult 返回原始操作结果。
+// OriginResult 返回底层操作产生的原始结果。
 //
-// 返回值：
-//   - interface{}：返回操作的原始结果。
+// 结果类型取决于当前操作，例如 driver.Conn、driver.Stmt、driver.Result、
+// driver.Rows、driver.Tx 或 nil。
+//
+// 参数：无。
+//
+// 返回：
+//   - interface{}: 底层操作返回的原始结果。
 func (h *HookContext) OriginResult() interface{} {
 	return h.originResult
 }
 
-// GetHookValue 获取 hook 中的值。
+// GetHookValue 读取当前操作中由 Hook 保存的共享数据。
 //
 // 参数：
-//   - key：要获取的键名。
+//   - key: 要读取的共享数据键名。
 //
-// 返回值：
-//   - interface{}：返回与键关联的值。
-//   - bool：如果键存在返回 true，否则返回 false。
+// 返回：
+//   - interface{}: 与 key 关联的值。
+//   - bool: key 存在时返回 true，否则返回 false。
 func (h *HookContext) GetHookValue(key string) (interface{}, bool) {
 	return h.hookMap.Load(key)
 }
 
-// SetHookValue 设置 hook 中的值。
+// SetHookValue 在当前操作的 Hook 链中保存共享数据。
 //
 // 参数：
-//   - key：要设置的键名。
-//   - value：要存储的值。
+//   - key: 要写入的共享数据键名。
+//   - value: 与 key 关联的值。
 func (h *HookContext) SetHookValue(key string, value interface{}) {
 	h.hookMap.Store(key, value)
 }
 
-// Deadline 实现 context.Context 接口。
+// Deadline 返回原始上下文的截止时间。
 //
-// 返回值：
-//   - deadline：返回上下文的截止时间。
-//   - ok：如果设置了截止时间返回 true，否则返回 false。
+// 参数：无。
+//
+// 返回：
+//   - deadline: 原始上下文的截止时间。
+//   - ok: 原始上下文设置了截止时间时返回 true，否则返回 false。
 func (h *HookContext) Deadline() (deadline time.Time, ok bool) {
 	return h.originContext.Deadline()
 }
 
-// Done 实现 context.Context 接口。
+// Done 返回原始上下文的 Done channel。
 //
-// 返回值：
-//   - <-chan struct{}：返回一个 channel，当上下文被取消时会被关闭。
+// 参数：无。
+//
+// 返回：
+//   - <-chan struct{}: 当原始上下文被取消时关闭的 channel。
 func (h *HookContext) Done() <-chan struct{} {
 	return h.originContext.Done()
 }
 
-// Err 实现 context.Context 接口。
+// Err 返回原始上下文的取消错误。
 //
-// 返回值：
-//   - error：如果上下文被取消，返回取消的原因。
+// 参数：无。
+//
+// 返回：
+//   - error: 原始上下文被取消或超时时返回对应错误，否则返回 nil。
 func (h *HookContext) Err() error {
 	return h.originContext.Err()
 }
 
-// Value 实现 context.Context 接口。
+// Value 返回原始上下文中与 key 关联的值。
 //
 // 参数：
-//   - key：要获取的值的键。
+//   - key: 要读取的上下文键。
 //
-// 返回值：
-//   - interface{}：返回与键关联的值。
+// 返回：
+//   - interface{}: 原始上下文中与 key 关联的值。
 func (h *HookContext) Value(key interface{}) interface{} {
 	return h.originContext.Value(key)
 }
 
-// Hook 定义数据库操作的钩子接口。
-// 该接口提供了以下功能：
-// - 在数据库操作执行前后执行自定义逻辑。
-// - 支持错误处理和日志记录。
-// - 支持性能监控和统计。
-// - 支持自定义的数据处理。
+// Hook 定义数据库驱动操作前后的扩展点。
+//
+// Before 在底层操作执行前调用；返回错误会阻止底层操作继续执行。
+// After 在底层操作返回并写入 HookContext 后调用；返回错误会覆盖底层操作
+// 原本准备返回给调用方的错误。
 type Hook interface {
-	// Before 在操作执行前调用。
+	// Before 在底层数据库操作开始前执行。
 	//
 	// 参数：
-	//   - ctx：钩子上下文，包含操作的相关信息。
+	//   - ctx: 当前操作的 HookContext；Before 阶段尚未写入 OriginResult、OriginError 和 EndTime。
 	//
-	// 返回值：
-	//   - error：如果钩子执行出错，返回相应的错误信息。
+	// 返回：
+	//   - error: 返回非 nil 错误会中止底层操作，并将该错误直接返回给调用方。
 	Before(ctx *HookContext) error
 
-	// After 在操作执行后调用。
+	// After 在底层数据库操作完成后执行。
 	//
 	// 参数：
-	//   - ctx：钩子上下文，包含操作的相关信息和结果。
+	//   - ctx: 当前操作的 HookContext；After 阶段可以读取底层操作写入的结果、错误和耗时。
 	//
-	// 返回值：
-	//   - error：如果钩子执行出错，返回相应的错误信息。
+	// 返回：
+	//   - error: 返回非 nil 错误会覆盖底层操作原本要返回给调用方的错误。
 	After(ctx *HookContext) error
 }
 
-// HookManager 管理多个 Hook 的执行。
-// 该结构体提供了以下功能：
-// - 注册和管理多个钩子
-// - 按顺序执行钩子链
-// - 支持钩子的动态添加和移除
-// - 提供钩子执行的错误处理
+// HookManager 按顺序编排多个 Hook。
+//
+// HookManager 会按 AddHook 的注册顺序调用 Before，并按相反顺序调用 After，
+// 以便成对组织前置和后置逻辑。HookManager 不做并发保护，通常应在初始化阶段
+// 完成 AddHook，再作为只读 Hook 链共享使用。
 type HookManager struct {
 	// hooks 存储注册的所有钩子。
 	hooks []Hook
 }
 
-// NewHookManager 创建一个新的 HookManager 实例。
+// NewHookManager 创建一个空的 HookManager。
 //
-// 返回值：
-//   - *HookManager：返回一个新创建的 HookManager 实例。
+// 参数：无。
+//
+// 返回：
+//   - *HookManager: 可继续通过 AddHook 注册 Hook 的管理器。
 func NewHookManager() *HookManager {
 	return &HookManager{
 		hooks: make([]Hook, 0),
 	}
 }
 
-// AddHook 添加一个 Hook。
+// AddHook 按注册顺序向 HookManager 追加一个 Hook。
+//
+// 后续 Before 会按照追加顺序执行该 Hook，After 会按逆序执行。
 //
 // 参数：
-//   - hook：要添加的钩子实例。
+//   - hook: 要注册到管理器末尾的 Hook。
 func (m *HookManager) AddHook(hook Hook) {
 	m.hooks = append(m.hooks, hook)
 }
 
-// Before 实现 Hook 接口，按顺序执行所有 Hook 的 Before 方法。
+// Before 按 Hook 的注册顺序执行所有前置逻辑。
 //
 // 参数：
-//   - ctx：钩子上下文，包含操作的相关信息。
+//   - ctx: 当前操作的 HookContext。
 //
-// 返回值：
-//   - error：如果任何钩子执行出错，返回第一个错误信息。
+// 返回：
+//   - error: 第一个返回的 Hook 错误；发生错误后不会继续执行后续 Hook。
 func (m *HookManager) Before(ctx *HookContext) error {
 	for _, hook := range m.hooks {
 		if err := hook.Before(ctx); err != nil {
@@ -322,13 +378,13 @@ func (m *HookManager) Before(ctx *HookContext) error {
 	return nil
 }
 
-// After 实现 Hook 接口，按逆序执行所有 Hook 的 After 方法。
+// After 按 Hook 的注册逆序执行所有后置逻辑。
 //
 // 参数：
-//   - ctx：钩子上下文，包含操作的相关信息和结果。
+//   - ctx: 当前操作的 HookContext。
 //
-// 返回值：
-//   - error：如果任何钩子执行出错，返回第一个错误信息。
+// 返回：
+//   - error: 逆序执行过程中遇到的第一个 Hook 错误；发生错误后不会继续执行剩余 Hook。
 func (m *HookManager) After(ctx *HookContext) error {
 	for i := len(m.hooks) - 1; i >= 0; i-- {
 		if err := m.hooks[i].After(ctx); err != nil {

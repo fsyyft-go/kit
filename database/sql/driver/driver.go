@@ -10,7 +10,7 @@ import (
 	"errors"
 )
 
-// 声明接口实现检查，确保类型实现了所有必需的接口。
+// 以下断言确保包装类型满足 database/sql/driver 相关接口。
 var (
 	_ driver.Driver             = (*KitDriver)(nil)
 	_ driver.Conn               = (*kitConn)(nil)
@@ -23,7 +23,11 @@ var (
 	_ driver.SessionResetter    = (*kitConn)(nil)
 )
 
-// KitDriver 是一个数据库驱动包装器，用于添加钩子功能。
+// KitDriver 包装底层 driver.Driver，并在连接及其派生对象的操作前后执行 Hook。
+//
+// KitDriver 只负责把 Open 创建出的连接，以及后续 PrepareContext 和 BeginTx 创建出的语句、事务再包装为带 Hook 的实现，
+// 不改变底层驱动对 DSN、结果类型或错误值的基础语义。调用方应为 d 和 h 提供
+// 可用的非 nil 实现。
 type KitDriver struct {
 	// 原始数据库驱动实例。
 	driver driver.Driver
@@ -31,14 +35,14 @@ type KitDriver struct {
 	hook Hook
 }
 
-// NewKitDriver 创建一个新的 KitDriver 实例。
+// NewKitDriver 创建一个带 Hook 的 driver.Driver 包装器。
 //
 // 参数：
-//   - d：原始数据库驱动实例，用于执行实际的数据库操作。
-//   - h：钩子接口实例，用于在数据库操作前后执行自定义逻辑。
+//   - d: 实际执行数据库协议的底层 driver。
+//   - h: 在 Open 以及后续连接、语句和事务操作前后执行的 Hook；调用方应传入非 nil 实现。
 //
-// 返回值：
-//   - *KitDriver：返回一个新创建的 KitDriver 实例。
+// 返回：
+//   - *KitDriver: 对 d 的包装实例。
 func NewKitDriver(d driver.Driver, h Hook) *KitDriver {
 	return &KitDriver{
 		driver: d,
@@ -46,14 +50,18 @@ func NewKitDriver(d driver.Driver, h Hook) *KitDriver {
 	}
 }
 
-// Open 实现 driver.Driver 接口，用于创建数据库连接。
+// Open 打开一个新的底层数据库连接，并为该连接安装 Hook 包装。
+//
+// Open 会先以 OpConnect 调用 Hook.Before，再调用底层 driver 的 Open，随后
+// 将连接或错误写入 HookContext 并调用 Hook.After。由于 driver.Driver.Open
+// 不接收上下文，HookContext 使用 context.Background 作为原始上下文。
 //
 // 参数：
-//   - name：数据源名称（DSN），包含数据库连接所需的配置信息。
+//   - name: 原样传递给底层 driver 的 DSN。
 //
-// 返回值：
-//   - driver.Conn：数据库连接接口。
-//   - error：如果连接过程中发生错误，返回相应的错误信息。
+// 返回：
+//   - driver.Conn: 成功时返回带 Hook 包装的连接。
+//   - error: Hook.Before 返回错误、底层 driver.Open 失败或 Hook.After 返回错误时返回错误。
 func (d *KitDriver) Open(name string) (driver.Conn, error) {
 	// 创建一个新的钩子上下文，用于连接操作。
 	ctx := NewHookContext(context.Background(), OpConnect, "", nil)
@@ -84,11 +92,10 @@ func (d *KitDriver) Open(name string) (driver.Conn, error) {
 	}, nil
 }
 
-// kitConn 实现了 driver.Conn 接口，用于包装原始的数据库连接。
-// 该结构体提供了以下功能：
-// - 支持钩子机制，可以在数据库操作前后执行自定义逻辑。
-// - 实现了所有必需的数据库连接接口。
-// - 提供了事务、查询和执行等操作的包装。
+// kitConn 包装底层 driver.Conn，并为连接级操作执行 Hook。
+//
+// kitConn 在 PrepareContext、ExecContext、QueryContext、Ping 和 BeginTx 中按统一流程执行 Hook；
+// 对 CheckNamedValue 和 ResetSession 则直接转发到底层可选接口。
 type kitConn struct {
 	// 原始数据库连接实例。
 	driver.Conn
@@ -96,15 +103,15 @@ type kitConn struct {
 	hook Hook
 }
 
-// PrepareContext 实现 driver.ConnPrepareContext 接口，用于创建预处理语句。
+// PrepareContext 创建带 Hook 包装的预处理语句。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制操作的生命周期。
-//   - query：预处理的 SQL 查询语句。
+//   - ctx: 控制预处理操作生命周期的上下文。
+//   - query: 要预处理的 SQL 语句文本。
 //
-// 返回值：
-//   - driver.Stmt：预处理语句接口。
-//   - error：如果预处理过程中发生错误，返回相应的错误信息。
+// 返回：
+//   - driver.Stmt: 成功时返回带 Hook 包装的预处理语句。
+//   - error: 底层连接不支持 driver.ConnPrepareContext、Hook.Before 返回错误、底层预处理失败或 Hook.After 返回错误时返回错误。
 func (c *kitConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
 	// 检查原始连接是否支持 PrepareContext。
 	if preparerCtx, ok := c.Conn.(driver.ConnPrepareContext); ok {
@@ -140,16 +147,16 @@ func (c *kitConn) PrepareContext(ctx context.Context, query string) (driver.Stmt
 	return nil, errors.New("driver does not support prepare context")
 }
 
-// ExecContext 实现 driver.ExecerContext 接口，用于执行 SQL 语句。
+// ExecContext 执行 SQL 语句并在操作前后执行 Hook。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制操作的生命周期。
-//   - query：要执行的 SQL 语句。
-//   - args：SQL 语句的参数列表，使用命名参数形式。
+//   - ctx: 控制执行操作生命周期的上下文。
+//   - query: 要执行的 SQL 语句。
+//   - args: SQL 语句的命名参数列表；没有参数时可为 nil。
 //
-// 返回值：
-//   - driver.Result：执行结果接口，包含影响的行数等信息。
-//   - error：如果执行过程中发生错误，返回相应的错误信息。
+// 返回：
+//   - driver.Result: 底层驱动返回的执行结果。
+//   - error: 底层连接不支持 driver.ExecerContext、Hook.Before 返回错误、底层执行失败或 Hook.After 返回错误时返回错误。
 func (c *kitConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	// 检查原始连接是否支持 ExecContext。
 	if execer, ok := c.Conn.(driver.ExecerContext); ok {
@@ -176,16 +183,16 @@ func (c *kitConn) ExecContext(ctx context.Context, query string, args []driver.N
 	return nil, errors.New("driver does not support exec context")
 }
 
-// QueryContext 实现 driver.QueryerContext 接口，用于执行查询操作。
+// QueryContext 执行查询语句并在操作前后执行 Hook。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制操作的生命周期。
-//   - query：要执行的查询 SQL 语句。
-//   - args：SQL 语句的参数列表，使用命名参数形式。
+//   - ctx: 控制查询操作生命周期的上下文。
+//   - query: 要执行的查询 SQL 语句。
+//   - args: SQL 语句的命名参数列表；没有参数时可为 nil。
 //
-// 返回值：
-//   - driver.Rows：查询结果集接口。
-//   - error：如果查询过程中发生错误，返回相应的错误信息。
+// 返回：
+//   - driver.Rows: 底层驱动返回的查询结果集。
+//   - error: 底层连接不支持 driver.QueryerContext、Hook.Before 返回错误、底层查询失败或 Hook.After 返回错误时返回错误。
 func (c *kitConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	// 检查原始连接是否支持 QueryContext。
 	if queryer, ok := c.Conn.(driver.QueryerContext); ok {
@@ -212,13 +219,13 @@ func (c *kitConn) QueryContext(ctx context.Context, query string, args []driver.
 	return nil, errors.New("driver does not support query context")
 }
 
-// Ping 实现 driver.Pinger 接口，用于检测数据库连接是否可用。
+// Ping 检测数据库连接是否可用并在操作前后执行 Hook。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制操作的生命周期。
+//   - ctx: 控制 Ping 操作生命周期的上下文。
 //
-// 返回值：
-//   - error：如果连接不可用或操作过程中发生错误，返回相应的错误信息。
+// 返回：
+//   - error: 底层连接不支持 driver.Pinger、Hook.Before 返回错误、底层 Ping 失败或 Hook.After 返回错误时返回错误。
 func (c *kitConn) Ping(ctx context.Context) error {
 	// 检查原始连接是否支持 Ping。
 	if pinger, ok := c.Conn.(driver.Pinger); ok {
@@ -245,15 +252,15 @@ func (c *kitConn) Ping(ctx context.Context) error {
 	return errors.New("driver does not support ping")
 }
 
-// BeginTx 实现 driver.ConnBeginTx 接口，用于开始一个新的事务。
+// BeginTx 开始一个新事务并返回带 Hook 包装的事务。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制操作的生命周期。
-//   - opts：事务选项，包含隔离级别等配置信息。
+//   - ctx: 控制开启事务操作生命周期的上下文。
+//   - opts: 事务选项，包含隔离级别和只读标志。
 //
-// 返回值：
-//   - driver.Tx：事务接口。
-//   - error：如果开始事务过程中发生错误，返回相应的错误信息。
+// 返回：
+//   - driver.Tx: 成功时返回带 Hook 包装的事务。
+//   - error: 底层连接不支持 driver.ConnBeginTx、Hook.Before 返回错误、底层开启事务失败或 Hook.After 返回错误时返回错误。
 func (c *kitConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
 	// 检查原始连接是否支持 BeginTx。
 	if beginner, ok := c.Conn.(driver.ConnBeginTx); ok {
@@ -288,13 +295,13 @@ func (c *kitConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx
 	return nil, errors.New("driver does not support begin tx")
 }
 
-// CheckNamedValue 实现 driver.NamedValueChecker 接口，用于检查命名参数值。
+// CheckNamedValue 检查命名参数值是否可被底层驱动接受。
 //
 // 参数：
-//   - nv：命名参数值对象，包含参数名称和值。
+//   - nv: 待检查的命名参数值。
 //
-// 返回值：
-//   - error：如果参数值不合法，返回相应的错误信息；如果不支持检查，返回 driver.ErrSkip。
+// 返回：
+//   - error: 底层检查返回的错误；底层连接不支持 driver.NamedValueChecker 时返回 driver.ErrSkip。
 func (c *kitConn) CheckNamedValue(nv *driver.NamedValue) error {
 	// 检查原始连接是否支持 CheckNamedValue。
 	if checker, ok := c.Conn.(driver.NamedValueChecker); ok {
@@ -303,13 +310,13 @@ func (c *kitConn) CheckNamedValue(nv *driver.NamedValue) error {
 	return driver.ErrSkip
 }
 
-// ResetSession 实现 driver.SessionResetter 接口，用于重置会话状态。
+// ResetSession 重置底层连接的会话状态。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制操作的生命周期。
+//   - ctx: 控制重置会话操作生命周期的上下文。
 //
-// 返回值：
-//   - error：如果重置会话过程中发生错误，返回相应的错误信息。
+// 返回：
+//   - error: 底层重置失败时返回错误；底层连接不支持 driver.SessionResetter 时返回 nil。
 func (c *kitConn) ResetSession(ctx context.Context) error {
 	// 检查原始连接是否支持 ResetSession。
 	if resetter, ok := c.Conn.(driver.SessionResetter); ok {
@@ -318,29 +325,27 @@ func (c *kitConn) ResetSession(ctx context.Context) error {
 	return nil
 }
 
-// kitStmt 实现了 driver.Stmt 接口，用于包装原始的预处理语句。
-// 该结构体提供了以下功能：
-// - 支持钩子机制，可以在语句执行前后执行自定义逻辑。
-// - 实现了所有必需的预处理语句接口。
-// - 提供了查询和执行操作的包装。
+// kitStmt 包装底层 driver.Stmt，并为预处理语句操作执行 Hook。
+//
+// kitStmt 保留预处理 SQL 文本，用于 ExecContext、QueryContext 和 Close 的 HookContext。
 type kitStmt struct {
 	// 原始预处理语句实例。
 	driver.Stmt
 	// 用于执行钩子操作的接口实例。
 	hook Hook
-	// SQL 查询语句。
+	// query 是预处理 SQL 语句文本。
 	query string
 }
 
-// ExecContext 实现预处理语句的执行操作。
+// ExecContext 执行预处理语句并在操作前后执行 Hook。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制操作的生命周期。
-//   - args：SQL 语句的参数列表，使用命名参数形式。
+//   - ctx: 控制执行操作生命周期的上下文。
+//   - args: SQL 语句的命名参数列表；没有参数时可为 nil。
 //
-// 返回值：
-//   - driver.Result：执行结果接口，包含影响的行数等信息。
-//   - error：如果执行过程中发生错误，返回相应的错误信息。
+// 返回：
+//   - driver.Result: 底层语句返回的执行结果。
+//   - error: 底层语句不支持 driver.StmtExecContext、Hook.Before 返回错误、底层执行失败或 Hook.After 返回错误时返回错误。
 func (s *kitStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
 	// 检查原始语句是否支持 ExecContext。
 	if execer, ok := s.Stmt.(driver.StmtExecContext); ok {
@@ -367,15 +372,15 @@ func (s *kitStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (dr
 	return nil, errors.New("stmt does not support exec context")
 }
 
-// QueryContext 实现预处理语句的查询操作。
+// QueryContext 执行预处理查询并在操作前后执行 Hook。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制操作的生命周期。
-//   - args：SQL 语句的参数列表，使用命名参数形式。
+//   - ctx: 控制查询操作生命周期的上下文。
+//   - args: SQL 语句的命名参数列表；没有参数时可为 nil。
 //
-// 返回值：
-//   - driver.Rows：查询结果集接口。
-//   - error：如果查询过程中发生错误，返回相应的错误信息。
+// 返回：
+//   - driver.Rows: 底层语句返回的查询结果集。
+//   - error: 底层语句不支持 driver.StmtQueryContext、Hook.Before 返回错误、底层查询失败或 Hook.After 返回错误时返回错误。
 func (s *kitStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
 	// 检查原始语句是否支持 QueryContext。
 	if queryer, ok := s.Stmt.(driver.StmtQueryContext); ok {
@@ -402,10 +407,12 @@ func (s *kitStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (d
 	return nil, errors.New("stmt does not support query context")
 }
 
-// Close 实现预处理语句的关闭操作。
+// Close 关闭预处理语句并在操作前后执行 Hook。
 //
-// 返回值：
-//   - error：如果关闭过程中发生错误，返回相应的错误信息。
+// 参数：无。
+//
+// 返回：
+//   - error: Hook.Before 返回错误、底层语句关闭失败或 Hook.After 返回错误时返回错误。
 func (s *kitStmt) Close() error {
 	// 创建关闭预处理语句的钩子上下文。
 	hookCtx := NewHookContext(context.Background(), OpStmtClose, s.query, nil)
@@ -428,11 +435,7 @@ func (s *kitStmt) Close() error {
 	return err
 }
 
-// kitTx 实现了 driver.Tx 接口，用于包装原始的事务。
-// 该结构体提供了以下功能：
-// - 支持钩子机制，可以在事务操作前后执行自定义逻辑。
-// - 实现了所有必需的事务接口。
-// - 提供了提交和回滚操作的包装。
+// kitTx 包装底层 driver.Tx，并为提交和回滚操作执行 Hook。
 type kitTx struct {
 	// 原始事务实例。
 	driver.Tx
@@ -440,10 +443,12 @@ type kitTx struct {
 	hook Hook
 }
 
-// Commit 实现事务的提交操作。
+// Commit 提交事务并在操作前后执行 Hook。
 //
-// 返回值：
-//   - error：如果提交过程中发生错误，返回相应的错误信息。
+// 参数：无。
+//
+// 返回：
+//   - error: Hook.Before 返回错误、底层事务提交失败或 Hook.After 返回错误时返回错误。
 func (t *kitTx) Commit() error {
 	// 创建提交事务的钩子上下文。
 	hookCtx := NewHookContext(context.Background(), OpCommit, "", nil)
@@ -466,10 +471,12 @@ func (t *kitTx) Commit() error {
 	return err
 }
 
-// Rollback 实现事务的回滚操作。
+// Rollback 回滚事务并在操作前后执行 Hook。
 //
-// 返回值：
-//   - error：如果回滚过程中发生错误，返回相应的错误信息。
+// 参数：无。
+//
+// 返回：
+//   - error: Hook.Before 返回错误、底层事务回滚失败或 Hook.After 返回错误时返回错误。
 func (t *kitTx) Rollback() error {
 	// 创建回滚事务的钩子上下文。
 	hookCtx := NewHookContext(context.Background(), OpRollback, "", nil)

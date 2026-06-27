@@ -75,6 +75,8 @@ $RECYCLE.BIN/
 
 # 以下为人工调整。
 .ai/
+.claude/
+CLAUDE.md
 out/
 .DS_Store
 *.log

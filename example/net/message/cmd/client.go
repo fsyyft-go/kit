@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -48,33 +49,50 @@ var (
 	_ kitruntime.Runner = (*client)(nil)
 )
 
+var (
+	// notifyClientConnected 在客户端连接完成赋值后发送同步通知，生产路径保持空操作。
+	notifyClientConnected = func(net.Conn) {}
+)
+
 type (
 	client struct {
-		conn net.Conn
+		addr   string
+		conn   net.Conn
+		connMu sync.RWMutex
 	}
 )
 
 func (c *client) Run(ctx context.Context) error {
-	if err := kitgoroutine.Submit(func() { _ = c.Start(ctx) }); nil != err {
+	c.ensureAddr()
+
+	startDone := make(chan error, 1)
+	if err := kitgoroutine.Submit(func() { startDone <- c.Start(ctx) }); nil != err {
 		return err
 	}
 
-	<-ctx.Done()
-	_ = c.Stop(ctx)
+	select {
+	case <-startDone:
+		<-ctx.Done()
+	case <-ctx.Done():
+		_ = c.Stop(ctx)
+		<-startDone
+	}
 
 	return ctx.Err()
 }
 
 func (c *client) Start(ctx context.Context) error {
-	if conn, err := net.Dial("tcp", addr); nil != err {
+	remoteAddr := c.address()
+	if conn, err := net.Dial("tcp", remoteAddr); nil != err {
 		fmt.Printf("客户端连接失败：%[1]s\n", err.Error())
 		return err
 	} else {
-		fmt.Printf("客户端连接成功：%[1]s -> %[2]s\n", conn.LocalAddr(), addr)
-		c.conn = conn
+		fmt.Printf("客户端连接成功：%[1]s -> %[2]s\n", conn.LocalAddr(), remoteAddr)
+		c.setConn(conn)
+		notifyClientConnected(conn)
 	}
 
-	conn := kitmessage.WrapConn(c.conn, 0)
+	conn := kitmessage.WrapConn(c.connection(), 0)
 
 	conn.Start(ctx)
 
@@ -99,5 +117,34 @@ func (c *client) Start(ctx context.Context) error {
 }
 
 func (c *client) Stop(ctx context.Context) error {
-	return c.conn.Close()
+	conn := c.connection()
+	if conn == nil {
+		return nil
+	}
+	return conn.Close()
+}
+
+func (c *client) ensureAddr() {
+	if c.addr == "" {
+		c.addr = addr
+	}
+}
+
+func (c *client) address() string {
+	c.ensureAddr()
+	return c.addr
+}
+
+func (c *client) setConn(conn net.Conn) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+
+	c.conn = conn
+}
+
+func (c *client) connection() net.Conn {
+	c.connMu.RLock()
+	defer c.connMu.RUnlock()
+
+	return c.conn
 }

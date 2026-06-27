@@ -2,19 +2,19 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package bloom 的内存存储测试文件
+package bloom
+
+// 本文件覆盖内存 Store 的添加、查询和初始化测试场景。
 // 设计思路：
-// 1. 使用表格驱动测试方式，覆盖所有主要功能点
-// 2. 测试内存存储的基本操作：添加、查询、初始化
-// 3. 测试用例包括正常和边界场景
-// 4. 使用 testify 包进行断言，提高测试代码的可读性
+// 1. 使用表格驱动测试方式，覆盖所有主要功能点。
+// 2. 测试内存存储的基本操作：添加、查询、初始化。
+// 3. 测试用例包括正常和边界场景。
+// 4. 使用 testify 包进行断言，提高测试代码的可读性。
 //
 // 使用方法：
-// 1. 运行所有测试：go test -v
-// 2. 运行特定测试：go test -v -run TestMemoryStore_Exist
-// 3. 查看测试覆盖率：go test -v -cover
-
-package bloom
+// 1. 运行所有测试：go test -v。
+// 2. 运行特定测试：go test -v -run TestMemoryStore_Exist。
+// 3. 查看测试覆盖率：go test -v -cover。
 
 import (
 	"context"

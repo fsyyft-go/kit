@@ -31,22 +31,25 @@ var (
 )
 
 type (
-	// LogType 定义了支持的日志类型，用于在初始化时选择具体的日志实现。
+	// LogType 定义 NewLogger 可选择的日志实现类型。
+	//
+	// 可选值包括：
+	//   - LogTypeConsole：使用标准库日志并输出到标准输出。
+	//   - LogTypeStd：使用标准库日志，可写入标准输出或指定文件。
+	//   - LogTypeLogrus：使用 Logrus 日志实现，支持格式化和文件轮转配置。
 	LogType string
 )
 
-// InitLogger 初始化全局日志实例。
-// 使用可选的配置选项来配置日志行为。
-// 如果没有提供任何选项，将使用默认配置：
-//   - 日志类型：LogTypeStd
-//   - 日志级别：InfoLevel
-//   - 输出路径：标准输出
+// InitLogger 初始化包级全局日志实例。
+//
+// 未传入 options 时使用 NewLogger 的默认配置。初始化成功后会替换当前全局 Logger；
+// 初始化失败时保持既有全局 Logger 不变。
 //
 // 参数：
-//   - options：可选的配置选项，用于定制日志行为。
+//   - options：可选配置项，按传入顺序应用；未传入时使用默认配置。
 //
-// 返回值：
-//   - error：返回初始化过程中可能发生的错误。
+// 返回：
+//   - error：NewLogger 返回错误时包装并返回；成功时返回 nil。
 func InitLogger(options ...Option) error {
 	logger, err := NewLogger(options...)
 	if nil != err {
@@ -60,34 +63,40 @@ func InitLogger(options ...Option) error {
 // SetLevel 设置全局日志级别。
 //
 // 参数：
-//   - level：要设置的日志级别。
+//   - level：日志过滤级别，可选值包括 DebugLevel、InfoLevel、WarnLevel、ErrorLevel 和 FatalLevel。
 func SetLevel(level Level) {
 	GetLogger().SetLevel(level)
 }
 
 // GetLevel 获取全局日志级别。
 //
-// 返回值：
-//   - Level：返回当前设置的日志级别。
+// 参数：无。
+//
+// 返回：
+//   - Level：当前全局 Logger 的日志过滤级别。
 func GetLevel() Level {
 	return GetLogger().GetLevel()
 }
 
-// SetLogger 设置全局日志实例。
+// SetLogger 设置包级全局日志实例。
 //
 // 参数：
-//   - logger：要设置为全局实例的日志记录器。
+//   - logger：要设置为全局实例的日志记录器；传入 nil 会清空当前全局实例，并使下一次 GetLogger 重新创建默认实例。
 func SetLogger(logger Logger) {
 	globalLoggerLock.Lock()
 	defer globalLoggerLock.Unlock()
 	globalLogger = logger
 }
 
-// GetLogger 获取全局日志实例。
-// 如果全局日志实例未设置，则返回一个默认的标准输出日志实例。
+// GetLogger 获取包级全局日志实例。
 //
-// 返回值：
-//   - Logger：返回全局日志实例。
+// 如果尚未设置全局 Logger，GetLogger 会惰性创建默认日志实例并缓存；默认实例写入标准输出。
+// 默认日志实例创建失败时会 panic。
+//
+// 参数：无。
+//
+// 返回：
+//   - Logger：当前全局日志实例。
 func GetLogger() Logger {
 	globalLoggerLock.RLock()
 	defer globalLoggerLock.RUnlock()
@@ -196,7 +205,7 @@ func Fatalf(format string, args ...interface{}) {
 //   - key：字段名。
 //   - value：字段值。
 //
-// 返回值：
+// 返回：
 //   - Logger：返回一个新的 Logger 实例，包含添加的字段。
 func WithField(key string, value interface{}) Logger {
 	return GetLogger().WithField(key, value)
@@ -207,7 +216,7 @@ func WithField(key string, value interface{}) Logger {
 // 参数：
 //   - fields：要添加的字段映射。
 //
-// 返回值：
+// 返回：
 //   - Logger：返回一个新的 Logger 实例，包含添加的字段。
 func WithFields(fields map[string]interface{}) Logger {
 	return GetLogger().WithFields(fields)

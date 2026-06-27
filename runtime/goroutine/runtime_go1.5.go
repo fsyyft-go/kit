@@ -25,6 +25,8 @@ type gobuf struct {
 	bp   uintptr
 }
 
+// g 镜像 Go 1.5 arm64 的 runtime.g 最小前缀布局。
+// SAFETY: 本结构仅用于让 goid 字段偏移与目标运行时保持一致，字段顺序不得随意改动。
 type g struct {
 	stack       stack
 	stackguard0 uintptr
@@ -42,5 +44,5 @@ type g struct {
 	param        uintptr
 	atomicstatus uint32
 	stackLock    uint32
-	goid         int64 // Here it is!
+	goid         int64 // goroutine 的唯一标识符
 }

@@ -2,8 +2,9 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package md5_test 提供了对 md5 包功能的示例。
 package md5_test
+
+// 本文件提供 md5 包公共示例，展示字符串摘要计算和错误处理方式。
 
 import (
 	"fmt"

@@ -72,12 +72,10 @@ func TestCache(t *testing.T) {
 		}
 
 		// 等待缓存过期
-		time.Sleep(200 * time.Millisecond)
-
-		// 测试不带 TTL 的 Get
-		if _, exists := cache.Get(key); exists {
-			t.Error("缓存应该已经过期")
-		}
+		waitForCacheMiss(t, func() bool {
+			_, exists := cache.Get(key)
+			return exists
+		})
 
 		// 测试带 TTL 的 Get
 		if _, exists, _ := cache.GetWithTTL(key); exists {
@@ -251,7 +249,10 @@ func TestTypedCache(t *testing.T) {
 		}
 
 		// 等待缓存过期
-		time.Sleep(200 * time.Millisecond)
+		waitForCacheMiss(t, func() bool {
+			_, exists := strCache.Get(key)
+			return exists
+		})
 
 		if _, exists := strCache.Get(key); exists {
 			t.Error("缓存应该已经过期")

@@ -2,6 +2,9 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+// log 示例演示默认日志器初始化、文件输出切换和独立日志实例的使用方式。
+//
+// 该命令会先使用全局日志器输出多级别与结构化日志，再切换到写入 example/log/app.log 的 Logrus 配置，最后创建一个独立日志实例。
 package main
 
 import (

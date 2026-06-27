@@ -2,6 +2,8 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+package validate
+
 // validate_test.go 提供了对验证中间件的测试用例。
 //
 // 测试设计思路：
@@ -16,7 +18,6 @@
 // go test -v github.com/fsyyft-go/kratos/middleware/validate
 // 或者使用覆盖率检查：
 // go test -cover github.com/fsyyft-go/kratos/middleware/validate
-package validate
 
 import (
 	"context"
@@ -51,6 +52,7 @@ func TestValidatorMiddleware(t *testing.T) {
 	// 定义测试用例
 	tests := []struct {
 		name           string      // 测试用例名称
+		description    string      // 用例语义说明
 		request        interface{} // 输入的请求对象
 		handlerCalled  bool        // 期望下一个处理器是否被调用
 		expectedErr    bool        // 是否期望返回错误
@@ -60,6 +62,7 @@ func TestValidatorMiddleware(t *testing.T) {
 	}{
 		{
 			name:           "非验证器请求",
+			description:    "验证未实现 validator 接口的请求会跳过验证并调用后续处理器。",
 			request:        &mockNonValidRequest{Data: "测试数据"},
 			handlerCalled:  true,
 			expectedErr:    false,
@@ -69,6 +72,7 @@ func TestValidatorMiddleware(t *testing.T) {
 		},
 		{
 			name:           "验证通过",
+			description:    "验证实现 validator 接口且校验成功的请求会继续调用后续处理器。",
 			request:        &mockValidRequest{ShouldFail: false},
 			handlerCalled:  true,
 			expectedErr:    false,
@@ -78,6 +82,7 @@ func TestValidatorMiddleware(t *testing.T) {
 		},
 		{
 			name:           "验证失败-默认回调",
+			description:    "验证默认回调会把 Validate 错误转换为 VALIDATOR BadRequest 并阻止处理器执行。",
 			request:        &mockValidRequest{ShouldFail: true},
 			handlerCalled:  false,
 			expectedErr:    true,
@@ -87,6 +92,7 @@ func TestValidatorMiddleware(t *testing.T) {
 		},
 		{
 			name:           "验证失败-自定义回调",
+			description:    "验证自定义回调返回错误时中间件透传该错误并阻止处理器执行。",
 			request:        &mockValidRequest{ShouldFail: true},
 			handlerCalled:  false,
 			expectedErr:    true,
@@ -100,6 +106,7 @@ func TestValidatorMiddleware(t *testing.T) {
 		},
 		{
 			name:           "验证失败-自定义回调返回响应",
+			description:    "验证自定义回调可用替代响应处理校验失败且不返回错误。",
 			request:        &mockValidRequest{ShouldFail: true},
 			handlerCalled:  false,
 			expectedErr:    false,
@@ -116,6 +123,8 @@ func TestValidatorMiddleware(t *testing.T) {
 	// 执行测试用例
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 创建一个记录调用状态的测试处理器
 			var handlerCalled bool
 			handler := func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -156,11 +165,13 @@ func TestWithValidateCallback(t *testing.T) {
 	// 定义测试用例
 	tests := []struct {
 		name            string           // 测试用例名称
+		description     string           // 用例语义说明
 		callback        ValidateCallback // 要设置的回调函数
 		expectedOutcome func(*Options)   // 预期的选项对象状态检查函数
 	}{
 		{
-			name: "设置自定义回调",
+			name:        "设置自定义回调",
+			description: "验证 WithValidateCallback 能把返回响应的自定义回调写入选项。",
 			callback: func(ctx context.Context, req interface{}, err error) (interface{}, error) {
 				return "自定义响应", nil
 			},
@@ -172,7 +183,8 @@ func TestWithValidateCallback(t *testing.T) {
 			},
 		},
 		{
-			name: "设置错误回调",
+			name:        "设置错误回调",
+			description: "验证 WithValidateCallback 能把返回错误的自定义回调写入选项。",
 			callback: func(ctx context.Context, req interface{}, err error) (interface{}, error) {
 				return nil, errors.New("自定义错误")
 			},
@@ -189,6 +201,8 @@ func TestWithValidateCallback(t *testing.T) {
 	// 执行测试用例
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 创建选项对象
 			options := &Options{}
 
@@ -207,14 +221,16 @@ func TestValidatorIntegration(t *testing.T) {
 	// 定义测试用例
 	tests := []struct {
 		name          string                  // 测试用例名称
+		description   string                  // 用例语义说明
 		request       interface{}             // 输入的请求对象
 		middlewares   []middleware.Middleware // 中间件链
 		expectedErr   bool                    // 是否期望返回错误
 		expectedReply interface{}             // 期望的响应
 	}{
 		{
-			name:    "验证通过-单个中间件",
-			request: &mockValidRequest{ShouldFail: false},
+			name:        "验证通过-单个中间件",
+			description: "验证单个 Validator 中间件在请求校验通过时返回最终处理器响应。",
+			request:     &mockValidRequest{ShouldFail: false},
 			middlewares: []middleware.Middleware{
 				Validator(),
 			},
@@ -222,8 +238,9 @@ func TestValidatorIntegration(t *testing.T) {
 			expectedReply: "处理成功",
 		},
 		{
-			name:    "验证失败-单个中间件",
-			request: &mockValidRequest{ShouldFail: true},
+			name:        "验证失败-单个中间件",
+			description: "验证单个 Validator 中间件在请求校验失败时返回错误且无响应。",
+			request:     &mockValidRequest{ShouldFail: true},
 			middlewares: []middleware.Middleware{
 				Validator(),
 			},
@@ -231,8 +248,9 @@ func TestValidatorIntegration(t *testing.T) {
 			expectedReply: nil,
 		},
 		{
-			name:    "验证通过-多个中间件",
-			request: &mockValidRequest{ShouldFail: false},
+			name:        "验证通过-多个中间件",
+			description: "验证 Validator 处于中间件链中且校验通过时链路会继续执行。",
+			request:     &mockValidRequest{ShouldFail: false},
 			middlewares: []middleware.Middleware{
 				func(handler middleware.Handler) middleware.Handler {
 					return func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -252,8 +270,9 @@ func TestValidatorIntegration(t *testing.T) {
 			expectedReply: "处理成功",
 		},
 		{
-			name:    "验证失败-多个中间件",
-			request: &mockValidRequest{ShouldFail: true},
+			name:        "验证失败-多个中间件",
+			description: "验证 Validator 在中间件链中校验失败时会中断后续中间件执行。",
+			request:     &mockValidRequest{ShouldFail: true},
 			middlewares: []middleware.Middleware{
 				func(handler middleware.Handler) middleware.Handler {
 					return func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -278,6 +297,8 @@ func TestValidatorIntegration(t *testing.T) {
 	// 执行测试用例
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
 			// 创建最终处理器
 			finalHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
 				return "处理成功", nil
@@ -310,6 +331,9 @@ func TestValidatorEdgeCases(t *testing.T) {
 
 	// 测试空Option情况
 	t.Run("空Option", func(t *testing.T) {
+		description := "验证 nil Option 会被 Validator 跳过且不影响非验证器请求处理。"
+		t.Log(description)
+
 		middleware := Validator(nilOption)
 		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 			return "处理成功", nil
@@ -324,6 +348,9 @@ func TestValidatorEdgeCases(t *testing.T) {
 
 	// 测试使用nil请求
 	t.Run("nil请求", func(t *testing.T) {
+		description := "验证 nil 请求不会被当作 validator，能够直接透传给后续处理器。"
+		t.Log(description)
+
 		middleware := Validator()
 		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 			return "处理成功", nil
@@ -338,6 +365,9 @@ func TestValidatorEdgeCases(t *testing.T) {
 
 	// 测试设置回调函数后的行为
 	t.Run("设置回调后的行为", func(t *testing.T) {
+		description := "验证设置自定义回调后校验失败请求会返回回调响应而非执行处理器。"
+		t.Log(description)
+
 		// 创建自定义回调
 		customCallback := func(ctx context.Context, req interface{}, err error) (interface{}, error) {
 			return "自定义回调响应", nil

@@ -2,19 +2,10 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package md5_test 提供了对 md5 包功能的测试。
-//
-// 测试设计思路：
-// 1. 采用表格驱动测试，覆盖正常情况、边界情况和特殊情况；
-// 2. 对 HashString 和 HashStringWithoutError 两个函数分别进行测试；
-// 3. 使用 stretchr/testify 包进行断言验证；
-// 4. 保证测试覆盖率达到 100%。
-//
-// 使用方法：
-// 1. 在项目根目录执行 `go test github.com/fsyyft-go/kit/crypto/md5` 运行测试；
-// 2. 添加 `-v` 参数可查看详细测试输出；
-// 3. 添加 `-cover` 参数可查看测试覆盖率。
 package md5_test
+
+// 本文件使用表格驱动测试覆盖 HashString 和 HashStringWithoutError 的正常输入、边界输入和错误语义。
+// 断言依赖 stretchr/testify，用于固定当前摘要输出和错误处理契约。
 
 import (
 	"testing"

@@ -5,68 +5,94 @@
 package goroutine
 
 import (
-	"runtime"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	kittesting "github.com/fsyyft-go/kit/testing"
+	"github.com/stretchr/testify/require"
 )
 
-func TestGetGoID(t *testing.T) {
-	t.Run("测试获取 GoroutineID", func(t *testing.T) {
-		if isDarwinArm64() {
-			kittesting.Println("M CPU 架构的 Mac 未能实现此方法。")
-		} else {
-			assertion := assert.New(t)
+// TestGetGoID_Consistency 验证快速 goroutine ID 获取逻辑的核心行为。
+//
+// 该测试通过表驱动用例覆盖当前 goroutine 与子 goroutine 场景，确保 GetGoID 返回非零 ID，
+// 且与 GetGoIDSlow 在同一 goroutine 内保持一致。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestGetGoID_Consistency(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		assert      func(t *testing.T)
+	}{
+		{
+			name:        "success/current-goroutine",
+			description: "验证当前 goroutine 中 GetGoID 返回非零值，并与 GetGoIDSlow 保持一致。",
+			assert: func(t *testing.T) {
+				t.Helper()
 
-			var wg sync.WaitGroup
-			var idOuter, idInternal int64
-			wg.Add(1)
-			idOuter = GetGoID()
-			go func() {
-				idInternal = GetGoID()
-				wg.Done()
-			}()
-			wg.Wait()
-			// 值每次都不一样，有需要的情况可以打印出来查看。
-			assertion.NotEqual(idOuter, idInternal)
-			// 在没有复用的情况下，里的一般会比外的大。
-			assertion.LessOrEqual(idOuter, idInternal)
-			// fmt.Println(idInternal, idOuter)
-			kittesting.Println(idOuter, idInternal)
-		}
-	})
+				gotFast := GetGoID()
+				gotSlow := GetGoIDSlow()
+
+				require.NotZero(t, gotFast)
+				assert.Equal(t, gotFast, gotSlow)
+			},
+		},
+		{
+			name:        "concurrency/child-goroutine",
+			description: "验证父子 goroutine 的 ID 不同，且子 goroutine 内快速与慢速获取结果一致。",
+			assert: func(t *testing.T) {
+				t.Helper()
+
+				parentID := GetGoID()
+				require.NotZero(t, parentID)
+				childIDs := make(chan struct {
+					fast int64
+					slow int64
+				}, 1)
+
+				go func() {
+					childIDs <- struct {
+						fast int64
+						slow int64
+					}{
+						fast: GetGoID(),
+						slow: GetGoIDSlow(),
+					}
+				}()
+
+				gotChild := receiveWithin(t, childIDs, "child goroutine ID collection")
+				require.NotZero(t, gotChild.fast)
+				assert.Equal(t, gotChild.fast, gotChild.slow)
+				assert.NotEqual(t, parentID, gotChild.fast)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+			tt.assert(t)
+		})
+	}
 }
 
-func TestGetGoID_Equal(t *testing.T) {
-	t.Run("GetGoID GetGoIDSlow 需要返回相同的值", func(t *testing.T) {
-		a := assert.New(t)
-
-		// 获取快速版本的 goroutine ID。
-		id := GetGoID()
-		// 获取慢速版本的 goroutine ID。
-		idSlow := GetGoIDSlow()
-
-		a.Equal(id, idSlow, "GetGoID GetGoIDSlow 需要返回相同的值")
-	})
-}
-
+// BenchmarkGetGoID 衡量快速 goroutine ID 获取方法的调用开销。
+//
+// 参数：
+//   - b: 基准测试上下文，用于控制迭代次数并报告性能数据。
 func BenchmarkGetGoID(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		go func() { GetGoID() }()
+	for b.Loop() {
+		GetGoID()
 	}
 }
 
+// BenchmarkGetGoIDSlow 衡量慢速 goroutine ID 获取方法的调用开销。
+//
+// 参数：
+//   - b: 基准测试上下文，用于控制迭代次数并报告性能数据。
 func BenchmarkGetGoIDSlow(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		go func() { GetGoIDSlow() }()
+	for b.Loop() {
+		GetGoIDSlow()
 	}
-}
-
-func isDarwinArm64() bool {
-	return runtime.GOOS == "darwin" && runtime.GOARCH == "arm64"
 }

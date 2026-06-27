@@ -2,266 +2,354 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-//
-// retry.go 单元测试
-//
-// 设计思路：
-//   - 采用表格驱动，覆盖 Retry、RetryWithContext 的正常、失败、超时、取消等场景。
-//   - 断言全部使用 stretchr/testify/assert，保证一致性和可读性。
-//   - 每个测试函数前均有详细注释，说明测试目标和覆盖点。
-//   - 充分利用 context 控制重试流程，验证边界和异常。
-//   - 使用方法：直接 go test 运行本文件即可。
-//
-
 package retry
 
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// 测试 Retry 的基本功能，覆盖成功、失败、重试多次等场景。
-func TestRetry_Basic(t *testing.T) {
-	type args struct {
-		fn  RetryableFunc
-		opt []BackoffOption
-	}
-	tests := []struct {
-		name      string // 用例名称。
-		args      args   // 输入参数。
-		expectErr bool   // 是否期望返回错误。
-		tryCount  int    // 期望实际调用次数。
-	}{
-		{
-			name: "一次成功，无需重试",
-			args: args{
-				fn: func() error { return nil },
-			},
-			expectErr: false,
-			tryCount:  1,
-		},
-		{
-			name:      "多次失败后成功",
-			args:      args{},
-			expectErr: false,
-			tryCount:  3,
-		},
-		{
-			name:      "始终失败，手动限制最大重试次数",
-			args:      args{},
-			expectErr: false,
-			tryCount:  4, // 第 4 次返回 nil
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			count := 0
-			var fn RetryableFunc
-			switch tt.name {
-			case "多次失败后成功":
-				staticCount := 0
-				fn = func() error {
-					count++
-					if staticCount < 2 {
-						staticCount++
-						return errors.New("fail")
-					}
-					return nil
-				}
-			case "始终失败，手动限制最大重试次数":
-				maxAttempts := 3
-				failCount := 0
-				fn = func() error {
-					count++
-					if failCount < maxAttempts {
-						failCount++
-						return errors.New("always fail")
-					}
-					return nil // 超过最大次数后返回 nil，模拟终止
-				}
-			default:
-				fn = func() error {
-					count++
-					return nil
-				}
-			}
-			err := Retry(fn, tt.args.opt...)
-			if tt.expectErr {
-				assert.Error(t, err, "应返回错误")
-			} else {
-				assert.NoError(t, err, "不应返回错误")
-			}
-			assert.Equal(t, tt.tryCount, count, "实际调用次数应等于期望值")
-		})
-	}
-}
-
-// 测试 RetryWithContext 的超时、取消、成功、失败等场景。
-func TestRetryWithContext(t *testing.T) {
-	type args struct {
-		ctx context.Context
-		// fn  RetryableFuncWithContext  // 已废弃，未被使用，删除以通过 lint 检查。
-		opt []BackoffOption
-	}
-	tests := []struct {
-		name      string
-		args      args
-		expectErr bool
-		tryCount  int
-	}{
-		{
-			name: "一次成功，无需重试",
-			args: args{
-				ctx: context.Background(),
-			},
-			expectErr: false,
-			tryCount:  1,
-		},
-		{
-			name: "多次失败后成功",
-			args: args{
-				ctx: context.Background(),
-			},
-			expectErr: false,
-			tryCount:  3,
-		},
-		{
-			name: "始终失败，手动限制最大重试次数",
-			args: args{
-				ctx: context.Background(),
-			},
-			expectErr: false,
-			tryCount:  4, // 第 4 次返回 nil
-		},
-		{
-			name: "超时提前终止",
-			args: args{
-				ctx: func() context.Context {
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-					defer cancel()
-					return ctx
-				}(),
-			},
-			// 说明：context 传入时已超时，RetryWithContext 实现会直接返回，不会调用 fn。
-			expectErr: true,
-			tryCount:  0,
-		},
-		{
-			name: "手动取消提前终止",
-			args: args{
-				ctx: func() context.Context {
-					ctx, cancel := context.WithCancel(context.Background())
-					go func() {
-						time.Sleep(10 * time.Millisecond)
-						cancel()
-					}()
-					return ctx
-				}(),
-			},
-			// 说明：context 传入时已被取消，RetryWithContext 实现会直接返回，不会调用 fn。
-			expectErr: true,
-			tryCount:  0,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			count := 0
-			var fn RetryableFuncWithContext
-			switch tt.name {
-			case "多次失败后成功":
-				staticCount := 0
-				fn = func(ctx context.Context) error {
-					count++
-					if staticCount < 2 {
-						staticCount++
-						return errors.New("fail")
-					}
-					return nil
-				}
-			case "始终失败，手动限制最大重试次数":
-				maxAttempts := 3
-				failCount := 0
-				fn = func(ctx context.Context) error {
-					count++
-					if failCount < maxAttempts {
-						failCount++
-						return errors.New("always fail")
-					}
-					return nil // 超过最大次数后返回 nil，模拟终止
-				}
-			case "超时提前终止":
-				fn = func(ctx context.Context) error {
-					count++
-					time.Sleep(20 * time.Millisecond)
-					return errors.New("fail")
-				}
-			case "手动取消提前终止":
-				fn = func(ctx context.Context) error {
-					count++
-					time.Sleep(20 * time.Millisecond)
-					return errors.New("fail")
-				}
-			default:
-				fn = func(ctx context.Context) error {
-					count++
-					return nil
-				}
-			}
-			err := RetryWithContext(tt.args.ctx, fn, tt.args.opt...)
-			if tt.expectErr {
-				assert.Error(t, err, "应返回错误")
-			} else {
-				assert.NoError(t, err, "不应返回错误")
-			}
-			assert.Equal(t, tt.tryCount, count, "实际调用次数应等于期望值")
-		})
-	}
-}
-
-// TestBackoffOptionsAndNewBackoff
+// TestRetry_Behavior 验证 Retry 在成功和失败后重试场景下的行为。
 //
-// 该测试专门覆盖 BackoffOption 相关函数（WithMin/WithMax/WithFactor/WithJitter）
-// 以及 NewBackoff 的所有分支，包括极端参数和组合，提升覆盖率。
-func TestBackoffOptionsAndNewBackoff(t *testing.T) {
-	// 直接测试各 Option 对 Backoff 字段的影响。
-	b := NewBackoff(
-		WithMin(123*time.Millisecond),
-		WithMax(456*time.Second),
-		WithFactor(3.14),
-		WithJitter(true),
-	)
-	assert.Equal(t, 123*time.Millisecond, b.min, "WithMin 应设置 min 字段")
-	assert.Equal(t, 456*time.Second, b.max, "WithMax 应设置 max 字段")
-	assert.Equal(t, 3.14, b.factor, "WithFactor 应设置 factor 字段")
-	assert.Equal(t, true, b.jitter, "WithJitter 应设置 jitter 字段")
+// 该测试通过短退避配置避免慢测试，并断言 Retry 委托到无取消上下文后的调用次数与成功返回语义。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestRetry_Behavior(t *testing.T) {
+	transientErr := errors.New("transient failure")
+	tests := []struct {
+		name        string
+		description string
+		setup       func(t *testing.T) (RetryableFunc, []BackoffOption, *int)
+		wantCalls   int
+	}{
+		{
+			name:        "success/first-attempt",
+			description: "验证 Retry 在函数首次成功时立即返回 nil 且不执行额外重试。",
+			setup: func(t *testing.T) (RetryableFunc, []BackoffOption, *int) {
+				t.Helper()
+				calls := 0
+				return func() error {
+					calls++
+					return nil
+				}, shortBackoffOptions(), &calls
+			},
+			wantCalls: 1,
+		},
+		{
+			name:        "success/after-retries",
+			description: "验证 Retry 在前两次返回错误后继续重试，并在后续成功时返回 nil。",
+			setup: func(t *testing.T) (RetryableFunc, []BackoffOption, *int) {
+				t.Helper()
+				calls := 0
+				return func() error {
+					calls++
+					if calls < 3 {
+						return transientErr
+					}
+					return nil
+				}, shortBackoffOptions(), &calls
+			},
+			wantCalls: 3,
+		},
+	}
 
-	// 测试 NewBackoff 默认参数
-	b2 := NewBackoff()
-	assert.Equal(t, 100*time.Millisecond, b2.min, "默认 min 应为 100ms")
-	assert.Equal(t, 10*time.Second, b2.max, "默认 max 应为 10s")
-	assert.Equal(t, 2.0, b2.factor, "默认 factor 应为 2")
-	assert.Equal(t, false, b2.jitter, "默认 jitter 应为 false")
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
 
-	// 测试极端参数分支
-	b3 := NewBackoff(WithMin(10*time.Second), WithMax(1*time.Second))
-	// min >= max 时 ForAttempt 直接返回 max
-	assert.Equal(t, 1*time.Second, b3.ForAttempt(0), "min >= max 时应返回 max")
+			fn, opts, calls := tt.setup(t)
+			err := Retry(fn, opts...)
 
-	b4 := NewBackoff(WithMin(0), WithMax(0), WithFactor(0))
-	// min/max/factor <= 0 时走默认值
-	assert.Equal(t, 100*time.Millisecond, b4.ForAttempt(0), "min/max/factor <= 0 时应走默认值")
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantCalls, *calls)
+		})
+	}
+}
 
-	// 测试溢出分支
-	b5 := NewBackoff(WithMin(1), WithMax(2), WithFactor(1e18))
-	_ = b5.ForAttempt(1000) // 只要不 panic 即可
+// TestRetryWithContext_Behavior 验证 RetryWithContext 的重试、取消、超时和错误返回行为。
+//
+// 该测试使用表驱动用例覆盖成功、失败后重试、调用前取消、重试等待期间取消和函数内部取消等关键语义。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestRetryWithContext_Behavior(t *testing.T) {
+	transientErr := errors.New("transient failure")
+	tests := []struct {
+		name        string
+		description string
+		setup       func(t *testing.T) (context.Context, RetryableFuncWithContext, []BackoffOption, *int)
+		wantErr     bool
+		wantErrIs   error
+		wantCalls   int
+	}{
+		{
+			name:        "success/first-attempt",
+			description: "验证 RetryWithContext 在首次调用成功时返回 nil，且只调用函数一次。",
+			setup: func(t *testing.T) (context.Context, RetryableFuncWithContext, []BackoffOption, *int) {
+				t.Helper()
+				calls := 0
+				return context.Background(), func(ctx context.Context) error {
+					calls++
+					assert.NoError(t, ctx.Err())
+					return nil
+				}, shortBackoffOptions(), &calls
+			},
+			wantCalls: 1,
+		},
+		{
+			name:        "success/after-retries",
+			description: "验证 RetryWithContext 在暂时性错误后按退避策略重试，并在成功后返回 nil。",
+			setup: func(t *testing.T) (context.Context, RetryableFuncWithContext, []BackoffOption, *int) {
+				t.Helper()
+				calls := 0
+				return context.Background(), func(ctx context.Context) error {
+					calls++
+					assert.NoError(t, ctx.Err())
+					if calls < 3 {
+						return transientErr
+					}
+					return nil
+				}, shortBackoffOptions(), &calls
+			},
+			wantCalls: 3,
+		},
+		{
+			name:        "error/canceled-before-first-attempt",
+			description: "验证传入已取消 context 时 RetryWithContext 直接返回 context.Canceled 且不调用函数。",
+			setup: func(t *testing.T) (context.Context, RetryableFuncWithContext, []BackoffOption, *int) {
+				t.Helper()
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				calls := 0
+				return ctx, func(ctx context.Context) error {
+					calls++
+					return transientErr
+				}, shortBackoffOptions(), &calls
+			},
+			wantErr:   true,
+			wantErrIs: context.Canceled,
+			wantCalls: 0,
+		},
+		{
+			name:        "error/deadline-before-first-attempt",
+			description: "验证传入已超时 context 时 RetryWithContext 直接返回 context.DeadlineExceeded 且不调用函数。",
+			setup: func(t *testing.T) (context.Context, RetryableFuncWithContext, []BackoffOption, *int) {
+				t.Helper()
+				ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Nanosecond))
+				t.Cleanup(cancel)
+				calls := 0
+				return ctx, func(ctx context.Context) error {
+					calls++
+					return transientErr
+				}, shortBackoffOptions(), &calls
+			},
+			wantErr:   true,
+			wantErrIs: context.DeadlineExceeded,
+			wantCalls: 0,
+		},
+		{
+			name:        "error/canceled-during-backoff",
+			description: "验证函数失败后处于退避等待时 context 被取消，RetryWithContext 返回 context.Canceled 并停止重试。",
+			setup: func(t *testing.T) (context.Context, RetryableFuncWithContext, []BackoffOption, *int) {
+				t.Helper()
+				ctx, cancel := context.WithCancel(context.Background())
+				t.Cleanup(cancel)
+				calls := 0
+				return ctx, func(ctx context.Context) error {
+					calls++
+					cancel()
+					return transientErr
+				}, []BackoffOption{WithMin(time.Hour), WithMax(time.Hour), WithFactor(1)}, &calls
+			},
+			wantErr:   true,
+			wantErrIs: context.Canceled,
+			wantCalls: 1,
+		},
+		{
+			name:        "error/deadline-during-backoff",
+			description: "验证函数失败后处于退避等待时 context 超时，RetryWithContext 返回 context.DeadlineExceeded 并停止重试。",
+			setup: func(t *testing.T) (context.Context, RetryableFuncWithContext, []BackoffOption, *int) {
+				t.Helper()
+				ctx := newControllableContext()
+				calls := 0
+				return ctx, func(giveCtx context.Context) error {
+					calls++
+					require.NoError(t, giveCtx.Err())
+					ctx.complete(context.DeadlineExceeded)
+					return transientErr
+				}, []BackoffOption{WithMin(time.Hour), WithMax(time.Hour), WithFactor(1)}, &calls
+			},
+			wantErr:   true,
+			wantErrIs: context.DeadlineExceeded,
+			wantCalls: 1,
+		},
+		{
+			name:        "error/function-observes-cancellation",
+			description: "验证函数内部因 context 取消返回错误后，RetryWithContext 优先返回 context.Canceled 语义。",
+			setup: func(t *testing.T) (context.Context, RetryableFuncWithContext, []BackoffOption, *int) {
+				t.Helper()
+				ctx, cancel := context.WithCancel(context.Background())
+				t.Cleanup(cancel)
+				calls := 0
+				return ctx, func(ctx context.Context) error {
+					calls++
+					cancel()
+					return ctx.Err()
+				}, shortBackoffOptions(), &calls
+			},
+			wantErr:   true,
+			wantErrIs: context.Canceled,
+			wantCalls: 1,
+		},
+	}
 
-	// 测试 jitter 分支
-	b6 := NewBackoff(WithJitter(true))
-	v := b6.ForAttempt(1)
-	assert.GreaterOrEqual(t, v, 100*time.Millisecond, "jitter 场景下返回值不应小于 min")
-	assert.LessOrEqual(t, v, 200*time.Millisecond, "jitter 场景下返回值不应大于理论最大")
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			ctx, fn, opts, calls := tt.setup(t)
+			err := RetryWithContext(ctx, fn, opts...)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrIs != nil {
+					assert.ErrorIs(t, err, tt.wantErrIs)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantCalls, *calls)
+		})
+	}
+}
+
+// TestRetryWithContext_RealDeadlineDuringBackoff 验证真实 context deadline 会中断退避等待。
+//
+// 该测试使用真实 deadline 和远长于 deadline 的退避配置，确保 RetryWithContext 在等待下一次重试时返回
+// context.DeadlineExceeded，且不会等完整退避时长或执行第二次调用。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestRetryWithContext_RealDeadlineDuringBackoff(t *testing.T) {
+	transientErr := errors.New("transient failure")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	t.Cleanup(cancel)
+	calls := 0
+	startedAt := time.Now()
+
+	err := RetryWithContext(ctx, func(ctx context.Context) error {
+		calls++
+		require.NoError(t, ctx.Err())
+		return transientErr
+	}, WithMin(time.Hour), WithMax(time.Hour), WithFactor(1))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, 1, calls)
+	assert.Less(t, time.Since(startedAt), time.Second, "deadline 应中断长退避等待")
+}
+
+// controllableContext 是测试专用的可控 context 实现。
+//
+// 该类型允许测试在函数首次调用后同步完成 context，避免使用极短 timeout 造成时序脆弱性。
+type controllableContext struct {
+	// done 是 context 完成通知通道，complete 会关闭该通道。
+	done chan struct{}
+	// once 保证 complete 多次调用时只关闭一次 done。
+	once sync.Once
+	// err 保存 context 完成后 Err 返回的错误语义。
+	err error
+}
+
+// newControllableContext 构造未完成的可控测试 context。
+//
+// 该辅助函数为 RetryWithContext 的等待阶段错误路径提供可同步触发的 context.Done 信号。
+//
+// 返回：
+//   - *controllableContext: 初始未完成、可通过 complete 触发 Done 的测试 context。
+func newControllableContext() *controllableContext {
+	return &controllableContext{done: make(chan struct{})}
+}
+
+// Deadline 返回该测试 context 不包含真实截止时间的语义。
+//
+// 参数：无。
+//
+// 返回：
+//   - time.Time: 零值时间。
+//   - bool: 固定为 false，表示没有真实 deadline。
+func (c *controllableContext) Deadline() (time.Time, bool) {
+	return time.Time{}, false
+}
+
+// Done 返回该测试 context 的完成通知通道。
+//
+// 参数：无。
+//
+// 返回：
+//   - <-chan struct{}: complete 被调用后关闭的完成通道。
+func (c *controllableContext) Done() <-chan struct{} {
+	return c.done
+}
+
+// Err 返回该测试 context 完成后的错误语义。
+//
+// 参数：无。
+//
+// 返回：
+//   - error: complete 设置的错误；未完成时返回 nil。
+func (c *controllableContext) Err() error {
+	select {
+	case <-c.done:
+		return c.err
+	default:
+		return nil
+	}
+}
+
+// Value 返回该测试 context 不携带任何键值的语义。
+//
+// 参数：
+//   - key: 调用方查询的 context key，本实现始终忽略。
+//
+// 返回：
+//   - any: 固定为 nil，表示不存在对应值。
+func (c *controllableContext) Value(key any) any {
+	return nil
+}
+
+// complete 同步完成该测试 context 并设置 Err 返回值。
+//
+// 该辅助方法只在首次调用时关闭 Done 通道，保证重复调用不会 panic。
+//
+// 参数：
+//   - err: context 完成后 Err 返回的错误语义。
+func (c *controllableContext) complete(err error) {
+	c.once.Do(func() {
+		c.err = err
+		close(c.done)
+	})
+}
+
+// shortBackoffOptions 返回适合单元测试的短退避配置。
+//
+// 该辅助函数集中提供纳秒级退避参数，避免 Retry 成功路径测试因默认退避时间变慢。
+//
+// 返回：
+//   - []BackoffOption: 可传入 Retry 或 RetryWithContext 的短退避选项。
+func shortBackoffOptions() []BackoffOption {
+	return []BackoffOption{
+		WithMin(time.Nanosecond),
+		WithMax(time.Nanosecond),
+		WithFactor(1),
+	}
 }

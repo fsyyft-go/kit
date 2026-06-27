@@ -2,7 +2,7 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// package main 是配置示例程序的入口包。
+// config 运行 Kratos 配置示例命令，并委托 cmd 包加载示例配置或执行 DES 子命令。
 package main
 
 import (
