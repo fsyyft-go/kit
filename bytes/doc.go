@@ -4,7 +4,7 @@
 
 // Package bytes 提供基于 crypto/rand 的随机字节生成工具。
 //
-// 当前导出 API 仅包含 GenerateNonce，用于生成指定长度的随机字节切片。
-// 该函数适用于需要随机 nonce、IV 或 token 原始字节的场景；协议层面的唯一性、
-// 重放防护和结果编码由调用方负责。
+// 本包面向需要密码学安全随机原始字节的场景，例如 nonce、IV、salt 或 token
+// 原始材料生成。GenerateNonce 会按请求长度读取随机源；长度合法性、随机源错误、
+// 协议要求的唯一性、重放防护和结果编码由调用方在使用处处理。
 package bytes
