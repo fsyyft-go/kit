@@ -2,19 +2,19 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package bloom 的测试文件
+package bloom
+
+// 本文件覆盖 Bloom 接口、默认实现和 mock 的基础测试场景。
 // 设计思路：
-// 1. 使用表格驱动测试方式，覆盖所有主要功能点
-// 2. 使用 mock 对象模拟存储层，确保测试的独立性
-// 3. 测试用例包括正常和异常场景
-// 4. 使用 testify 包进行断言，提高测试代码的可读性
+// 1. 使用表格驱动测试方式，覆盖所有主要功能点。
+// 2. 使用 mock 对象模拟存储层，确保测试的独立性。
+// 3. 测试用例包括正常和异常场景。
+// 4. 使用 testify 包进行断言，提高测试代码的可读性。
 //
 // 使用方法：
-// 1. 运行所有测试：go test -v
-// 2. 运行特定测试：go test -v -run TestBloom_Contain
-// 3. 查看测试覆盖率：go test -v -cover
-
-package bloom
+// 1. 运行所有测试：go test -v。
+// 2. 运行特定测试：go test -v -run TestBloom_Contain。
+// 3. 查看测试覆盖率：go test -v -cover。
 
 import (
 	"context"

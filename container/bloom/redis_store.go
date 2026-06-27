@@ -13,25 +13,26 @@ import (
 	kitredis "github.com/fsyyft-go/kit/database/redis"
 )
 
-// ErrResultTypeNotArray 表示 Redis 脚本返回结果类型不是数组时的错误。
-// 当期望返回数组类型但实际类型不符时会返回该错误。
+// ErrResultTypeNotArray 表示 Redis Lua 查询脚本返回结果不是数组。
+//
+// redisStore.Exist 期望批量 getbit 脚本返回 []any；当 Redis 客户端返回其它类型时会返回该错误。
 var (
 	ErrResultTypeNotArray = errors.New("result type is not array")
 )
 
 const (
-	// redisKeyFormat 定义了 Redis 中布隆过滤器键名的格式模板。
-	// 通过格式化字符串，将布隆过滤器名称嵌入到 Redis 键名中，避免键名冲突。
+	// redisKeyFormat 定义布隆过滤器位图在 Redis 中的 key 格式。
+	//
+	// 格式化参数来自 Store 层 key，可能是 Bloom 名称，也可能是 "name:group" 形式的分组 key。
 	redisKeyFormat = "kit:bloom:%s"
 
-	// existed 表示布隆过滤器位数组中某一位已被设置（即为 1）。
-	// 用于判断哈希位是否已存在。
+	// existed 表示 Redis 位数组中某一位已被设置为 1。
 	existed = int64(1)
 
 	// bloomSetScript 是用于批量设置 Redis 位数组中指定位置为 1 的 Lua 脚本。
 	// 该脚本遍历所有哈希值，将对应位设置为 1，并返回每次 setbit 操作的结果。
-	// KEYS[1]：布隆过滤器的 Redis 键名
-	// ARGV：所有需要设置的哈希位索引
+	// KEYS[1]：布隆过滤器的 Redis 键名。
+	// ARGV：所有需要设置的哈希位索引。
 	bloomSetScript = `
 		local key = KEYS[1]
 		local result = {}
@@ -45,8 +46,8 @@ const (
 
 	// bloomGetScript 是用于批量获取 Redis 位数组中指定位置值的 Lua 脚本。
 	// 该脚本遍历所有哈希值，获取对应位的值，并返回每次 getbit 操作的结果。
-	// KEYS[1]：布隆过滤器的 Redis 键名
-	// ARGV：所有需要查询的哈希位索引
+	// KEYS[1]：布隆过滤器的 Redis 键名。
+	// ARGV：所有需要查询的哈希位索引。
 	bloomGetScript = `
 		local key = KEYS[1]
 		local result = {}
@@ -59,7 +60,7 @@ const (
 	`
 )
 
-// redisStore 实现了 Store 接口，基于 Redis 保存布隆过滤器位图。
+// redisStore 实现 Store 接口，基于 Redis 保存布隆过滤器位图。
 //
 // redisStore 会同时使用 ctx 和 key：ctx 透传给底层 Redis 命令，key 经 redisKeyFormat
 // 转换后作为 Redis 中的位图命名空间。实例初始化时会预加载批量 getbit/setbit Lua 脚本并缓存
@@ -75,20 +76,20 @@ type redisStore struct {
 	getScriptHash string
 }
 
-// Exist 实现 Store 接口。
+// Exist 实现 Store 接口，判断 Redis 位图中指定 hash 位是否全部已设置。
 //
 // redisStore 会将 ctx 传递给脚本执行，并把 key 转换为对应的 Redis 位图 key。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制底层 Redis 命令的执行。
-//   - key：位图命名空间标识，会进一步转换为 Redis key。
-//   - hash：要判断的哈希值列表。
+//   - ctx: 调用上下文，用于控制底层 Redis 命令的执行。
+//   - key: 位图命名空间标识，会进一步转换为 Redis key。
+//   - hash: 要判断的哈希值列表，每个值会作为 Redis getbit 的偏移量。
 //
-// 返回值：
-//   - bool：所有哈希值是否都已存在。
-//   - false：至少有一个哈希值不存在。
-//   - true：所有哈希值都存在。
-//   - error：脚本执行失败或返回值类型异常时返回错误。
+// 返回：
+//   - bool: 所有哈希值是否都已存在：
+//   - false: 至少有一个 Redis 位值不是 1，或脚本执行失败。
+//   - true: 所有 Redis 位值均为 1；hash 为空时脚本返回空数组也会保持 true。
+//   - error: 脚本执行失败或返回值类型异常时返回错误；返回值类型异常时可用 errors.Is 判断 ErrResultTypeNotArray。
 func (s *redisStore) Exist(ctx context.Context, key string, hash []uint64) (bool, error) {
 	// 生成 Redis 脚本所需的 KEYS 和 ARGS 参数。
 	keys, args := s.generateKeysAndArgs(key, hash)
@@ -111,17 +112,17 @@ func (s *redisStore) Exist(ctx context.Context, key string, hash []uint64) (bool
 	return true, nil
 }
 
-// Add 实现 Store 接口。
+// Add 实现 Store 接口，将指定 hash 位批量写入 Redis 位图。
 //
 // redisStore 会将 ctx 传递给脚本执行，并把 key 转换为对应的 Redis 位图 key。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制底层 Redis 命令的执行。
-//   - key：位图命名空间标识，会进一步转换为 Redis key。
-//   - hash：要写入的哈希值列表。
+//   - ctx: 调用上下文，用于控制底层 Redis 命令的执行。
+//   - key: 位图命名空间标识，会进一步转换为 Redis key。
+//   - hash: 要写入的哈希值列表，每个值会作为 Redis setbit 的偏移量。
 //
-// 返回值：
-//   - error：脚本执行失败时返回错误。
+// 返回：
+//   - error: 脚本执行失败时返回错误。
 func (s *redisStore) Add(ctx context.Context, key string, hash []uint64) error {
 	// 生成 Redis 脚本所需的 KEYS 和 ARGS 参数。
 	keys, args := s.generateKeysAndArgs(key, hash)
@@ -133,18 +134,18 @@ func (s *redisStore) Add(ctx context.Context, key string, hash []uint64) error {
 	return nil
 }
 
-// evalScript 执行 Redis 脚本，并处理脚本不存在（NOSCRIPT）错误。
+// evalScript 执行 Redis Lua 脚本，并在脚本缓存失效时处理 NOSCRIPT 重载。
 //
 // 参数：
-//   - ctx：上下文对象，用于控制请求的生命周期。
-//   - scriptHash：脚本在 Redis 中的哈希值。
-//   - script：脚本内容。
-//   - keys：脚本所需的 KEYS 参数。
-//   - args：脚本所需的 ARGS 参数。
+//   - ctx: 调用上下文，用于控制 Redis EvalSha、ScriptLoad 和重试请求。
+//   - scriptHash: 脚本在 Redis 中的哈希值，优先用于 EvalSha。
+//   - script: 脚本内容；当 EvalSha 返回 NOSCRIPT 时用于重新加载。
+//   - keys: 脚本所需的 KEYS 参数。
+//   - args: 脚本所需的 ARGV 参数。
 //
-// 返回值：
-//   - any：脚本执行结果。
-//   - error：执行过程中发生的错误。
+// 返回：
+//   - any: 脚本执行结果；当发生错误时当前实现返回 false。
+//   - error: EvalSha、ScriptLoad 或 NOSCRIPT 后重试失败时返回底层错误。
 func (s *redisStore) evalScript(ctx context.Context, scriptHash string, script string, keys []string, args []any) (any, error) {
 	result, err := s.redis.EvalSha(ctx, scriptHash, keys, args...).Result()
 	if err != nil {
@@ -168,17 +169,17 @@ func (s *redisStore) evalScript(ctx context.Context, scriptHash string, script s
 	return result, nil
 }
 
-// generateKeysAndArgs 生成 Redis 脚本调用所需的 KEYS 和 ARGS 参数列表。
+// generateKeysAndArgs 生成 Redis 脚本调用所需的 KEYS 和 ARGV 参数列表。
 //
 // name 是 Store 层传入的位图命名空间 key；函数会将其转换为最终的 Redis key。
 //
 // 参数：
-//   - name：Store 层传入的位图命名空间 key。
-//   - hash：哈希值列表，每个值对应位数组中的一个位置。
+//   - name: Store 层传入的位图命名空间 key。
+//   - hash: 哈希值列表，每个值对应位数组中的一个位置。
 //
-// 返回值：
-//   - []string：包含最终 Redis key 的 KEYS 切片。
-//   - []any：包含所有哈希值的 ARGS 切片。
+// 返回：
+//   - []string: 包含最终 Redis key 的 KEYS 切片。
+//   - []any: 包含所有哈希值的 ARGV 切片。
 func (r *redisStore) generateKeysAndArgs(name string, hash []uint64) ([]string, []any) {
 	// 构造 Redis 键名。
 	keys := make([]string, 1)
@@ -191,14 +192,17 @@ func (r *redisStore) generateKeysAndArgs(name string, hash []uint64) ([]string, 
 	return keys, args
 }
 
-// NewRedisStore 创建一个基于 Redis 的布隆过滤器存储实例。
+// NewRedisStore 创建一个基于 Redis 的布隆过滤器 Store 实例。
+//
+// NewRedisStore 会在 context.Background() 下预加载批量 setbit 和 getbit Lua 脚本。返回的 Store
+// 不负责关闭 Redis 客户端，客户端生命周期由调用方管理。
 //
 // 参数：
-//   - redis：Redis 客户端实例，用于与 Redis 服务进行通信。
+//   - redis: Redis 客户端实例，用于预加载脚本并执行后续位图读写。
 //
-// 返回值：
-//   - *redisStore：Redis 存储实现的实例指针。
-//   - error：初始化过程中发生的错误。
+// 返回：
+//   - *redisStore: Redis 存储实现的实例指针。
+//   - error: set 或 get 脚本预加载失败时返回底层 Redis 错误。
 func NewRedisStore(redis kitredis.Redis) (*redisStore, error) {
 	var setScriptHash string
 	var getScriptHash string
