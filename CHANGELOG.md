@@ -4,6 +4,43 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [v0.0.16] (2026-06-28)
+
+### 新增
+
+- **RSA-OAEP 加解密**
+  - `crypto/rsa` 新增 `EncryptPubKeyOAEP`、`EncryptPubKeyOAEPWithHash`、`EncryptPublicKeyOAEP`、`EncryptPublicKeyOAEPWithHash`、`DecryptPrivKeyOAEP`、`DecryptPrivKeyOAEPWithHash`、`DecryptPrivateKeyOAEP`、`DecryptPrivateKeyOAEPWithHash` 和 `ErrNilHash`，支持基于 SHA-256 默认参数或自定义 hash/label 的 RSA-OAEP 加解密。
+  - 将旧的 PKCS#1 v1.5 加解密入口标注为兼容历史格式的 Deprecated，并在 `crypto/rsa/README.md` 中补充 OAEP 用法与边界说明。
+
+### 变更
+
+- **Go 1.26 与依赖升级**
+  - `go.mod` 的 Go 版本升级至 `1.26`，并同步更新 `Gin`、`Kratos v2`、`GORM/MySQL`、`go-redis`、`Prometheus Client`、`Testify`、`golang.org/x/*` 等依赖。
+  - CI 调整为使用 `Go 1.26.x`、`golangci-lint v2.12.2`、`actions/checkout@v5` 与 `actions/setup-go@v6`，并为 Codecov OIDC 上传补充最小权限配置。
+  - `time` 包适配新版 `carbon` 的 `WeekStartsAt` 类型变化，保留 `defaultWeekStartAt` 通过 `-ldflags -X` 注入字符串的配置方式。
+
+- **文档与注释优化**
+  - 完善 `algorithms/snowflake`、`bytes`、`cache`、`context`、`convert`、`container/bloom`、`crypto`、`database`、`go`、`kratos`、`log`、`math/rand`、`net`、`runtime`、`testing`、`text/pinyin` 和 `time` 等包的 Go doc、README 与函数注释，补充 API 契约、参数、边界和示例说明。
+  - 规范多模块包级文档，补充 `doc.go`，提升 Go doc 的可读性与一致性。
+
+- **测试覆盖**
+  - 补充缓存、配置、Bloom、转换、加密、数据库、Kratos、中间件、日志、网络消息、运行时、重试、拼音、时间等模块的行为、边界、错误分支与生命周期测试。
+  - 增强 `example/kratos/config` 和 `example/net/message` 命令测试，覆盖示例命令构造与消息示例运行路径。
+
+### 修复
+
+- **导入检查与时间工具**
+  - `go/imp` 的导入别名检查允许空白标识符 `_`，避免对副作用导入误报别名规范问题。
+  - `time` 包的相对时间函数在 Carbon 测试时间被冻结时基于当前时间副本计算，避免 `DayAfterTomorrow`、`DayBeforeYesterday`、`LastWeek`、`LastMonth`、`NextWeek`、`NextMonth`、`LastYear`、`NextYear` 等函数污染后续 `Now` 结果。
+
+- **网络与示例稳定性**
+  - 修复 `net/http` HTTPS 证书地址覆盖和网络测试边界行为，并补充 HTTP hook、HTTPS 与网络测试用例。
+  - 修复 `net/message` 连接、消息工厂、心跳、扫描器和单字符串消息的边界行为，提升消息示例客户端、服务端命令的运行稳定性。
+  - 修复 `runtime/goroutine` 默认协程池，并补充默认池和指标测试。
+
+- **测试断言与边界修正**
+  - 修正 RSA 公钥解析断言字段、AES-GCM 非法 nonce 边界、Bloom 内存存储位图隔离、Redis 过期语义与 MySQL 钩子配置等测试中暴露的边界问题。
+
 ## [v0.0.15] (2025-11-15)
 
 ### 新增

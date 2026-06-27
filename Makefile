@@ -3,7 +3,7 @@
 # 输出目录
 OUT_DIR=out
 # 版本号
-VERSION=v0.1.0
+VERSION=v0.0.16
 # Git 提交哈希
 COMMIT=$(shell git rev-parse --short HEAD)
 # 构建时间
