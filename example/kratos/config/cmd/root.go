@@ -2,6 +2,7 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+// Package cmd 实现 Kratos 配置示例命令，提供示例配置加载和 DES 加解密子命令。
 package cmd
 
 import (

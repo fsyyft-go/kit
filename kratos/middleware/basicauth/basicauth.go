@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// package basicauth 实现 HTTP 基本认证中间件，用于保护 API 接口。
 package basicauth
 
 import (
@@ -16,12 +15,21 @@ import (
 )
 
 var (
-	// ErrInvalidBasicAuth 是无效的基本认证错误。
+	// ErrInvalidBasicAuth 表示 Basic Authentication 校验失败。
+	//
+	// 当请求缺少 Authorization 头、头部不是合法的 Basic 凭据，或
+	// CredentialValidator 拒绝用户名与密码时，Server 返回该错误。
+	// 对于携带服务端 transport 的请求，中间件会在返回前写入
+	// WWW-Authenticate 响应头；调用方通常按 401 Unauthorized 处理，
+	// 并可通过返回的 Kratos 错误 reason `UNAUTHORIZED` 识别该失败。
 	ErrInvalidBasicAuth = errors.Unauthorized("UNAUTHORIZED", "Invalid basic authentication")
 )
 
 type (
-	// Option 是 basicauth 中间件的配置选项。
+	// Option 配置 Server 返回的 Basic Authentication 中间件。
+	//
+	// Option 通常由 WithValidator 或 WithRealm 返回。Server 不会忽略 nil Option，
+	// 调用方应只传入有效选项。
 	Option func(*options)
 
 	// options 包含中间件配置选项。
@@ -32,51 +40,66 @@ type (
 		realm string
 	}
 
-	// CredentialValidator 是一个函数类型，用于验证认证信息。
+	// CredentialValidator 校验从 Authorization 头中解析出的用户名和密码。
 	//
 	// 参数：
-	//   - ctx context.Context：上下文。
-	//   - username string：用户名。
-	//   - password string：密码。
+	//   - ctx context.Context：当前请求上下文。
+	//   - username string：从 Authorization 头中解析出的用户名。
+	//   - password string：从 Authorization 头中解析出的密码。
 	//
 	// 返回值：
-	//   - bool：如果认证成功，返回 true；否则返回 false。
+	//   - bool：返回 true 表示凭据通过校验；返回 false 表示 Server 应返回 ErrInvalidBasicAuth。
+	//
+	// Server 仅在从服务端 transport 中成功读取并解析 Basic 凭据后调用该回调。
+	// 若未通过 WithValidator 提供自定义实现，默认 validator 始终返回 false。
 	CredentialValidator func(ctx context.Context, username, password string) bool
 )
 
-// WithValidator 配置自定义的认证信息验证器。
+// WithValidator 配置自定义的 CredentialValidator。
 //
 // 参数：
-//   - validator CredentialValidator：认证信息验证器。
+//   - validator CredentialValidator：用于校验 Authorization 头中用户名与密码的回调。
 //
 // 返回值：
 //   - Option：中间件配置选项。
+//
+// validator 必须为非 nil。若未设置该选项，Server 使用的默认 validator 始终拒绝认证。
 func WithValidator(validator CredentialValidator) Option {
 	return func(o *options) {
 		o.validator = validator
 	}
 }
 
-// WithRealm 配置认证域名，显示在浏览器认证对话框中。
+// WithRealm 配置认证失败时写入 WWW-Authenticate 头的 realm。
 //
 // 参数：
-//   - realm string：认证域名。
+//   - realm string：用于构造 `Basic realm="..."` 响应头的认证域名。
 //
 // 返回值：
 //   - Option：中间件配置选项。
+//
+// 若未设置该选项，Server 使用默认 realm `Restricted`。当请求缺少凭据、凭据格式非法
+// 或 CredentialValidator 拒绝认证时，携带服务端 transport 的请求会收到该 realm。
 func WithRealm(realm string) Option {
 	return func(o *options) {
 		o.realm = realm
 	}
 }
 
-// Server 创建一个基本认证中间件，用于服务端验证请求。
+// Server 创建用于服务端请求的 Basic Authentication 中间件。
 //
 // 参数：
 //   - opts ...Option：中间件配置选项。
 //
 // 返回值：
-//   - middleware.Middleware：基本认证中间件。
+//   - middleware.Middleware：在进入后续处理器前执行 Basic Authentication 校验的中间件。
+//
+// 中间件会从 transport.ServerContext 中读取 Authorization 请求头并解析 Basic 凭据。
+// 当请求缺少凭据、凭据格式非法或 CredentialValidator 返回 false 时，中间件会设置
+// `WWW-Authenticate: Basic realm="..."` 响应头并返回 ErrInvalidBasicAuth。
+//
+// 若上下文中不存在服务端 transport，中间件不会尝试认证，而是直接调用后续处理器。
+// 未显式配置时，默认 validator 始终拒绝认证，默认 realm 为 `Restricted`。
 func Server(opts ...Option) middleware.Middleware {
 	// 初始化配置选项，设置默认值。
 	o := &options{

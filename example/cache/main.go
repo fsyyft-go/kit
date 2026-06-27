@@ -2,6 +2,9 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+// cache 示例演示 Kit 缓存模块的全局实例、自定义实例、TTL 过期和类型安全访问。
+//
+// 该命令会初始化日志与缓存，展示基础读写、过期检查、类型安全包装，以及在结束前关闭全局实例和自定义实例。
 package main
 
 import (

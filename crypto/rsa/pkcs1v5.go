@@ -29,15 +29,31 @@ var (
 	}
 )
 
-// publicDecrypt 使用 RSA 公钥对签名进行解密，通常用于验证签名。
+// publicDecrypt 执行与历史私钥原始操作配套的 RSA 公钥恢复流程。
+//
+// 当 hash 非 0 且输入满足本函数的前置约束时，返回值是恢复出的 DigestInfo；当 hash 为 0 时，
+// 返回值是恢复出的原始消息块。本函数只使用 hashed 校验摘要长度，不会验证恢复内容是否等于 prefix+hashed。
+//
 // 参数：
-// - pub: RSA 公钥。
-// - hash: 使用的哈希算法。
-// - hashed: 已哈希的消息。
-// - sig: 签名数据。
-// 返回值：
-// - out: 解密后的数据。
-// - err: 错误信息。
+//   - pub: RSA 公钥，必须非 nil 且包含有效模数和指数。
+//   - hash: 使用的摘要算法；必须是 hash 可选值列表中的值之一。
+//   - hashed: 待匹配的摘要数据；hash 非 0 时长度必须与摘要算法匹配。
+//   - sig: 待恢复的签名数据。
+//
+// hash 可选值：
+//   - crypto.Hash(0): 按原始消息块恢复，不附加 ASN.1 DER 前缀。
+//   - crypto.MD5: 使用 MD5 DigestInfo 前缀。
+//   - crypto.SHA1: 使用 SHA-1 DigestInfo 前缀。
+//   - crypto.SHA224: 使用 SHA-224 DigestInfo 前缀。
+//   - crypto.SHA256: 使用 SHA-256 DigestInfo 前缀。
+//   - crypto.SHA384: 使用 SHA-384 DigestInfo 前缀。
+//   - crypto.SHA512: 使用 SHA-512 DigestInfo 前缀。
+//   - crypto.MD5SHA1: 使用无前缀的 MD5+SHA-1 摘要兼容形式。
+//   - crypto.RIPEMD160: 使用 RIPEMD-160 DigestInfo 前缀。
+//
+// 返回：
+//   - []byte: hash 非 0 时为恢复出的 DigestInfo；hash 为 0 时为恢复出的原始消息块。
+//   - error: 输入摘要长度、哈希类型或密钥长度不满足要求时返回错误。
 func publicDecrypt(pub *rsa.PublicKey, hash crypto.Hash, hashed []byte, sig []byte) (out []byte, err error) {
 	// 获取哈希算法的相关信息，包括哈希长度和前缀。
 	hashLen, prefix, err := pkcs1v15HashInfo(hash, len(hashed))
@@ -67,11 +83,13 @@ func publicDecrypt(pub *rsa.PublicKey, hash crypto.Hash, hashed []byte, sig []by
 	return
 }
 
-// unLeftPad 移除左侧填充，恢复原始数据。
+// unLeftPad 按历史兼容规则移除 PKCS#1 v1.5 风格左侧填充。
+//
 // 参数：
-// - input: 带有左侧填充的数据。
-// 返回值：
-// - out: 移除填充后的原始数据。
+//   - input: 带左侧填充的编码块；调用方应保证长度足以包含前导标记和填充长度信息。
+//
+// 返回：
+//   - []byte: 移除填充后得到的 payload；无法识别连续 0xff 填充时按历史长度字节规则截取。
 func unLeftPad(input []byte) (out []byte) {
 	// 获取输入数据长度。
 	n := len(input)
@@ -98,16 +116,19 @@ func unLeftPad(input []byte) (out []byte) {
 	return
 }
 
-// leftPad 对输入数据进行左侧填充，使其达到指定大小。
+// leftPad 对输入数据进行左侧零填充，使其达到指定大小。
+//
 // 参数：
-// - input: 原始输入数据。
-// - size: 期望的填充后大小。
-// 返回值：
-// - out: 填充后的数据。
+//   - input: 原始输入数据。
+//   - size: 期望的输出大小，必须非负；小于 input 长度时按当前实现保留 input 前缀字节。
+//
+// 返回：
+//   - []byte: 长度为 size 的填充结果；当 input 短于 size 时，结果左侧以 0 填充。
 func leftPad(input []byte, size int) (out []byte) {
 	// 获取输入数据长度。
 	n := len(input)
-	// 如果输入长度大于目标大小，则截断。
+	// 如果输入长度大于目标大小，则截断为目标大小。
+	// 当前实现通过后续 copy(out[len(out)-n:], input) 保留 input 的前缀字节。
 	if n > size {
 		n = size
 	}
@@ -118,13 +139,15 @@ func leftPad(input []byte, size int) (out []byte) {
 	return
 }
 
-// encrypt 执行基本的 RSA 加密操作。
+// encrypt 执行基本的 RSA 公钥指数运算。
+//
 // 参数：
-// - c: 用于存储计算结果的大整数。
-// - pub: RSA 公钥。
-// - m: 待加密的消息（大整数形式）。
-// 返回值：
-// - 加密后的结果（大整数）。
+//   - c: 用于存储计算结果的大整数，必须非 nil。
+//   - pub: RSA 公钥，必须非 nil 且包含有效模数和指数。
+//   - m: 待处理的消息整数，必须非 nil。
+//
+// 返回：
+//   - *big.Int: 计算得到的 m^e mod N；返回值与 c 指向同一对象。
 func encrypt(c *big.Int, pub *rsa.PublicKey, m *big.Int) *big.Int {
 	// 创建表示公钥指数的大整数。
 	e := big.NewInt(int64(pub.E))
@@ -133,14 +156,27 @@ func encrypt(c *big.Int, pub *rsa.PublicKey, m *big.Int) *big.Int {
 	return c
 }
 
-// pkcs1v15HashInfo 获取 PKCS#1 v1.5 中特定哈希算法的信息。
+// pkcs1v15HashInfo 返回 PKCS#1 v1.5 签名编码所需的哈希长度和 ASN.1 DER 前缀。
+//
 // 参数：
-// - hash: 哈希算法类型。
-// - inLen: 输入数据的长度。
-// 返回值：
-// - hashLen: 哈希值长度。
-// - prefix: 对应的 ASN.1 DER 编码前缀。
-// - err: 错误信息。
+//   - hash: 哈希算法；必须是 hash 可选值列表中的值之一。
+//   - inLen: 输入摘要长度；hash 非 0 时必须等于 hash.Size()。
+//
+// hash 可选值：
+//   - crypto.Hash(0): 表示输入是原始消息块，不使用 ASN.1 DER 前缀。
+//   - crypto.MD5: 返回 MD5 摘要长度和 DigestInfo 前缀。
+//   - crypto.SHA1: 返回 SHA-1 摘要长度和 DigestInfo 前缀。
+//   - crypto.SHA224: 返回 SHA-224 摘要长度和 DigestInfo 前缀。
+//   - crypto.SHA256: 返回 SHA-256 摘要长度和 DigestInfo 前缀。
+//   - crypto.SHA384: 返回 SHA-384 摘要长度和 DigestInfo 前缀。
+//   - crypto.SHA512: 返回 SHA-512 摘要长度和 DigestInfo 前缀。
+//   - crypto.MD5SHA1: 返回 MD5+SHA-1 组合摘要长度和空前缀。
+//   - crypto.RIPEMD160: 返回 RIPEMD-160 摘要长度和 DigestInfo 前缀。
+//
+// 返回：
+//   - hashLen: hash 为 0 时等于 inLen；否则等于 hash.Size()。
+//   - prefix: hash 对应的 ASN.1 DER 前缀；hash 为 0 或 crypto.MD5SHA1 时为空。
+//   - error: 输入长度与 hash 不匹配或 hash 不在支持列表中时返回错误。
 func pkcs1v15HashInfo(hash crypto.Hash, inLen int) (hashLen int, prefix []byte, err error) {
 	// 如果没有指定哈希算法，则直接使用输入长度作为哈希长度，不使用前缀。
 	if hash == 0 {

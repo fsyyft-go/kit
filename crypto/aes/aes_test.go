@@ -2,21 +2,21 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package aes 的单元测试
+package aes
+
+// 本测试文件覆盖 aes 包的 AES-GCM 加解密行为。
 //
-// 本测试文件设计思路：
-// 1. 采用表格驱动测试方式，提高测试代码的可读性和可维护性
-// 2. 按照加密和解密两大类功能组织测试用例
-// 3. 覆盖正常使用场景和错误处理场景
-// 4. 使用 stretchr/testify 包进行断言，简化测试结果验证
-// 5. 通过 test 和 benchmark 两种测试方式验证功能和性能
+// 设计思路：
+//  1. 采用表格驱动测试方式，提高测试代码的可读性和可维护性。
+//  2. 按照加密和解密两大类功能组织测试用例。
+//  3. 覆盖正常使用场景和错误处理场景。
+//  4. 使用 stretchr/testify 包进行断言，简化测试结果验证。
+//  5. 通过 test 和 benchmark 两种测试方式验证功能和性能。
 //
 // 使用方法：
-// 1. 单元测试：go test -v github.com/fsyyft-go/kit/crypto/aes
-// 2. 覆盖率测试：go test -cover github.com/fsyyft-go/kit/crypto/aes
-// 3. 性能测试：go test -bench=. github.com/fsyyft-go/kit/crypto/aes
-
-package aes
+//  1. 单元测试：go test -v github.com/fsyyft-go/kit/crypto/aes。
+//  2. 覆盖率测试：go test -cover github.com/fsyyft-go/kit/crypto/aes。
+//  3. 性能测试：go test -bench=. github.com/fsyyft-go/kit/crypto/aes。
 
 import (
 	"crypto/aes"

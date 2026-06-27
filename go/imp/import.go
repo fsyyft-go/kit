@@ -210,6 +210,9 @@ func getGroupName(group ImportGroup) string {
 // 返回值：
 //   - string：如果不符合规范则返回错误信息，否则返回空字符串。
 func checkAlias(imp ImportInfo) string {
+	if imp.Alias == "_" {
+		return ""
+	}
 	if imp.Group == GroupKit {
 		if !strings.HasPrefix(imp.Alias, "kit") {
 			return fmt.Sprintf("fsyyft-go 包 %s 应使用 kit 前缀别名", imp.Path)
@@ -223,7 +226,7 @@ func checkAlias(imp ImportInfo) string {
 	// 检查别名只能包含小写字母和数字
 	if imp.Alias != "" {
 		for _, r := range imp.Alias {
-			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
 				return fmt.Sprintf("别名 %s 只能包含小写字母和数字", imp.Alias)
 			}
 		}

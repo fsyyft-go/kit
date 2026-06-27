@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -48,41 +49,81 @@ var (
 	_ kitruntime.Runner = (*server)(nil)
 )
 
+var (
+	// notifyServerListenReady 在服务端监听器完成赋值后发送同步通知，生产路径保持空操作。
+	notifyServerListenReady = func(net.Listener) {}
+	// notifyServerMessageReceived 在服务端收到消息后发送同步通知，生产路径保持空操作。
+	notifyServerMessageReceived = func(kitmessage.Message) {}
+)
+
 type (
 	server struct {
-		listen net.Listener
+		addr              string
+		listen            net.Listener
+		listenMu          sync.RWMutex
+		notifyListenReady func(net.Listener)
 	}
 )
 
 func (s *server) Run(ctx context.Context) error {
-	_ = kitgoroutine.Submit(func() {
-		if err := s.Start(ctx); nil != err {
+	s.ensureAddr()
+
+	listenReady := make(chan net.Listener, 1)
+	startDone := make(chan error, 1)
+	oldNotifyListenReady := s.notifyListenReady
+	s.notifyListenReady = func(listener net.Listener) {
+		select {
+		case listenReady <- listener:
+		default:
+		}
+		if oldNotifyListenReady != nil {
+			oldNotifyListenReady(listener)
+		}
+	}
+
+	if err := kitgoroutine.Submit(func() {
+		startDone <- s.Start(ctx)
+	}); nil != err {
+		return err
+	}
+
+	select {
+	case listener := <-listenReady:
+		fmt.Printf("服务启动成功：%v\n", listener.Addr())
+	case err := <-startDone:
+		if nil != err {
 			fmt.Printf("服务启动失败：%v\n", err)
 		}
-	})
-
-	time.Sleep(50 * time.Millisecond)
-	if nil != s.listen {
-		fmt.Printf("服务启动成功：%v\n", s.listen.Addr())
-	} else {
 		return nil
+	case <-ctx.Done():
+		_ = s.Stop(ctx)
+		<-startDone
+		return ctx.Err()
 	}
 
 	<-ctx.Done()
 	_ = s.Stop(ctx)
+	<-startDone
 
 	return ctx.Err()
 }
 
 func (s *server) Start(ctx context.Context) error {
-	if listen, err := net.Listen("tcp", addr); nil != err {
+	listen, err := net.Listen("tcp", s.address())
+	if nil != err {
 		return err
-	} else {
-		s.listen = listen
+	}
+	s.setListen(listen)
+	s.notifyReady(listen)
+	select {
+	case <-ctx.Done():
+		_ = listen.Close()
+		return ctx.Err()
+	default:
 	}
 
 	for {
-		conn, err := s.listen.Accept()
+		conn, err := listen.Accept()
 		if nil != err {
 			return err
 		}
@@ -110,6 +151,7 @@ func (s *server) Start(ctx context.Context) error {
 					if !ok {
 						return
 					}
+					notifyServerMessageReceived(message)
 					fmt.Println(message)
 				}
 			}
@@ -118,5 +160,41 @@ func (s *server) Start(ctx context.Context) error {
 }
 
 func (s *server) Stop(ctx context.Context) error {
-	return s.listen.Close()
+	listen := s.listener()
+	if listen == nil {
+		return nil
+	}
+	return listen.Close()
+}
+
+func (s *server) ensureAddr() {
+	if s.addr == "" {
+		s.addr = addr
+	}
+}
+
+func (s *server) address() string {
+	s.ensureAddr()
+	return s.addr
+}
+
+func (s *server) setListen(listen net.Listener) {
+	s.listenMu.Lock()
+	defer s.listenMu.Unlock()
+
+	s.listen = listen
+}
+
+func (s *server) listener() net.Listener {
+	s.listenMu.RLock()
+	defer s.listenMu.RUnlock()
+
+	return s.listen
+}
+
+func (s *server) notifyReady(listen net.Listener) {
+	if s.notifyListenReady != nil {
+		s.notifyListenReady(listen)
+	}
+	notifyServerListenReady(listen)
 }

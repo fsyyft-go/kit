@@ -6,387 +6,269 @@ package config
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	kratosconfig "github.com/go-kratos/kratos/v2/config"
+	_ "github.com/go-kratos/kratos/v2/encoding/json"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// TestWithResolve 测试 WithResolve 函数是否正确设置解析函数。
-func TestWithResolve(t *testing.T) {
-	// 创建一个测试用的解析函数。
-	testResolve := func(target map[string]interface{}) error {
-		return nil
-	}
-
-	// 创建一个空的 DecoderOptions。
+// TestWithResolve_Option 验证 WithResolve 能将自定义解析函数写入解码器选项。
+//
+// 该测试通过调用选项中保存的 Resolve 函数并观察 target 变化，确保选项保存的函数可被后续解码流程使用。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestWithResolve_Option(t *testing.T) {
 	options := &DecoderOptions{}
+	target := map[string]interface{}{}
 
-	// 应用 WithResolve 选项。
-	opt := WithResolve(testResolve)
+	opt := WithResolve(func(target map[string]interface{}) error {
+		target["resolved"] = true
+		return nil
+	})
 	opt(options)
 
-	// 验证解析函数是否已正确设置。
-	assert.NotNil(t, options.Resolve, "WithResolve() 未能正确设置解析函数")
+	require.NotNil(t, options.Resolve)
+	require.NoError(t, options.Resolve(target))
+	assert.Equal(t, true, target["resolved"])
 }
 
-// TestNewDecoder 测试 NewDecoder 函数是否正确创建解码器实例。
-func TestNewDecoder(t *testing.T) {
-	// 定义测试用例。
+// TestNewDecoder_Options 验证 NewDecoder 对默认配置、自定义 Resolve 和 nil option 的处理。
+//
+// 该测试通过表驱动用例覆盖解码器初始化时的默认解析函数、自定义解析函数以及 nil DecoderOption 跳过语义。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestNewDecoder_Options(t *testing.T) {
 	tests := []struct {
-		name          string          // 测试用例名称。
-		opts          []DecoderOption // 解码器选项。
-		expectResolve bool            // 是否期望解析函数存在。
+		name        string
+		description string
+		giveOptions []DecoderOption
+		assert      func(t *testing.T, decoder *Decoder)
 	}{
 		{
-			name:          "无选项",
-			opts:          nil,
-			expectResolve: true, // 默认使用 defaultResolve.Resolve。
+			name:        "success/default-resolve",
+			description: "验证 NewDecoder 在未提供选项时使用默认 Resolve 函数。",
+			assert: func(t *testing.T, decoder *Decoder) {
+				t.Helper()
+				assert.NotNil(t, decoder.Resolve)
+			},
 		},
 		{
-			name: "自定义解析函数",
-			opts: []DecoderOption{
+			name:        "success/custom-resolve",
+			description: "验证 NewDecoder 能应用自定义 Resolve 函数并保留其行为。",
+			giveOptions: []DecoderOption{
 				WithResolve(func(target map[string]interface{}) error {
+					target["source"] = "custom"
 					return nil
 				}),
 			},
-			expectResolve: true,
+			assert: func(t *testing.T, decoder *Decoder) {
+				t.Helper()
+				target := map[string]interface{}{}
+				require.NotNil(t, decoder.Resolve)
+				require.NoError(t, decoder.Resolve(target))
+				assert.Equal(t, "custom", target["source"])
+			},
 		},
 		{
-			name: "包含空选项",
-			opts: []DecoderOption{
+			name:        "success/nil-option-skipped",
+			description: "验证 NewDecoder 遇到 nil DecoderOption 时跳过该选项并继续应用后续选项。",
+			giveOptions: []DecoderOption{
 				nil,
 				WithResolve(func(target map[string]interface{}) error {
+					target["source"] = "after-nil"
 					return nil
 				}),
 			},
-			expectResolve: true,
+			assert: func(t *testing.T, decoder *Decoder) {
+				t.Helper()
+				target := map[string]interface{}{}
+				require.NotNil(t, decoder.Resolve)
+				require.NoError(t, decoder.Resolve(target))
+				assert.Equal(t, "after-nil", target["source"])
+			},
 		},
 	}
 
-	// 遍历测试用例。
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			// 创建解码器实例。
-			decoder := NewDecoder(tt.opts...)
+			t.Log(tt.description)
 
-			// 验证解码器是否已创建。
-			assert.NotNil(t, decoder, "NewDecoder() 返回了 nil")
+			decoder := NewDecoder(tt.giveOptions...)
 
-			// 验证解析函数是否已正确设置。
-			hasResolve := decoder.Resolve != nil
-			assert.Equal(t, tt.expectResolve, hasResolve, "解析函数设置不正确，期望存在: %v, 实际: %v", tt.expectResolve, hasResolve)
+			require.NotNil(t, decoder)
+			if tt.assert != nil {
+				tt.assert(t, decoder)
+			}
 		})
 	}
 }
 
-// TestDecode 测试 Decode 方法是否正确解码配置。
-func TestDecode(t *testing.T) {
-	// 跳过需要 JSON 编解码器的测试，因为我们没有实际的 JSON 编解码器。
-	t.Skip("跳过需要 JSON 编解码器的测试")
+// TestDecode_Behavior 验证 Decoder.Decode 对空格式、已注册 codec、Resolve 和错误路径的处理。
+//
+// 该测试通过表驱动用例覆盖简单键、嵌套键、JSON 解码、Resolve 修改 target、Resolve 错误透传、codec.Unmarshal 错误以及 unsupported format 错误。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestDecode_Behavior(t *testing.T) {
+	errResolve := errors.New("resolve failed")
 
-	// 定义测试用例。
 	tests := []struct {
-		name          string                 // 测试用例名称。
-		src           *kratosconfig.KeyValue // 源配置。
-		resolveFunc   Resolve                // 解析函数。
-		expectedMap   map[string]interface{} // 期望的映射结果。
-		expectedError bool                   // 是否期望错误。
+		name              string
+		description       string
+		giveSrc           *kratosconfig.KeyValue
+		giveNilOption     bool
+		giveResolve       Resolve
+		wantTarget        map[string]interface{}
+		wantErr           bool
+		wantErrIs         error
+		wantErrEqual      string
+		wantErrContains   string
+		wantResolveCalled bool
 	}{
 		{
-			name: "空格式，简单键",
-			src: &kratosconfig.KeyValue{
-				Key:    "key",
+			name:        "success/empty-format-simple-key",
+			description: "验证空格式配置会把简单键直接写入 target，并保留原始字节值。",
+			giveSrc: &kratosconfig.KeyValue{
+				Key:    "plain",
 				Value:  []byte("value"),
 				Format: "",
 			},
-			resolveFunc: nil,
-			expectedMap: map[string]interface{}{
-				"key": []byte("value"),
+			wantTarget: map[string]interface{}{
+				"plain": []byte("value"),
 			},
-			expectedError: false,
 		},
 		{
-			name: "空格式，嵌套键",
-			src: &kratosconfig.KeyValue{
-				Key:    "a.b.c",
-				Value:  []byte("value"),
+			name:        "success/empty-format-nested-key",
+			description: "验证空格式配置会把点分隔键展开为嵌套 map，并在叶子节点写入原始字节值。",
+			giveSrc: &kratosconfig.KeyValue{
+				Key:    "database.password",
+				Value:  []byte("secret"),
 				Format: "",
 			},
-			resolveFunc: nil,
-			expectedMap: map[string]interface{}{
-				"a": map[string]interface{}{
-					"b": map[string]interface{}{
-						"c": []byte("value"),
-					},
+			wantTarget: map[string]interface{}{
+				"database": map[string]interface{}{
+					"password": []byte("secret"),
 				},
 			},
-			expectedError: false,
 		},
 		{
-			name: "JSON格式，成功解码",
-			src: &kratosconfig.KeyValue{
+			name:        "success/json-registered-codec",
+			description: "验证已注册 JSON codec 能将 JSON 配置成功解码到 target。",
+			giveSrc: &kratosconfig.KeyValue{
 				Key:    "config",
-				Value:  []byte(`{"key":"value","nested":{"inner":"data"}}`),
+				Value:  []byte(`{"name":"kit","nested":{"enabled":true}}`),
 				Format: "json",
 			},
-			resolveFunc: nil,
-			expectedMap: map[string]interface{}{
-				"key": "value",
+			wantTarget: map[string]interface{}{
+				"name": "kit",
 				"nested": map[string]interface{}{
-					"inner": "data",
+					"enabled": true,
 				},
 			},
-			expectedError: false,
 		},
 		{
-			name: "JSON格式，解析函数成功",
-			src: &kratosconfig.KeyValue{
+			name:          "success/json-resolve-mutates-target-after-nil-option",
+			description:   "验证 JSON 解码成功后会调用 Resolve，且 nil DecoderOption 不会阻止后续 Resolve 修改 target。",
+			giveNilOption: true,
+			giveSrc: &kratosconfig.KeyValue{
 				Key:    "config",
-				Value:  []byte(`{"key":"value"}`),
+				Value:  []byte(`{"name":"kit"}`),
 				Format: "json",
 			},
-			resolveFunc: func(target map[string]interface{}) error {
-				target["added"] = "by_resolve"
+			giveResolve: func(target map[string]interface{}) error {
+				target["name"] = "resolved"
+				target["added"] = "by-resolve"
 				return nil
 			},
-			expectedMap: map[string]interface{}{
-				"key":   "value",
-				"added": "by_resolve",
+			wantTarget: map[string]interface{}{
+				"name":  "resolved",
+				"added": "by-resolve",
 			},
-			expectedError: false,
+			wantResolveCalled: true,
 		},
 		{
-			name: "JSON格式，解析函数失败",
-			src: &kratosconfig.KeyValue{
+			name:        "error/json-resolve-error",
+			description: "验证 Resolve 返回错误时 Decode 会透传该错误并停止返回成功结果。",
+			giveSrc: &kratosconfig.KeyValue{
 				Key:    "config",
-				Value:  []byte(`{"key":"value"}`),
+				Value:  []byte(`{"name":"kit"}`),
 				Format: "json",
 			},
-			resolveFunc: func(target map[string]interface{}) error {
-				return errors.New("解析错误")
+			giveResolve: func(target map[string]interface{}) error {
+				return errResolve
 			},
-			expectedMap:   map[string]interface{}{},
-			expectedError: true,
+			wantErr:           true,
+			wantErrIs:         errResolve,
+			wantResolveCalled: true,
 		},
 		{
-			name: "无效的JSON",
-			src: &kratosconfig.KeyValue{
+			name:        "error/json-unmarshal",
+			description: "验证已注册 codec 反序列化失败时 Decode 返回 codec.Unmarshal 的错误。",
+			giveSrc: &kratosconfig.KeyValue{
 				Key:    "config",
-				Value:  []byte(`{"key":"value`), // 缺少结束括号。
+				Value:  []byte(`{"name":`),
 				Format: "json",
 			},
-			resolveFunc:   nil,
-			expectedMap:   map[string]interface{}{},
-			expectedError: true,
+			wantErr:         true,
+			wantErrContains: "unexpected end of JSON input",
 		},
 		{
-			name: "不支持的格式",
-			src: &kratosconfig.KeyValue{
+			name:        "error/unsupported-format",
+			description: "验证未注册格式会返回包含 key 与 format 的 unsupported format 错误。",
+			giveSrc: &kratosconfig.KeyValue{
 				Key:    "config",
-				Value:  []byte(`{"key":"value"}`),
+				Value:  []byte(`{"name":"kit"}`),
 				Format: "unsupported",
 			},
-			resolveFunc:   nil,
-			expectedMap:   map[string]interface{}{},
-			expectedError: true,
+			wantErr:      true,
+			wantErrEqual: "unsupported key: config format: unsupported",
 		},
 	}
 
-	// 遍历测试用例。
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			// 创建解码器。
-			decoder := NewDecoder()
-			if tt.resolveFunc != nil {
-				decoder.Resolve = tt.resolveFunc
-			}
+			t.Log(tt.description)
 
-			// 准备目标映射。
+			resolveCalled := false
+			options := make([]DecoderOption, 0, 2)
+			if tt.giveNilOption {
+				options = append(options, nil)
+			}
+			if tt.giveResolve != nil {
+				options = append(options, WithResolve(func(target map[string]interface{}) error {
+					resolveCalled = true
+					return tt.giveResolve(target)
+				}))
+			}
+			decoder := NewDecoder(options...)
 			target := make(map[string]interface{})
 
-			// 执行解码。
-			err := decoder.Decode(tt.src, target)
+			err := decoder.Decode(tt.giveSrc, target)
 
-			// 验证错误是否符合预期。
-			if tt.expectedError {
-				assert.Error(t, err, "期望有错误，但没有返回错误")
-			} else {
-				assert.NoError(t, err, "不期望有错误，但返回了错误: %v", err)
-			}
-
-			// 如果期望成功，验证解码结果。
-			if !tt.expectedError {
-				if tt.src.Format == "" {
-					// 对于空格式，我们需要特殊处理验证，因为键可能是嵌套的。
-					validateNestedKeyValueWithAssert(t, target, tt.src.Key, tt.src.Value)
-				} else {
-					// 对于其他格式，直接比较映射。
-					validateMapWithAssert(t, target, tt.expectedMap)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrIs != nil {
+					assert.ErrorIs(t, err, tt.wantErrIs)
 				}
-			}
-		})
-	}
-}
-
-// TestDecodeEmptyFormat 测试 Decode 方法处理空格式的情况。
-func TestDecodeEmptyFormat(t *testing.T) {
-	// 定义测试用例。
-	tests := []struct {
-		name          string                 // 测试用例名称。
-		src           *kratosconfig.KeyValue // 源配置。
-		expectedKey   string                 // 期望的键。
-		expectedValue []byte                 // 期望的值。
-	}{
-		{
-			name: "简单键",
-			src: &kratosconfig.KeyValue{
-				Key:    "key",
-				Value:  []byte("value"),
-				Format: "",
-			},
-			expectedKey:   "key",
-			expectedValue: []byte("value"),
-		},
-		{
-			name: "嵌套键",
-			src: &kratosconfig.KeyValue{
-				Key:    "a.b.c",
-				Value:  []byte("value"),
-				Format: "",
-			},
-			expectedKey:   "c",
-			expectedValue: []byte("value"),
-		},
-	}
-
-	// 遍历测试用例。
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// 创建解码器。
-			decoder := NewDecoder()
-
-			// 准备目标映射。
-			target := make(map[string]interface{})
-
-			// 执行解码。
-			err := decoder.Decode(tt.src, target)
-
-			// 验证没有错误。
-			assert.NoError(t, err, "解码出错: %v", err)
-
-			// 验证解码结果。
-			if tt.src.Key == tt.expectedKey {
-				// 简单键。
-				value, exists := target[tt.expectedKey]
-				assert.True(t, exists, "键 %s 不存在于映射中", tt.expectedKey)
-
-				// 验证值类型和内容。
-				actualValue, ok := value.([]byte)
-				assert.True(t, ok, "键 %s 的值类型不是 []byte，而是 %T", tt.expectedKey, value)
-				assert.Equal(t, string(tt.expectedValue), string(actualValue), "键 %s 的值不匹配", tt.expectedKey)
-			} else {
-				// 嵌套键，需要遍历键路径。
-				keys := strings.Split(tt.src.Key, ".")
-				current := target
-
-				// 遍历键路径。
-				for i, k := range keys {
-					value, exists := current[k]
-					assert.True(t, exists, "键 %s 不存在于映射中", k)
-
-					if i == len(keys)-1 {
-						// 最后一个键，验证值。
-						actualValue, ok := value.([]byte)
-						assert.True(t, ok, "键 %s 的值类型不是 []byte，而是 %T", k, value)
-						assert.Equal(t, string(tt.expectedValue), string(actualValue), "键 %s 的值不匹配", k)
-					} else {
-						// 中间键，继续遍历。
-						nestedMap, ok := value.(map[string]interface{})
-						assert.True(t, ok, "键 %s 的值不是映射，而是 %T", k, value)
-						current = nestedMap
-					}
+				if tt.wantErrEqual != "" {
+					assert.EqualError(t, err, tt.wantErrEqual)
 				}
+				if tt.wantErrContains != "" {
+					assert.Contains(t, err.Error(), tt.wantErrContains)
+				}
+				assert.Equal(t, tt.wantResolveCalled, resolveCalled)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantTarget, target)
+			assert.Equal(t, tt.wantResolveCalled, resolveCalled)
 		})
-	}
-}
-
-// TestDecodeUnsupportedFormat 测试 Decode 方法处理不支持的格式的情况。
-func TestDecodeUnsupportedFormat(t *testing.T) {
-	// 创建解码器。
-	decoder := NewDecoder()
-
-	// 准备源配置和目标映射。
-	src := &kratosconfig.KeyValue{
-		Key:    "config",
-		Value:  []byte(`{"key":"value"}`),
-		Format: "unsupported",
-	}
-	target := make(map[string]interface{})
-
-	// 执行解码。
-	err := decoder.Decode(src, target)
-
-	// 验证有错误。
-	assert.Error(t, err, "期望解码不支持的格式时返回错误，但没有错误")
-
-	// 验证错误消息。
-	expectedErrMsg := "unsupported key: config format: unsupported"
-	assert.Equal(t, expectedErrMsg, err.Error(), "错误消息不匹配")
-}
-
-// validateNestedKeyValueWithAssert 验证嵌套键值是否正确设置，使用 assert 包。
-func validateNestedKeyValueWithAssert(t *testing.T, actual map[string]interface{}, key string, expectedValue []byte) {
-	// 分割键路径。
-	keys := strings.Split(key, ".")
-
-	// 遍历键路径。
-	current := actual
-	for i, k := range keys {
-		value, exists := current[k]
-		assert.True(t, exists, "键 %s 不存在于映射中", k)
-
-		if i == len(keys)-1 {
-			// 最后一个键，验证值。
-			actualValue, ok := value.([]byte)
-			assert.True(t, ok, "键 %s 的值类型不是 []byte，而是 %T", k, value)
-			assert.Equal(t, string(expectedValue), string(actualValue), "键 %s 的值不匹配", k)
-		} else {
-			// 中间键，继续遍历。
-			nestedMap, ok := value.(map[string]interface{})
-			assert.True(t, ok, "键 %s 的值不是映射，而是 %T", k, value)
-			current = nestedMap
-		}
-	}
-}
-
-// validateMapWithAssert 验证两个映射是否匹配，使用 assert 包。
-func validateMapWithAssert(t *testing.T, actual, expected map[string]interface{}) {
-	// 验证所有期望的键值对都存在。
-	for k, expectedV := range expected {
-		actualV, exists := actual[k]
-		assert.True(t, exists, "键 %s 不存在于实际映射中", k)
-
-		// 根据值的类型进行不同的验证。
-		switch expectedVTyped := expectedV.(type) {
-		case map[string]interface{}:
-			// 如果值是映射，递归验证。
-			actualVTyped, ok := actualV.(map[string]interface{})
-			assert.True(t, ok, "键 %s 的值类型不匹配，期望: map[string]interface{}, 实际: %T", k, actualV)
-			if ok {
-				validateMapWithAssert(t, actualVTyped, expectedVTyped)
-			}
-		default:
-			// 对于简单类型，直接比较字符串表示。
-			assert.Equal(t, expectedV, actualV, "键 %s 的值不匹配", k)
-		}
-	}
-
-	// 验证没有多余的键。
-	for k := range actual {
-		_, exists := expected[k]
-		assert.True(t, exists, "实际映射中存在多余的键: %s", k)
 	}
 }

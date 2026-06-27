@@ -2,7 +2,6 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// package http 提供 Kratos HTTP 服务器与 Gin 框架的集成功能。
 package http
 
 import (
@@ -90,7 +89,9 @@ type (
 		router *mux.Router
 	}
 
-	// RouteInfo 结构体存储路由信息。
+	// RouteInfo 表示一条提取到的路由信息。
+	//
+	// RouteInfo 当前仅导出类型本身，method 和 path 字段未导出，主要供本包内部桥接逻辑和调试场景复用。
 	RouteInfo struct {
 		// method 是 HTTP 请求方法（GET、POST、PUT 等）。
 		method string
@@ -114,18 +115,22 @@ func getRouter(s *kratoshttp.Server) *mux.Router {
 		return nil
 	}
 
-	// 将 kratoshttp.Server 指针转换为 serverAccessor 指针，以访问私有字段。
+	// SAFETY: 这里依赖 kratoshttp.Server 当前版本的字段布局与 serverAccessor 保持一致，
+	// 且 router 字段仍位于末尾。升级 Kratos 后需重新核对结构布局，否则可能读取到错误指针。
 	sa := (*serverAccessor)(unsafe.Pointer(s))
 	return sa.router
 }
 
-// GetPaths 获取 HTTP 服务器中注册的所有路由信息。
+// GetPaths 提取 kratos http.Server 中已注册的路由信息。
+//
+// GetPaths 主要供本包桥接逻辑和调试场景复用。当前返回的 RouteInfo 字段未导出，
+// 包外调用方无法直接读取其中的 method 和 path。
 //
 // 参数：
-//   - s：kratos http.Server 指针。
+//   - s：kratos http.Server 指针；为 nil 时返回空切片。
 //
 // 返回值：
-//   - []RouteInfo：包含所有注册路由信息的切片。
+//   - []RouteInfo：提取到的路由切片；若未找到 router 或 s 为 nil，则返回空切片。
 func GetPaths(s *kratoshttp.Server) []RouteInfo {
 	// 初始化空的路由信息切片。
 	routeInfos := make([]RouteInfo, 0)

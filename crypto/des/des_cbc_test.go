@@ -2,7 +2,9 @@
 //
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-// Package des_test 实现了 DES 加密算法相关功能的测试。
+package des_test
+
+// 本测试文件覆盖 DES CBC 加解密相关功能。
 //
 // 测试文件设计思路：
 // 1. 采用表格驱动测试方式，提高测试代码的可维护性和可读性；
@@ -20,7 +22,6 @@
 // 2. 运行覆盖率测试：go test -v -cover ./crypto/des
 // 3. 生成覆盖率报告：go test -v -coverprofile=coverage.out ./crypto/des
 // 4. 查看覆盖率报告：go tool cover -html=coverage.out
-package des_test
 
 import (
 	"testing"

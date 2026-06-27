@@ -18,16 +18,18 @@ var (
 )
 
 type (
-	// HeartbeatMessage 心跳消息包接口。
+	// HeartbeatMessage 表示携带心跳序列号的消息。
 	HeartbeatMessage interface {
-		// SerialNumber 返回心跳包序列号。
+		// SerialNumber 返回心跳消息中的序列号。
 		//
-		// 返回值：
-		//   - uint64: 心跳包序列号。
+		// 参数：无。
+		//
+		// 返回：
+		//   - uint64: 心跳消息中的序列号。
 		SerialNumber() uint64
 	}
 
-	// heartbeatMessage 心跳消息包，实现接口 Message 和 HeartbeatMessage。
+	// heartbeatMessage 是 [HeartbeatMessage] 的默认实现。
 	heartbeatMessage struct {
 		messageType  MessageType // 消息类型。
 		serialNumber uint64      // 心跳包序列号。
@@ -36,21 +38,22 @@ type (
 
 // MessageType 返回消息类型。
 //
-// 返回值：
-//   - uint16: 消息类型。
+// 参数：无。
+//
+// 返回：
+//   - MessageType: 当前消息的协议类型。
 func (m *heartbeatMessage) MessageType() MessageType {
 	return m.messageType
 }
 
-// Pack 将心跳包序列号转换为 payload 字节数组。
+// Pack 将心跳序列号编码为 8 字节大端序 payload。
 //
-// 返回值：
-//   - []byte: 心跳包序列号的字节数组。
-//   - error: 错误信息。
-func (m *heartbeatMessage) Pack() ([]byte, error) {
-	var msg []byte
-	var err error
-
+// 参数：无。
+//
+// 返回：
+//   - []byte: 按大端序编码后的心跳 payload。
+//   - error: 编码失败或发生 panic 恢复时返回错误。
+func (m *heartbeatMessage) Pack() (msg []byte, err error) {
 	defer func() {
 		if r := recover(); nil != r {
 			err = cockroachdberrors.Newf("封包过程发生异常：%[1]v。", r)
@@ -58,7 +61,7 @@ func (m *heartbeatMessage) Pack() ([]byte, error) {
 	}()
 
 	buf := &bytes.Buffer{}
-	if errWriteSerialNumber := binary.Write(buf, binary.BigEndian, m.serialNumber); nil != errWriteSerialNumber {
+	if errWriteSerialNumber := binaryWrite(buf, binary.BigEndian, m.serialNumber); nil != errWriteSerialNumber {
 		err = cockroachdberrors.Wrap(errWriteSerialNumber, "封包过程发生异常。")
 	} else {
 		msg = buf.Bytes()
@@ -67,16 +70,16 @@ func (m *heartbeatMessage) Pack() ([]byte, error) {
 	return msg, err
 }
 
-// Unpack 从 payload 字节数组还原心跳包序列号。
+// Unpack 从 payload 的前 8 字节还原心跳序列号。
+//
+// payload 少于 8 字节时返回错误；多余字节会被忽略。
 //
 // 参数：
-//   - payload: 心跳包序列号的字节数组。
+//   - payload: 待解码的心跳消息 payload。
 //
-// 返回值：
-//   - error: 错误信息。
-func (m *heartbeatMessage) Unpack(payload []byte) error {
-	var err error
-
+// 返回：
+//   - error: 解码失败或发生 panic 恢复时返回错误。
+func (m *heartbeatMessage) Unpack(payload []byte) (err error) {
 	defer func() {
 		if r := recover(); nil != r {
 			err = cockroachdberrors.Newf("解包过程发生异常：%[1]v。", r)
@@ -85,28 +88,30 @@ func (m *heartbeatMessage) Unpack(payload []byte) error {
 
 	buf := bytes.NewBuffer(payload)
 
-	if errRead := binary.Read(buf, binary.BigEndian, &m.serialNumber); nil != errRead {
+	if errRead := binaryRead(buf, binary.BigEndian, &m.serialNumber); nil != errRead {
 		err = cockroachdberrors.Wrap(errRead, "解包过程发生异常。")
 	}
 
 	return err
 }
 
-// SerialNumber 返回心跳包序列号。
+// SerialNumber 返回心跳消息中的序列号。
 //
-// 返回值：
-//   - uint64: 心跳包序列号。
+// 参数：无。
+//
+// 返回：
+//   - uint64: 心跳消息中的序列号。
 func (m *heartbeatMessage) SerialNumber() uint64 {
 	return m.serialNumber
 }
 
-// NewHeartbeatMessage 创建一个心跳消息包。
+// NewHeartbeatMessage 创建心跳消息。
 //
 // 参数：
-//   - serialNumber: 心跳包序列号。
+//   - serialNumber: 要写入消息的心跳序列号。
 //
-// 返回值：
-//   - *heartbeatMessage: 新建的心跳消息包。
+// 返回：
+//   - *heartbeatMessage: 新创建的心跳消息实例。
 func NewHeartbeatMessage(serialNumber uint64) *heartbeatMessage {
 	m := &heartbeatMessage{
 		messageType:  HeartbeatMessageType,
@@ -116,15 +121,17 @@ func NewHeartbeatMessage(serialNumber uint64) *heartbeatMessage {
 	return m
 }
 
-// GenerateHeartbeatMessage 生成心跳消息包结构体。
+// GenerateHeartbeatMessage 根据消息类型和 payload 生成心跳消息。
+//
+// messageType 必须等于 [HeartbeatMessageType]，payload 不能为空。
 //
 // 参数：
-//   - messageType: 消息类型。
-//   - payload: 心跳包序列号的字节数组。
+//   - messageType: 目标消息类型。
+//   - payload: 待解码的心跳消息 payload。
 //
-// 返回值：
-//   - Message: 生成的心跳消息包。
-//   - error: 错误信息。
+// 返回：
+//   - Message: 生成的心跳消息实例。
+//   - error: messageType 不匹配、payload 为 nil 或解码失败时返回错误。
 func GenerateHeartbeatMessage(messageType MessageType, payload []byte) (Message, error) {
 	var m *heartbeatMessage
 	var err error

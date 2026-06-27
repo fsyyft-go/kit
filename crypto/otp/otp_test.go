@@ -18,8 +18,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	kittesting "github.com/fsyyft-go/kit/testing"
 )
 
 /*
@@ -199,14 +197,10 @@ func TestPasswordGeneration(t *testing.T) {
 		assert.Len(t, password, digits, fmt.Sprintf("密码长度应为%d。", digits))
 	}
 
-	// 测试EffectivePassword方法。
+	// 测试EffectivePassword方法，按当前实现断言窗口内密码数量为 windowSize*2。
 	passwords, err := otp.EffectivePassword()
-	assert.NoError(t, err, "生成有效密码列表不应出错。")
-	assert.NotEmpty(t, passwords, "生成的密码列表不应为空。")
-	// 注意：根据实际实现，密码数量可能与窗口大小的关系不完全是2n+1
-	// 所以这里改为检查是否在合理范围内
-	assert.LessOrEqual(t, len(passwords), otp.windowSize*2+1, "密码数量应在合理范围内。")
-	assert.GreaterOrEqual(t, len(passwords), otp.windowSize, "密码数量应在合理范围内。")
+	require.NoError(t, err, "生成有效密码列表不应出错。")
+	assert.Len(t, passwords, otp.windowSize*2, "有效密码数量应与当前窗口遍历契约一致。")
 	for _, pwd := range passwords {
 		assert.Len(t, pwd, defaultDigits, "每个密码的长度应为默认值。")
 		assert.Regexp(t, `^\d+$`, pwd, "密码应只包含数字。")
@@ -226,11 +220,8 @@ func TestPasswordVerification(t *testing.T) {
 	// 验证生成的密码。
 	assert.True(t, otp.VeryfyPassword(password), "当前生成的密码应该验证通过。")
 
-	// 验证一个无效的密码。
-	invalidPassword := "000000" // 极小概率与有效密码冲突。
-	if password == invalidPassword {
-		invalidPassword = "111111"
-	}
+	// 验证一个非数字格式的无效密码，避免与任一有效窗口密码发生数值碰撞。
+	invalidPassword := "not-a-code"
 	assert.False(t, otp.VeryfyPassword(invalidPassword), "无效密码应验证失败。")
 
 	// 测试全局验证函数。
@@ -508,16 +499,11 @@ func TestErrorHandling(t *testing.T) {
 	_, err := NewOneTimePassword(invalidSecret)
 	assert.Error(t, err, "使用无效Base32密钥应返回错误。")
 
-	// 测试空密钥。
-	// 注意：由于实现可能接受空密钥，这里我们不做错误检查，而是记录日志。
+	// 测试空密钥会被当前实现接受，并生成可用实例。
 	emptySecret := ""
 	otp, err := NewOneTimePassword(emptySecret)
-	if err != nil {
-		t.Logf("空密钥返回了错误：%v", err)
-	} else {
-		t.Logf("空密钥被接受，返回了有效实例")
-		assert.NotNil(t, otp, "如果没有错误，返回的实例不应为nil。")
-	}
+	require.NoError(t, err, "空密钥按当前实现应被 base32 解码接受。")
+	assert.NotNil(t, otp, "空密钥被接受时应返回有效实例。")
 }
 
 // TestFunctionalVerification 测试函数式验证。
@@ -542,88 +528,176 @@ func TestFunctionalVerification(t *testing.T) {
 
 // TestEdgeCases 测试边界情况。
 func TestEdgeCases(t *testing.T) {
-	// 测试不同的窗口大小。
-	// 窗口大小为0时，应该仍能验证当前时间的密码。
-	otp, err := NewOneTimePassword(testSecretBase32, WithWindowSize(0))
-	require.NoError(t, err, "创建OneTimePassword实例不应出错。")
-	password, err := otp.Password()
-	require.NoError(t, err, "生成密码不应出错。")
+	tests := []struct {
+		name        string
+		description string
+		options     []OneTimePasswordOption
+		assert      func(t *testing.T, otp *oneTimePassword)
+	}{
+		{
+			name:        "boundary/zero-window",
+			description: "验证窗口大小为 0 时，当前实现不会生成有效密码列表且当前密码不被窗口验证接受。",
+			options:     []OneTimePasswordOption{WithWindowSize(0)},
+			assert: func(t *testing.T, otp *oneTimePassword) {
+				t.Helper()
 
-	// 验证当前密码，即使窗口大小为0。
-	// 注意：由于窗口大小为0，验证可能取决于实现细节。
-	// 如果实现是验证当前时间点，那么应该通过；如果实现是验证当前时间点±窗口，那么可能失败。
-	if !otp.VeryfyPassword(password) {
-		t.Logf("注意：窗口大小为0时当前密码验证未通过，这可能是实现细节所致。")
+				password, err := otp.Password()
+				require.NoError(t, err, "生成密码不应出错。")
+
+				passwords, err := otp.EffectivePassword()
+				require.NoError(t, err, "生成有效密码列表不应出错。")
+				assert.Empty(t, passwords)
+				assert.False(t, otp.VeryfyPassword(password))
+			},
+		},
+		{
+			name:        "boundary/one-period-window-size",
+			description: "验证有效期为 1 秒时，窗口密码集合大小仍由 windowSize 精确决定，不依赖真实等待。",
+			options:     []OneTimePasswordOption{WithPeriodSeconds(1), WithWindowSize(1)},
+			assert: func(t *testing.T, otp *oneTimePassword) {
+				t.Helper()
+
+				passwords, err := otp.EffectivePassword()
+				require.NoError(t, err, "生成有效密码列表不应出错。")
+				assert.Len(t, passwords, 2)
+				for _, password := range passwords {
+					assert.Len(t, password, defaultDigits)
+					assert.Regexp(t, `^\d+$`, password)
+				}
+			},
+		},
 	}
 
-	// 测试有效密码列表，窗口大小为0时可能是空，可能有1个，取决于实现。
-	passwords, err := otp.EffectivePassword()
-	assert.NoError(t, err, "生成有效密码列表不应出错。")
-	// 不检查具体长度，因为可能取决于实现。
-	t.Logf("窗口大小为0时，有效密码列表长度为：%d", len(passwords))
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
 
-	// 测试不同的有效期。
-	// 有效期为1秒时，密码变化非常快。但也可能在1秒内没有变化，所以测试需要更加灵活。
-	otp, err = NewOneTimePassword(testSecretBase32, WithPeriodSeconds(1))
-	require.NoError(t, err, "创建OneTimePassword实例不应出错。")
-
-	// 生成第一个密码。
-	password1, err := otp.Password()
-	require.NoError(t, err, "生成密码不应出错。")
-
-	// 等待足够长的时间，以确保密码可能已经变化。
-	// 注意：在某些情况下，即使等待几秒后密码也可能保持不变。
-	time.Sleep(2 * time.Second)
-
-	// 生成第二个密码。
-	password2, err := otp.Password()
-	require.NoError(t, err, "生成密码不应出错。")
-
-	// 记录结果，但不断言必须不同。
-	if password1 != password2 {
-		t.Logf("密码在2秒后改变：%s -> %s", password1, password2)
-	} else {
-		t.Logf("密码在2秒后保持不变：%s", password1)
+			otp, err := NewOneTimePassword(testSecretBase32, tt.options...)
+			require.NoError(t, err, "创建OneTimePassword实例不应出错。")
+			tt.assert(t, otp)
+		})
 	}
 }
 
-func TestHotp(t *testing.T) {
-	const (
-		secret = "ORSXG5DJNZTQ" // secret 测试密钥，testing 的 Base32 表示形式。
-
+// TestEffectivePassword_WindowBoundaryConsistency 验证有效密码窗口的边界和验证一致性。
+//
+// 该测试使用超长周期固定当前计数器窗口，断言 EffectivePassword 返回窗口下界到上界前一项，
+// 且生成的密码均可被 VeryfyPassword 接受，而上边界外密码被拒绝。
+//
+// 参数：
+//   - t: 测试上下文，用于报告断言失败。
+func TestEffectivePassword_WindowBoundaryConsistency(t *testing.T) {
+	const windowSize = 2
+	periodSeconds := int((24 * time.Hour).Seconds())
+	otp, err := NewOneTimePassword(testSecretBase32,
+		WithPeriodSeconds(periodSeconds),
+		WithWindowSize(windowSize),
 	)
+	require.NoError(t, err, "创建OneTimePassword实例不应出错。")
 
-	assertions := assert.New(t)
+	passwords, err := otp.EffectivePassword()
+	require.NoError(t, err)
+	assert.Len(t, passwords, windowSize*2)
+	for _, password := range passwords {
+		assert.True(t, otp.VeryfyPassword(password), "窗口内密码应可被验证接受。")
+	}
 
-	var newOneTimePassword OneTimePassword
-	var password, url string
-	var veryfyPassword bool
-	var err error
+	currentCounter := uint64(time.Now().Unix()) / uint64(periodSeconds) // nolint:gosec // 测试固定窗口计数器，仅用于断言边界。
+	outsidePassword, err := hmacBasedOneTimePassword(otp.hashFunc, otp.secretKey, currentCounter+uint64(windowSize), otp.digits)
+	require.NoError(t, err)
+	assert.False(t, otp.VeryfyPassword(fmt.Sprintf("%0*d", otp.digits, outsidePassword)), "上边界外密码应被拒绝。")
+}
 
-	// otpauth://totp/%E5%AF%86%E9%92%A5%E6%98%AF%EF%BC%9Atesting?secret=ORSXG5DJNZTQ&issuer=Golang%20%E5%8D%95%E5%85%83%E6%B5%8B%E8%AF%95
-	newOneTimePassword, err = NewOneTimePassword(secret)
-	assertions.Nil(err)
-	password, err = newOneTimePassword.Password()
-	assertions.Nil(err)
-	veryfyPassword = newOneTimePassword.VeryfyPassword(password)
-	assertions.True(veryfyPassword)
-	kittesting.Println(password)
-	url = newOneTimePassword.GenerateURL()
-	kittesting.Println(url)
+// TestHotp_RFC4226Vectors 验证 HOTP 生成逻辑符合 RFC 4226 标准测试向量。
+//
+// 该测试通过 RFC 4226 Appendix D 中的 10 组计数器向量覆盖动态截断、模数裁剪和零填充语义。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestHotp_RFC4226Vectors(t *testing.T) {
+	key := []byte("12345678901234567890")
+	tests := []struct {
+		name        string
+		description string
+		counter     uint64
+		want        string
+	}{
+		{name: "success/counter-0", description: "验证 RFC 4226 计数器 0 的 HOTP 标准向量。", counter: 0, want: "755224"},
+		{name: "success/counter-1", description: "验证 RFC 4226 计数器 1 的 HOTP 标准向量。", counter: 1, want: "287082"},
+		{name: "success/counter-2", description: "验证 RFC 4226 计数器 2 的 HOTP 标准向量。", counter: 2, want: "359152"},
+		{name: "success/counter-3", description: "验证 RFC 4226 计数器 3 的 HOTP 标准向量。", counter: 3, want: "969429"},
+		{name: "success/counter-4", description: "验证 RFC 4226 计数器 4 的 HOTP 标准向量。", counter: 4, want: "338314"},
+		{name: "success/counter-5", description: "验证 RFC 4226 计数器 5 的 HOTP 标准向量。", counter: 5, want: "254676"},
+		{name: "success/counter-6", description: "验证 RFC 4226 计数器 6 的 HOTP 标准向量。", counter: 6, want: "287922"},
+		{name: "success/counter-7", description: "验证 RFC 4226 计数器 7 的 HOTP 标准向量。", counter: 7, want: "162583"},
+		{name: "success/counter-8", description: "验证 RFC 4226 计数器 8 的 HOTP 标准向量。", counter: 8, want: "399871"},
+		{name: "success/counter-9", description: "验证 RFC 4226 计数器 9 的 HOTP 标准向量。", counter: 9, want: "520489"},
+	}
 
-	// otpauth://totp/%E5%AF%86%E9%92%A5%E6%98%AF%EF%BC%9Atesting?secret=ORSXG5DJNZTQ&issuer=Golang%20%E5%8D%95%E5%85%83%E6%B5%8B%E8%AF%95&algorithm=SHA512&digits=8&period=10
-	newOneTimePassword, err = NewOneTimePassword(secret,
-		WithSHA512(),
-		WithPeriodSeconds(10),
-		WithDigits(8),
-		WithIssuer("Golang 单元测试"),
-		WithLabel("密钥是：testing"))
-	assertions.Nil(err)
-	password, err = newOneTimePassword.Password()
-	assertions.Nil(err)
-	veryfyPassword = newOneTimePassword.VeryfyPassword(password)
-	assertions.True(veryfyPassword)
-	kittesting.Println(password)
-	url = newOneTimePassword.GenerateURL()
-	kittesting.Println(url)
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			got, err := hmacBasedOneTimePassword(sha1.New, key, tt.counter, 6)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, fmt.Sprintf("%06d", got))
+		})
+	}
+}
+
+// TestHotp_URLAndVerification 验证 OTP 实例的 URL 生成和验证协作行为。
+//
+// 该测试通过默认配置和完整配置覆盖 URL 参数、密码格式和当前窗口验证语义，不依赖人工观察日志输出。
+//
+// 参数：
+//   - t: 测试上下文，用于运行子测试和报告断言失败。
+func TestHotp_URLAndVerification(t *testing.T) {
+	const secret = "ORSXG5DJNZTQ"
+	tests := []struct {
+		name        string
+		description string
+		options     []OneTimePasswordOption
+		wantURL     string
+		wantDigits  int
+	}{
+		{
+			name:        "success/default-url-and-verification",
+			description: "验证默认配置生成可验证密码，并输出只包含 secret 参数的 otpauth URL。",
+			wantURL:     "otpauth://totp/?secret=ORSXG5DJNZTQ&",
+			wantDigits:  defaultDigits,
+		},
+		{
+			name:        "success/custom-url-and-verification",
+			description: "验证完整配置生成可验证密码，并在 otpauth URL 中包含标签、发行者、算法、位数和周期参数。",
+			options: []OneTimePasswordOption{
+				WithSHA512(),
+				WithPeriodSeconds(10),
+				WithDigits(8),
+				WithIssuer("Golang 单元测试"),
+				WithLabel("密钥是：testing"),
+			},
+			wantURL:    "otpauth://totp/%E5%AF%86%E9%92%A5%E6%98%AF%EF%BC%9Atesting?secret=ORSXG5DJNZTQ&issuer=Golang+%E5%8D%95%E5%85%83%E6%B5%8B%E8%AF%95&algorithm=SHA512&digits=8&period=10&",
+			wantDigits: 8,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Log(tt.description)
+
+			newOneTimePassword, err := NewOneTimePassword(secret, tt.options...)
+			require.NoError(t, err)
+
+			password, err := newOneTimePassword.Password()
+			require.NoError(t, err)
+			assert.Len(t, password, tt.wantDigits)
+			assert.Regexp(t, `^\d+$`, password)
+			assert.True(t, newOneTimePassword.VeryfyPassword(password))
+			assert.Equal(t, tt.wantURL, newOneTimePassword.GenerateURL())
+		})
+	}
 }

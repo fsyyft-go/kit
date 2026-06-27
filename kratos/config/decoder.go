@@ -34,27 +34,31 @@ type (
 	}
 )
 
-// WithResolve 返回一个 DecoderOption，用于设置解码器的 Resolve 函数。
-// 该函数在配置解码完成后被调用，可以对解码后的配置进行额外处理。
+// WithResolve 为 Decoder 设置解码后的附加处理函数。
+//
+// 当 Decode 通过 codec 成功写入 target 后，会继续调用该函数处理结果 map。
 //
 // 参数：
-//   - fn: 要设置的解析函数。
+//   - fn：解码完成后的附加处理函数；传入 nil 表示显式禁用默认 Resolve。
 //
 // 返回值：
-//   - DecoderOption: 可用于配置解码器的选项函数。
+//   - DecoderOption：可用于配置 Decoder 的选项函数。
 func WithResolve(fn Resolve) DecoderOption {
 	return func(o *DecoderOptions) {
 		o.Resolve = fn
 	}
 }
 
-// NewDecoder 创建并返回一个新的 Decoder 实例。
+// NewDecoder 创建一个新的配置解码器。
+//
+// 默认情况下，Decoder 会在 codec 解码成功后执行包级 defaultResolve.Resolve；
+// 调用方可通过 WithResolve 覆盖该行为。
 //
 // 参数：
-//   - opts: 可选的解码器配置选项列表。
+//   - opts：可选的 DecoderOption 列表；nil 选项会被忽略。
 //
 // 返回值：
-//   - *Decoder: 配置好的解码器实例。
+//   - *Decoder：应用默认配置和自定义选项后的解码器实例。
 func NewDecoder(opts ...DecoderOption) *Decoder {
 	d := Decoder{
 		DecoderOptions: DecoderOptions{
@@ -73,16 +77,18 @@ func NewDecoder(opts ...DecoderOption) *Decoder {
 	return &d
 }
 
-// Decode 将配置从源 KeyValue 解码到目标映射。
-// 如果 src.Format 为空，则将点分隔的键展开为嵌套映射。
-// 如果 src.Format 不为空，则使用对应的编解码器解码配置值。
+// Decode 将 src 解码到 target map。
+//
+// 当 src.Format 为空时，Decode 会把点分隔的 key 展开为嵌套 map；
+// 当 src.Format 非空时，Decode 使用对应的 Kratos codec.Unmarshal 写入 target，随后按需执行 Resolve。
+// 当前 API 仅接受 map[string]any 作为 target，不直接解码到结构体指针。
 //
 // 参数：
-//   - src: 源配置的 KeyValue 对象。
-//   - target: 解码后的配置将存储在此映射中。
+//   - src：Kratos 配置源，包含 key、format 和原始 value。
+//   - target：解码结果写入的 map[string]any。
 //
 // 返回值：
-//   - error: 解码过程中可能发生的错误，成功时返回 nil。
+//   - error：codec 不存在、反序列化失败或 Resolve 处理失败时返回错误。
 func (d *Decoder) Decode(src *kratosconfig.KeyValue, target map[string]any) error {
 	if src.Format == "" {
 		// 当格式为空时，将键 "aaa.bbb" 展开为 map[aaa]map[bbb]interface{}。

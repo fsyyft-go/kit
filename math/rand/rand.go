@@ -9,14 +9,14 @@ import (
 )
 
 const (
-	// minChinese 定义了常用汉字的 Unicode 最小值，用于生成随机汉字的范围下限。
+	// minChinese 表示随机汉字范围的 Unicode 下限（含）。
 	minChinese = 19968
 
-	// maxChinese 定义了常用汉字的 Unicode 最大值，用于生成随机汉字的范围上限。
+	// maxChinese 表示随机汉字范围的 Unicode 上限（不含）。
 	maxChinese = 40869
 
-	// lastNameString 包含了中国传统姓氏的字符集，包括单姓和复姓，按照传统顺序排列。
-	// 此字符集收录了中国最常见的姓氏，用于随机生成具有真实性的中文姓氏。
+	// lastNameString 按顺序拼接了单姓和复姓文本，供 ChineseLastName 随机选取字符。
+	// 由于字符串中未保留姓氏边界，复姓会按其中的单个字符参与随机选择。
 	lastNameString = "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜戚谢邹喻柏水窦章云苏潘葛奚范彭郎" +
 		"鲁韦昌马苗凤花方俞任袁柳酆鲍史唐费廉岑薛雷贺倪汤滕殷罗毕郝邬安常乐于时傅皮卞齐康伍余元卜顾孟平黄" +
 		"和穆萧尹姚邵湛汪祁毛禹狄米贝明臧计伏成戴谈宋茅庞熊纪舒屈项祝董梁杜阮蓝闵席季麻强贾路娄危江童颜郭" +
@@ -31,15 +31,19 @@ const (
 		"岳帅缑亢况後有琴梁丘左丘东门西门商牟佘佴伯赏南宫墨哈谯笪年爱阳佟"
 )
 
-// Int63n 生成一个范围在 [min, max) 之间的 int64 类型随机数。
+// Int63n 返回范围在 [min, max) 内的随机 int64。
+//
+// 本函数不额外校验边界，会直接将 max-min 作为 math/rand.Int63n 的上界。
+// 调用方应保证 max > min，且 max-min 在 int64 中可表示；否则可能 panic
+// 或产生不符合预期的范围。
 //
 // 参数：
-//   - random：随机数生成器，如果为 nil 则使用默认的随机数生成器。
-//   - min：随机数范围的最小值（包含）。
-//   - max：随机数范围的最大值（不包含）。
+//   - random：随机数生成器；为 nil 时使用 math/rand 包级默认随机数生成器，非 nil 时调用方负责其并发安全。
+//   - min：结果范围的下限（含）。
+//   - max：结果范围的上限（不含）。
 //
-// 返回值：
-//   - int64：返回一个范围在 [min, max) 之间的 int64 类型随机数。
+// 返回：
+//   - int64：基于 random 或默认随机数生成器生成，并平移到 [min, max) 范围内的随机值。
 func Int63n(random *rand.Rand, min, max int64) int64 {
 	// 计算随机数范围。
 	result := max - min
@@ -57,15 +61,19 @@ func Int63n(random *rand.Rand, min, max int64) int64 {
 	return result
 }
 
-// Intn 生成一个范围在 [min, max) 之间的 int 类型随机数。
+// Intn 返回范围在 [min, max) 内的随机 int。
+//
+// 本函数不额外校验边界，会直接将 max-min 作为 math/rand.Intn 的上界。
+// 调用方应保证 max > min，且 max-min 在 int 中可表示；否则可能 panic
+// 或产生不符合预期的范围。
 //
 // 参数：
-//   - random：随机数生成器，如果为 nil 则使用默认的随机数生成器。
-//   - min：随机数范围的最小值（包含）。
-//   - max：随机数范围的最大值（不包含）。
+//   - random：随机数生成器；为 nil 时使用 math/rand 包级默认随机数生成器，非 nil 时调用方负责其并发安全。
+//   - min：结果范围的下限（含）。
+//   - max：结果范围的上限（不含）。
 //
-// 返回值：
-//   - int：返回一个范围在 [min, max) 之间的 int 类型随机数。
+// 返回：
+//   - int：基于 random 或默认随机数生成器生成，并平移到 [min, max) 范围内的随机值。
 func Intn(random *rand.Rand, min, max int) int {
 	// 计算随机数范围。
 	result := max - min
@@ -83,13 +91,13 @@ func Intn(random *rand.Rand, min, max int) int {
 	return result
 }
 
-// Chinese 生成一个随机的汉字字符串。
+// Chinese 返回一个随机汉字字符串。
 //
 // 参数：
-//   - random：随机数生成器，如果为 nil 则使用默认的随机数生成器。
+//   - random：随机数生成器；为 nil 时使用 math/rand 包级默认随机数生成器。
 //
-// 返回值：
-//   - string：返回一个随机生成的汉字字符串。
+// 返回：
+//   - string：由 [minChinese, maxChinese) 范围内随机 Unicode 码点转换得到的单个汉字字符串。
 func Chinese(random *rand.Rand) string {
 	// 生成一个在常用汉字 Unicode 范围内的随机数。
 	r := rune(Intn(random, minChinese, maxChinese))
@@ -98,13 +106,13 @@ func Chinese(random *rand.Rand) string {
 	return s
 }
 
-// ChineseLastName 生成一个随机的中文姓氏。
+// ChineseLastName 返回一个随机姓氏字符。
 //
 // 参数：
-//   - random：随机数生成器，如果为 nil 则使用默认的随机数生成器。
+//   - random：随机数生成器；为 nil 时使用 math/rand 包级默认随机数生成器。
 //
-// 返回值：
-//   - string：返回一个随机选择的中文姓氏字符串。
+// 返回：
+//   - string：从 lastNameString 转换得到的 rune 切片中随机选取的单个字符字符串。
 func ChineseLastName(random *rand.Rand) string {
 	// 将姓氏字符串转换为 rune 切片。
 	var r = []rune(lastNameString)
